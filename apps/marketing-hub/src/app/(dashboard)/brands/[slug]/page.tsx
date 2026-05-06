@@ -21,15 +21,7 @@ export default function BrandPage() {
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
     const fromDate = sevenDaysAgo.toISOString().split('T')[0]!
 
-    Promise.all([
-      supabase.from('brands').select('*').eq('slug', slug).single(),
-      supabase
-        .from('daily_metrics')
-        .select('*')
-        .eq('brand_id', supabase.from('brands').select('id').eq('slug', slug))
-        .gte('metric_date', fromDate)
-        .order('metric_date', { ascending: false }),
-    ]).then(async ([brandRes]) => {
+    supabase.from('brands').select('*').eq('slug', slug).single().then(async (brandRes) => {
       const b = brandRes.data as Brand | null
       setBrand(b)
       if (b) {

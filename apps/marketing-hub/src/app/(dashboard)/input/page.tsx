@@ -182,6 +182,11 @@ export default function InputPortalPage() {
           week_start: weekStart.toISOString().split('T')[0],
           week_end: weekEnd.toISOString().split('T')[0],
           days_posted: daysPosted,
+          target_days: 5,
+          stories_days: 0,
+          status: daysPosted >= 5 ? 'complete' : 'on_track',
+          escalated: false,
+          escalation_note: null,
         },
         { onConflict: 'brand_id,week_start' }
       )
@@ -267,7 +272,25 @@ export default function InputPortalPage() {
                 return (
                   <button
                     key={bc.slug}
-                    onClick={() => setSelectedBrand(brand ?? ({ ...bc, id: bc.slug, is_active: true, created_at: '', instagram_handle: null, instagram_account_id: null, youtube_channel_id: null, tiktok_handle: null, facebook_page_id: null, whatsapp_number: null } as Brand))}
+                    onClick={() =>
+                      setSelectedBrand(
+                        brand ?? {
+                          id: bc.slug,
+                          slug: bc.slug,
+                          name: bc.label,
+                          short_name: bc.short,
+                          color_hex: bc.color,
+                          is_active: true,
+                          created_at: '',
+                          instagram_handle: null,
+                          instagram_account_id: null,
+                          youtube_channel_id: null,
+                          tiktok_handle: null,
+                          facebook_page_id: null,
+                          whatsapp_number: null,
+                        }
+                      )
+                    }
                     className={`p-4 rounded-xl border-2 text-center transition-all ${
                       selected
                         ? 'border-ocg-navy bg-ocg-navy text-white'

@@ -220,22 +220,31 @@ export interface Lead {
   created_at: string
 }
 
+type DbTable<Row, Insert, Update> = {
+  Row: Row & Record<string, unknown>
+  Insert: Insert & Record<string, unknown>
+  Update: Update & Record<string, unknown>
+  Relationships: []
+}
+
 // ─── Supabase DB type map (for typed client) ──────────────────────────────────
 export interface Database {
   public: {
     Tables: {
-      brands: { Row: Brand; Insert: Omit<Brand, 'id' | 'created_at'>; Update: Partial<Omit<Brand, 'id'>> }
-      daily_metrics: { Row: DailyMetric; Insert: DailyMetricInsert; Update: Partial<DailyMetricInsert> }
-      compliance_log: { Row: ComplianceLog; Insert: Omit<ComplianceLog, 'id' | 'created_at' | 'compliance_pct'>; Update: Partial<Omit<ComplianceLog, 'id' | 'compliance_pct'>> }
-      weekly_summaries: { Row: WeeklySummary; Insert: Omit<WeeklySummary, 'id' | 'created_at'>; Update: Partial<Omit<WeeklySummary, 'id'>> }
-      reports: { Row: Report; Insert: Omit<Report, 'id' | 'created_at'>; Update: Partial<Omit<Report, 'id'>> }
-      properties: { Row: Property; Insert: Omit<Property, 'id' | 'created_at' | 'updated_at'>; Update: Partial<Omit<Property, 'id'>> }
-      property_enquiries: { Row: PropertyEnquiry; Insert: PropertyEnquiryInsert; Update: Partial<PropertyEnquiryInsert> }
-      property_reviews: { Row: PropertyReview; Insert: Omit<PropertyReview, 'id' | 'created_at'>; Update: Partial<Omit<PropertyReview, 'id'>> }
-      products: { Row: Product; Insert: Omit<Product, 'id' | 'created_at'>; Update: Partial<Omit<Product, 'id'>> }
-      orders: { Row: Order; Insert: Omit<Order, 'id' | 'order_number' | 'created_at'>; Update: Partial<Omit<Order, 'id' | 'order_number'>> }
-      order_items: { Row: OrderItem; Insert: Omit<OrderItem, 'id'>; Update: Partial<Omit<OrderItem, 'id'>> }
-      leads: { Row: Lead; Insert: Omit<Lead, 'id' | 'created_at'>; Update: Partial<Omit<Lead, 'id'>> }
+      brands: DbTable<Brand, Omit<Brand, 'id' | 'created_at'>, Partial<Omit<Brand, 'id'>>>
+      daily_metrics: DbTable<DailyMetric, DailyMetricInsert, Partial<DailyMetricInsert>>
+      compliance_log: DbTable<ComplianceLog, Omit<ComplianceLog, 'id' | 'created_at' | 'compliance_pct'>, Partial<Omit<ComplianceLog, 'id' | 'compliance_pct'>>>
+      weekly_summaries: DbTable<WeeklySummary, Omit<WeeklySummary, 'id' | 'created_at'>, Partial<Omit<WeeklySummary, 'id'>>>
+      reports: DbTable<Report, Omit<Report, 'id' | 'created_at'>, Partial<Omit<Report, 'id'>>>
+      properties: DbTable<Property, Omit<Property, 'id' | 'created_at' | 'updated_at'>, Partial<Omit<Property, 'id'>>>
+      property_enquiries: DbTable<PropertyEnquiry, PropertyEnquiryInsert, Partial<PropertyEnquiryInsert>>
+      property_reviews: DbTable<PropertyReview, Omit<PropertyReview, 'id' | 'created_at'>, Partial<Omit<PropertyReview, 'id'>>>
+      products: DbTable<Product, Omit<Product, 'id' | 'created_at'>, Partial<Omit<Product, 'id'>>>
+      orders: DbTable<Order, Omit<Order, 'id' | 'order_number' | 'created_at'>, Partial<Omit<Order, 'id' | 'order_number'>>>
+      order_items: DbTable<OrderItem, Omit<OrderItem, 'id'>, Partial<Omit<OrderItem, 'id'>>>
+      leads: DbTable<Lead, Omit<Lead, 'id' | 'created_at'>, Partial<Omit<Lead, 'id'>>>
     }
+    Views: Record<string, never>
+    Functions: Record<string, never>
   }
 }
