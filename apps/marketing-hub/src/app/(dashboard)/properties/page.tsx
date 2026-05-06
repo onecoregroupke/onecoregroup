@@ -3,7 +3,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { Property } from '@ocg/db'
 import { getClient } from '@/lib/supabase'
-import { AlertCircle, CheckCircle, Eye, Home, Plus, Save } from 'lucide-react'
+import { AlertCircle, CheckCircle, Eye, Home, Plus, Save, Upload } from 'lucide-react'
+
+const PROPERTY_PHOTOS_BUCKET = 'nuuranest-properties'
 
 type PropertyForm = {
   id?: string
@@ -197,6 +199,7 @@ export default function PropertiesAdminPage() {
   const [form, setForm] = useState<PropertyForm>(EMPTY_FORM)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [uploading, setUploading] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
 
@@ -280,6 +283,58 @@ export default function PropertiesAdminPage() {
       setError(err instanceof Error ? err.message : 'Failed to save property.')
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function uploadPhotos(files: FileList | null) {
+    if (!files?.length) return
+
+    setUploading(true)
+    setError('')
+    setMessage('')
+
+    try {
+      const supabase = getClient()
+      const folder = (form.slug.trim() || 'new-property')
+        .toLowerCase()
+        .replace(/[^a-z0-9-]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+
+      const urls: string[] = []
+
+      for (const file of Array.from(files)) {
+        if (!file.type.startsWith('image/')) continue
+
+        const extension = file.name.split('.').pop()?.toLowerCase() || 'jpg'
+        const safeName = file.name
+          .replace(/\.[^/.]+$/, '')
+          .toLowerCase()
+          .replace(/[^a-z0-9-]+/g, '-')
+          .replace(/^-+|-+$/g, '')
+        const path = `${folder}/${Date.now()}-${safeName || 'photo'}.${extension}`
+
+        const { error: uploadError } = await supabase.storage
+          .from(PROPERTY_PHOTOS_BUCKET)
+          .upload(path, file, {
+            cacheControl: '31536000',
+            upsert: false,
+          })
+
+        if (uploadError) throw new Error(uploadError.message)
+
+        const { data } = supabase.storage.from(PROPERTY_PHOTOS_BUCKET).getPublicUrl(path)
+        urls.push(data.publicUrl)
+      }
+
+      if (!urls.length) throw new Error('No image files were selected.')
+
+      const existing = linesToArray(form.photos)
+      update('photos', [...existing, ...urls].join('\n'))
+      setMessage(`${urls.length} photo${urls.length === 1 ? '' : 's'} uploaded. Save the property to publish the updated gallery.`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to upload photos.')
+    } finally {
+      setUploading(false)
     }
   }
 
@@ -430,7 +485,41 @@ export default function PropertiesAdminPage() {
             </div>
 
             <div className="grid gap-4 lg:grid-cols-2">
-              <TextAreaField label="Photo URLs, one per line" value={form.photos} onChange={(value) => update('photos', value)} rows={6} />
+              <div className="space-y-3">
+                <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-4">
+                  <label className="flex cursor-pointer flex-col items-center justify-center gap-2 text-center">
+                    <Upload size={22} className="text-ocg-navy" />
+                    <span className="text-sm font-semibold text-gray-900">
+                      {uploading ? 'Uploading photos...' : 'Upload property photos'}
+                    </span>
+                    <span className="text-xs text-gray-500">
+                      Select JPG, PNG, or WebP files. URLs are added below after upload.
+                    </span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      disabled={uploading}
+                      onChange={(event) => {
+                        void uploadPhotos(event.target.files)
+                        event.currentTarget.value = ''
+                      }}
+                      className="sr-only"
+                    />
+                  </label>
+                </div>
+                {linesToArray(form.photos).length > 0 && (
+                  <div className="grid grid-cols-3 gap-2">
+                    {linesToArray(form.photos).slice(0, 6).map((url) => (
+                      <div key={url} className="aspect-square overflow-hidden rounded-lg bg-gray-100">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={url} alt="" className="h-full w-full object-cover" />
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <TextAreaField label="Photo URLs, one per line" value={form.photos} onChange={(value) => update('photos', value)} rows={6} />
+              </div>
               <TextAreaField label="Amenities, one per line" value={form.amenities} onChange={(value) => update('amenities', value)} rows={6} />
               <TextAreaField label="Highlights, one per line" value={form.highlights} onChange={(value) => update('highlights', value)} rows={5} />
               <TextAreaField label="House rules, one per line" value={form.house_rules} onChange={(value) => update('house_rules', value)} rows={5} />
