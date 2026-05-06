@@ -7,6 +7,7 @@ import {
   PenSquare,
   CheckSquare,
   FileText,
+  Home,
   Settings,
   LogOut,
   X,
@@ -26,6 +27,7 @@ const mainNav = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/input', label: 'Input Portal', icon: PenSquare },
   { href: '/compliance', label: 'Compliance', icon: CheckSquare },
+  { href: '/properties', label: 'Properties', icon: Home },
   { href: '/reports', label: 'Reports', icon: FileText },
 ]
 
