@@ -1,0 +1,6 @@
+{
+  "buildCommand": "cd ../.. && npx turbo run build --filter=nuuranest-web",
+  "outputDirectory": ".next",
+  "framework": "nextjs",
+  "installCommand": "npm install"
+}

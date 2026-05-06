@@ -1,0 +1,26 @@
+{
+  "name": "one-core-group",
+  "version": "0.0.1",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "type-check": "turbo run type-check",
+    "dev:nuuranest": "turbo run dev --filter=nuuranest-web",
+    "dev:hub": "turbo run dev --filter=marketing-hub",
+    "dev:glitz": "turbo run dev --filter=glitz-n-glim"
+  },
+  "devDependencies": {
+    "turbo": "^2.3.3",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "npm@11.12.1"
+}
