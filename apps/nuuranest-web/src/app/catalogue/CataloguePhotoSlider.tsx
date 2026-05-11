@@ -1,8 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Image from 'next/image'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { X, ChevronLeft, ChevronRight } from 'lucide-react'
 
 interface CataloguePhotoSliderProps {
   photos: string[]
@@ -10,77 +10,179 @@ interface CataloguePhotoSliderProps {
 }
 
 export function CataloguePhotoSlider({ photos, propertyName }: CataloguePhotoSliderProps) {
-  const [active, setActive] = useState(0)
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
 
-  const prev = () => setActive((i) => (i === 0 ? photos.length - 1 : i - 1))
-  const next = () => setActive((i) => (i === photos.length - 1 ? 0 : i + 1))
+  const main = photos[0] ?? ''
+  const small1 = photos[1] ?? null
+  const small2 = photos[2] ?? null
+  const extra = photos.length > 3 ? photos.length - 3 : 0
 
-  const mainPhoto = photos[active] ?? ''
-  const thumbs = photos.slice(0, 4)
+  function openLightbox(index: number) {
+    setLightboxIndex(index)
+  }
+
+  function closeLightbox() {
+    setLightboxIndex(null)
+  }
+
+  const prev = useCallback(() => {
+    setLightboxIndex((i) => (i === null ? 0 : i === 0 ? photos.length - 1 : i - 1))
+  }, [photos.length])
+
+  const next = useCallback(() => {
+    setLightboxIndex((i) => (i === null ? 0 : i === photos.length - 1 ? 0 : i + 1))
+  }, [photos.length])
+
+  useEffect(() => {
+    if (lightboxIndex === null) return
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'ArrowLeft') prev()
+      else if (e.key === 'ArrowRight') next()
+      else if (e.key === 'Escape') closeLightbox()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [lightboxIndex, prev, next])
 
   return (
-    <div>
-      {/* Main image */}
-      <div className="relative aspect-[4/3] lg:aspect-auto lg:h-full min-h-[280px] group">
-        <Image
-          src={mainPhoto}
-          alt={`${propertyName} — photo ${active + 1}`}
-          fill
-          className="object-cover transition-opacity duration-300"
-          sizes="(max-width: 1024px) 100vw, 50vw"
-          priority={active === 0}
-        />
+    <>
+      {/* Default view */}
+      <div className="flex aspect-[4/3] lg:aspect-auto lg:h-full min-h-[280px] gap-0.5">
+        {/* Main image */}
+        <div
+          className="relative flex-1 cursor-pointer overflow-hidden group"
+          onClick={() => openLightbox(0)}
+        >
+          <Image
+            src={main}
+            alt={`${propertyName} — main photo`}
+            fill
+            className="object-cover group-hover:brightness-90 transition-all duration-300"
+            sizes="(max-width: 1024px) 66vw, 33vw"
+            priority
+          />
+        </div>
 
-        {photos.length > 1 && (
-          <>
-            <button
-              onClick={prev}
-              aria-label="Previous photo"
-              className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/40 hover:bg-black/60 text-white rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-opacity"
-            >
-              <ChevronLeft size={18} />
-            </button>
-            <button
-              onClick={next}
-              aria-label="Next photo"
-              className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/40 hover:bg-black/60 text-white rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-opacity"
-            >
-              <ChevronRight size={18} />
-            </button>
-            <div className="absolute bottom-2 right-3 bg-black/40 text-white text-xs px-2 py-0.5 rounded-full">
-              {active + 1} / {photos.length}
-            </div>
-          </>
+        {/* Small images column */}
+        {(small1 ?? small2) && (
+          <div className="w-[36%] flex flex-col gap-0.5">
+            {small1 && (
+              <div
+                className="relative flex-1 cursor-pointer overflow-hidden group"
+                onClick={() => openLightbox(1)}
+              >
+                <Image
+                  src={small1}
+                  alt={`${propertyName} — photo 2`}
+                  fill
+                  className="object-cover group-hover:brightness-90 transition-all duration-300"
+                  sizes="(max-width: 1024px) 33vw, 16vw"
+                />
+              </div>
+            )}
+            {small2 && (
+              <div
+                className="relative flex-1 cursor-pointer overflow-hidden group"
+                onClick={() => openLightbox(2)}
+              >
+                <Image
+                  src={small2}
+                  alt={`${propertyName} — photo 3`}
+                  fill
+                  className="object-cover group-hover:brightness-90 transition-all duration-300"
+                  sizes="(max-width: 1024px) 33vw, 16vw"
+                />
+                {extra > 0 && (
+                  <div className="absolute inset-0 bg-black/50 flex items-center justify-center text-white font-semibold text-xl pointer-events-none">
+                    +{extra}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         )}
       </div>
 
-      {/* Thumbnail strip */}
-      {thumbs.length > 1 && (
-        <div className={`grid gap-0.5 grid-cols-${thumbs.length}`}>
-          {thumbs.map((src, i) => (
+      {/* Lightbox */}
+      {lightboxIndex !== null && (
+        <div
+          className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center"
+          onClick={closeLightbox}
+        >
+          {/* Close */}
+          <button
+            onClick={closeLightbox}
+            className="absolute top-4 right-4 text-white hover:text-gray-300 transition-colors z-10"
+            aria-label="Close gallery"
+          >
+            <X size={28} />
+          </button>
+
+          {/* Prev */}
+          {photos.length > 1 && (
             <button
-              key={i}
-              onClick={() => setActive(i)}
-              className={`relative aspect-[4/3] overflow-hidden ${
-                active === i ? 'ring-2 ring-nn-gold ring-inset' : ''
-              }`}
+              onClick={(e) => { e.stopPropagation(); prev() }}
+              className="absolute left-4 top-1/2 -translate-y-1/2 text-white hover:text-gray-300 p-2 transition-colors z-10"
+              aria-label="Previous"
             >
-              <Image
-                src={src}
-                alt={`${propertyName} thumbnail ${i + 1}`}
-                fill
-                className={`object-cover transition-all ${active === i ? 'brightness-100' : 'brightness-75 hover:brightness-90'}`}
-                sizes="25vw"
-              />
-              {i === 3 && photos.length > 4 && (
-                <div className="absolute inset-0 bg-black/50 flex items-center justify-center text-white text-sm font-medium">
-                  +{photos.length - 4}
-                </div>
-              )}
+              <ChevronLeft size={36} />
             </button>
-          ))}
+          )}
+
+          {/* Image */}
+          <div
+            className="relative w-full max-w-4xl h-[75vh] mx-16"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Image
+              src={photos[lightboxIndex] ?? ''}
+              alt={`${propertyName} — photo ${lightboxIndex + 1}`}
+              fill
+              className="object-contain"
+              sizes="100vw"
+            />
+          </div>
+
+          {/* Next */}
+          {photos.length > 1 && (
+            <button
+              onClick={(e) => { e.stopPropagation(); next() }}
+              className="absolute right-4 top-1/2 -translate-y-1/2 text-white hover:text-gray-300 p-2 transition-colors z-10"
+              aria-label="Next"
+            >
+              <ChevronRight size={36} />
+            </button>
+          )}
+
+          {/* Counter */}
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-white text-sm opacity-70">
+            {lightboxIndex + 1} / {photos.length}
+          </div>
+
+          {/* Thumbnail strip */}
+          {photos.length > 1 && (
+            <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex gap-1.5 max-w-[90vw] overflow-x-auto px-2 pb-1">
+              {photos.map((src, i) => (
+                <button
+                  key={i}
+                  onClick={(e) => { e.stopPropagation(); setLightboxIndex(i) }}
+                  className={`relative flex-shrink-0 w-14 h-10 rounded overflow-hidden transition-all ${
+                    i === lightboxIndex ? 'ring-2 ring-nn-gold' : 'opacity-50 hover:opacity-80'
+                  }`}
+                >
+                  <Image
+                    src={src}
+                    alt={`thumb ${i + 1}`}
+                    fill
+                    className="object-cover"
+                    sizes="56px"
+                  />
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
-    </div>
+    </>
   )
 }
