@@ -20,7 +20,7 @@ export function PropertyCard({ property, compact = false }: PropertyCardProps) {
 
   return (
     <div className="bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow group">
-      <div className="relative aspect-[4/3] overflow-hidden">
+      <div className={`relative overflow-hidden ${compact ? 'aspect-[16/10]' : 'aspect-[4/3]'}`}>
         <Image
           src={photo}
           alt={property.name}
@@ -42,8 +42,8 @@ export function PropertyCard({ property, compact = false }: PropertyCardProps) {
         )}
       </div>
 
-      <div className="p-5">
-        <h3 className="font-heading text-lg font-semibold text-nn-dark mb-1 leading-tight">
+      <div className={compact ? 'p-3.5' : 'p-5'}>
+        <h3 className={`font-heading font-semibold text-nn-dark mb-1 leading-tight ${compact ? 'text-base' : 'text-lg'}`}>
           {property.name}
         </h3>
         {property.tagline && (
