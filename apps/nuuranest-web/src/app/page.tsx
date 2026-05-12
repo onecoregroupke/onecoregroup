@@ -5,6 +5,7 @@ import type { Property, PropertyReview } from '@ocg/db'
 import { PropertyCard } from '@/components/property/PropertyCard'
 import { StarRating } from '@/components/ui/StarRating'
 import { WhatsAppButton } from '@/components/ui/WhatsAppButton'
+import { withResolvedPhotos } from '@/lib/photos'
 import { Home, MapPin, Clock, MessageCircle, ChevronDown, Star } from 'lucide-react'
 
 async function getFeaturedProperties(): Promise<Property[]> {
@@ -13,11 +14,10 @@ async function getFeaturedProperties(): Promise<Property[]> {
     const { data } = await supabase
       .from('properties')
       .select('*')
-      .eq('is_featured', true)
       .eq('is_active', true)
       .order('sort_order')
-      .limit(2)
-    return (data as Property[]) ?? []
+      .limit(3)
+    return ((data as Property[]) ?? []).map(withResolvedPhotos)
   } catch {
     return []
   }
@@ -164,7 +164,7 @@ export default async function HomePage() {
                 Our Properties
               </p>
               <h2 className="font-heading text-3xl lg:text-4xl font-semibold text-nn-dark">
-                Featured Stays
+                Our Stays
               </h2>
             </div>
             <Link
@@ -176,14 +176,14 @@ export default async function HomePage() {
           </div>
 
           {featuredProperties.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8">
               {featuredProperties.map((p) => (
                 <PropertyCard key={p.id} property={p} />
               ))}
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8">
-              {[1, 2].map((i) => (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8">
+              {[1, 2, 3].map((i) => (
                 <div key={i} className="bg-white rounded-xl overflow-hidden shadow-sm animate-pulse">
                   <div className="aspect-[4/3] bg-gray-200" />
                   <div className="p-5 space-y-3">

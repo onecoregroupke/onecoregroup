@@ -38,12 +38,18 @@ export function getLocalPhotos(slug: string): string[] {
 
 /**
  * Resolves the ordered photo list for a property.
- * Prefers local numbered files; falls back to DB photos.
+ * Prefers DB photos when they contain real (non-placeholder) URLs — so any
+ * order set in the admin panel is reflected on the site immediately.
+ * Falls back to local numbered files when DB photos are empty or still
+ * contain placeholder Unsplash images.
  */
 export function resolvePhotos(property: Pick<Property, 'slug' | 'photos'>): string[] {
-  const local = getLocalPhotos(property.slug)
-  if (local.length > 0) return local
-  return Array.isArray(property.photos) ? (property.photos as string[]) : []
+  const dbPhotos = Array.isArray(property.photos) ? (property.photos as string[]) : []
+  const realDbPhotos = dbPhotos.filter(
+    (url) => typeof url === 'string' && url.trim() !== '' && !url.includes('unsplash.com'),
+  )
+  if (realDbPhotos.length > 0) return realDbPhotos
+  return getLocalPhotos(property.slug)
 }
 
 /**

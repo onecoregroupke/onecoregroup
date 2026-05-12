@@ -21,11 +21,7 @@ async function getAllProperties(): Promise<Property[]> {
       .select('*')
       .eq('is_active', true)
       .order('sort_order')
-    const rows = (data as Property[]) ?? []
-    return rows.sort((a, b) => {
-      const rank = (n: string) => (n.toLowerCase() === 'bamburi' ? 0 : 1)
-      return rank(a.neighbourhood) - rank(b.neighbourhood) || a.sort_order - b.sort_order
-    })
+    return (data as Property[]) ?? []
   } catch {
     return []
   }
