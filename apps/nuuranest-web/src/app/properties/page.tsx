@@ -1,5 +1,6 @@
 import { createServerClient } from '@ocg/db'
 import type { Property } from '@ocg/db'
+import { withResolvedPhotos } from '@/lib/photos'
 import { PropertiesClient } from './PropertiesClient'
 
 export const metadata = {
@@ -16,7 +17,7 @@ async function getAllProperties(): Promise<Property[]> {
       .select('*')
       .eq('is_active', true)
       .order('sort_order')
-    return (data as Property[]) ?? []
+    return ((data as Property[]) ?? []).map(withResolvedPhotos)
   } catch {
     return []
   }

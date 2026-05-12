@@ -10,6 +10,7 @@ import { BookingSidebar } from '@/components/property/BookingSidebar'
 import { PropertyGallery } from '@/components/property/PropertyGallery'
 import { NearbyProperties } from '@/components/property/NearbyProperties'
 import { formatKsh } from '@/lib/format'
+import { resolvePhotos } from '@/lib/photos'
 
 interface PageProps {
   params: Promise<{ slug: string }>
@@ -70,9 +71,10 @@ export default async function PropertyDetailPage({ params }: PageProps) {
 
   const reviews = await getPropertyReviews(property.id)
 
+  const resolved = resolvePhotos(property)
   const photos =
-    Array.isArray(property.photos) && property.photos.length > 0
-      ? (property.photos as string[])
+    resolved.length > 0
+      ? resolved
       : [
           'https://images.unsplash.com/photo-1499793983690-e29da59ef1c2?w=1200',
           'https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=800',

@@ -485,15 +485,21 @@ export default function PropertiesAdminPage() {
             </div>
 
             <div className="grid gap-4 lg:grid-cols-2">
+              {/* ── Photo Manager ── */}
               <div className="space-y-3">
+                <span className="block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                  Photos
+                </span>
+
+                {/* Upload button */}
                 <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-4">
                   <label className="flex cursor-pointer flex-col items-center justify-center gap-2 text-center">
                     <Upload size={22} className="text-ocg-navy" />
                     <span className="text-sm font-semibold text-gray-900">
-                      {uploading ? 'Uploading photos...' : 'Upload property photos'}
+                      {uploading ? 'Uploading…' : 'Upload photos'}
                     </span>
                     <span className="text-xs text-gray-500">
-                      Select JPG, PNG, or WebP files. URLs are added below after upload.
+                      JPG, PNG or WebP. Drag thumbnails below to reorder.
                     </span>
                     <input
                       type="file"
@@ -508,18 +514,71 @@ export default function PropertiesAdminPage() {
                     />
                   </label>
                 </div>
+
+                {/* Draggable photo grid */}
                 {linesToArray(form.photos).length > 0 && (
                   <div className="grid grid-cols-3 gap-2">
-                    {linesToArray(form.photos).slice(0, 6).map((url) => (
-                      <div key={url} className="aspect-square overflow-hidden rounded-lg bg-gray-100">
+                    {linesToArray(form.photos).map((url, i, arr) => (
+                      <div
+                        key={url}
+                        draggable
+                        onDragStart={(e) => e.dataTransfer.setData('text/plain', String(i))}
+                        onDragOver={(e) => e.preventDefault()}
+                        onDrop={(e) => {
+                          e.preventDefault()
+                          const from = Number(e.dataTransfer.getData('text/plain'))
+                          if (from === i) return
+                          const next = [...arr]
+                          const [moved] = next.splice(from, 1)
+                          next.splice(i, 0, moved)
+                          update('photos', next.join('\n'))
+                        }}
+                        className="group relative aspect-square overflow-hidden rounded-lg bg-gray-100 cursor-grab active:cursor-grabbing"
+                      >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img src={url} alt="" className="h-full w-full object-cover" />
+                        {/* Position badge */}
+                        <span className="absolute top-1 left-1 bg-black/60 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center">
+                          {i + 1}
+                        </span>
+                        {/* Delete button */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const next = arr.filter((_, j) => j !== i)
+                            update('photos', next.join('\n'))
+                          }}
+                          className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-xs leading-none"
+                          aria-label="Remove photo"
+                        >
+                          ×
+                        </button>
+                        {/* First badge */}
+                        {i === 0 && (
+                          <span className="absolute bottom-1 left-1 right-1 bg-green-600 text-white text-[9px] text-center rounded py-0.5 font-semibold">
+                            HERO
+                          </span>
+                        )}
                       </div>
                     ))}
                   </div>
                 )}
-                <TextAreaField label="Photo URLs, one per line" value={form.photos} onChange={(value) => update('photos', value)} rows={6} />
+
+                {/* Raw URL textarea (collapsed but still editable) */}
+                <details className="text-xs text-gray-400">
+                  <summary className="cursor-pointer select-none hover:text-gray-600 transition-colors py-1">
+                    Edit URLs manually
+                  </summary>
+                  <textarea
+                    value={form.photos}
+                    rows={5}
+                    onChange={(e) => update('photos', e.target.value)}
+                    className="mt-2 w-full rounded-lg border border-gray-200 px-3 py-2 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-ocg-navy font-mono"
+                    placeholder="One URL per line"
+                  />
+                </details>
               </div>
+
               <TextAreaField label="Amenities, one per line" value={form.amenities} onChange={(value) => update('amenities', value)} rows={6} />
               <TextAreaField label="Highlights, one per line" value={form.highlights} onChange={(value) => update('highlights', value)} rows={5} />
               <TextAreaField label="House rules, one per line" value={form.house_rules} onChange={(value) => update('house_rules', value)} rows={5} />

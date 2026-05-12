@@ -1,33 +1,16 @@
-import fs from 'fs'
-import path from 'path'
 import Image from 'next/image'
 import Link from 'next/link'
 import { createServerClient } from '@ocg/db'
 import type { Property } from '@ocg/db'
 import { Bed, Bath, Users, MapPin, ArrowRight } from 'lucide-react'
 import { WhatsAppButton } from '@/components/ui/WhatsAppButton'
+import { resolvePhotos } from '@/lib/photos'
 import { CataloguePhotoSlider } from './CataloguePhotoSlider'
 
 export const metadata = {
   title: 'Property Catalogue',
   description:
     'Browse the full Nuuranest Stays catalogue — five fully furnished short-stay properties in Nyali and Bamburi, Mombasa.',
-}
-
-function getLocalPhotos(slug: string): string[] {
-  try {
-    const dir = path.join(process.cwd(), 'public', 'properties', slug)
-    return fs
-      .readdirSync(dir)
-      .filter((f) => /\.(jpg|jpeg|png|webp)$/i.test(f))
-      .sort((a, b) => {
-        const n = (s: string) => parseInt(s.replace(/\D/g, ''), 10) || 0
-        return n(a) - n(b)
-      })
-      .map((f) => `/properties/${slug}/${f}`)
-  } catch {
-    return []
-  }
 }
 
 async function getAllProperties(): Promise<Property[]> {
@@ -81,9 +64,7 @@ export default async function CataloguePage() {
         ) : (
           <div className="space-y-16 lg:space-y-24">
             {properties.map((property, index) => {
-              const localPhotos = getLocalPhotos(property.slug)
-              const dbPhotos = Array.isArray(property.photos) ? (property.photos as string[]) : []
-              const photos = localPhotos.length > 0 ? localPhotos : dbPhotos
+              const photos = resolvePhotos(property)
 
               const isEven = index % 2 === 0
 

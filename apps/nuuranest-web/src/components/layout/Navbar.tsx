@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { Menu, X } from 'lucide-react'
 import { WhatsAppButton } from '@/components/ui/WhatsAppButton'
 
@@ -32,7 +33,17 @@ export function Navbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 lg:h-20">
           {/* Logo */}
-          <Link href="/" className="flex-shrink-0">
+          <Link href="/" className="flex-shrink-0 flex items-center gap-2.5">
+            <div className={`relative w-9 h-9 rounded-full overflow-hidden flex-shrink-0 ${scrolled ? '' : 'ring-1 ring-white/30'}`}>
+              <Image
+                src="/nuuranest-logo.png"
+                alt="Nuuranest Stays"
+                fill
+                className="object-contain"
+                sizes="36px"
+                priority
+              />
+            </div>
             <span
               className={`font-heading font-semibold text-xl lg:text-2xl transition-colors ${
                 scrolled ? 'text-nn-green' : 'text-white'
@@ -41,7 +52,7 @@ export function Navbar() {
               Nuuranest
             </span>
             <span
-              className={`text-sm ml-1 transition-colors ${
+              className={`text-sm transition-colors ${
                 scrolled ? 'text-nn-gold' : 'text-nn-gold'
               }`}
             >

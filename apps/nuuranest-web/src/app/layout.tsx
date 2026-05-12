@@ -11,10 +11,16 @@ export const metadata: Metadata = {
   description:
     'Five beautifully appointed short-stay properties in Nyali and Bamburi, Mombasa. Book direct for the best rates.',
   keywords: ['Mombasa accommodation', 'Nyali apartment', 'Bamburi short stay', 'Mombasa holiday rental'],
+  icons: {
+    icon: '/nuuranest-logo.png',
+    shortcut: '/nuuranest-logo.png',
+    apple: '/nuuranest-logo.png',
+  },
   openGraph: {
     type: 'website',
     locale: 'en_KE',
     siteName: 'Nuuranest Stays',
+    images: [{ url: '/nuuranest-logo.png' }],
   },
 }
 
