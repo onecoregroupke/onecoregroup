@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 import { createServerClient } from '@ocg/db'
 import type { Property } from '@ocg/db'
 import { withResolvedPhotos } from '@/lib/photos'
