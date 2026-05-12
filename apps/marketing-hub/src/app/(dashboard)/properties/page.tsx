@@ -10,6 +10,32 @@ const NUURANEST_URL =
 
 const PROPERTY_PHOTOS_BUCKET = 'nuuranest-properties'
 
+/** Tries jpg → png → house icon in sequence using React state, bypassing
+ *  broken Supabase URLs that return 200 HTML and never fire onError. */
+function PropertyThumbnail({ slug, active }: { slug: string; active: boolean }) {
+  const sources = [
+    `${NUURANEST_URL}/properties/${slug}/01.jpg`,
+    `${NUURANEST_URL}/properties/${slug}/01.png`,
+  ]
+  const [idx, setIdx] = useState(0)
+  const failed = idx >= sources.length
+
+  if (failed) {
+    return <Home size={18} className={active ? 'text-white/60' : 'text-gray-400'} />
+  }
+
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      key={sources[idx]}
+      src={sources[idx]}
+      alt=""
+      className="h-full w-full object-cover"
+      onError={() => setIdx((i) => i + 1)}
+    />
+  )
+}
+
 type PropertyForm = {
   id?: string
   slug: string
@@ -414,11 +440,6 @@ export default function PropertiesAdminPage() {
             ) : (
               properties.map((property) => {
                 const active = property.id === selectedProperty?.id
-                // Use DB photo if available, otherwise derive from the site's public folder pattern
-                const firstPhoto =
-                  (property.photos[0] as string | undefined) ||
-                  `${NUURANEST_URL}/properties/${property.slug}/01.jpg`
-                const fallbackPhoto = `${NUURANEST_URL}/properties/${property.slug}/01.png`
                 return (
                   <button
                     key={property.id}
@@ -433,28 +454,7 @@ export default function PropertiesAdminPage() {
                   >
                     <div className="flex gap-3">
                       <div className={`h-14 w-14 rounded-lg overflow-hidden flex items-center justify-center ${active ? 'bg-white/10' : 'bg-gray-100'}`}>
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={firstPhoto}
-                          alt=""
-                          className="h-full w-full object-cover"
-                          onError={(e) => {
-                            // Try .png fallback if .jpg failed, then show icon
-                            if (e.currentTarget.src !== fallbackPhoto) {
-                              e.currentTarget.src = fallbackPhoto
-                            } else {
-                              e.currentTarget.style.display = 'none'
-                              const fallbackEl = e.currentTarget.nextElementSibling as HTMLElement | null
-                              if (fallbackEl) fallbackEl.style.display = 'flex'
-                            }
-                          }}
-                        />
-                        <span
-                          style={{ display: 'none' }}
-                          className="items-center justify-center w-full h-full"
-                        >
-                          <Home size={18} className={active ? 'text-white/60' : 'text-gray-400'} />
-                        </span>
+                        <PropertyThumbnail slug={property.slug} active={active} />
                       </div>
                       <div className="min-w-0 flex-1">
                         <p className={`truncate text-sm font-semibold ${active ? 'text-white' : 'text-gray-900'}`}>
