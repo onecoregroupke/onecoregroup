@@ -414,7 +414,11 @@ export default function PropertiesAdminPage() {
             ) : (
               properties.map((property) => {
                 const active = property.id === selectedProperty?.id
-                const firstPhoto = property.photos[0]
+                // Use DB photo if available, otherwise derive from the site's public folder pattern
+                const firstPhoto =
+                  (property.photos[0] as string | undefined) ||
+                  `${NUURANEST_URL}/properties/${property.slug}/01.jpg`
+                const fallbackPhoto = `${NUURANEST_URL}/properties/${property.slug}/01.png`
                 return (
                   <button
                     key={property.id}
@@ -429,21 +433,24 @@ export default function PropertiesAdminPage() {
                   >
                     <div className="flex gap-3">
                       <div className={`h-14 w-14 rounded-lg overflow-hidden flex items-center justify-center ${active ? 'bg-white/10' : 'bg-gray-100'}`}>
-                        {firstPhoto ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={firstPhoto}
-                            alt=""
-                            className="h-full w-full object-cover"
-                            onError={(e) => {
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={firstPhoto}
+                          alt=""
+                          className="h-full w-full object-cover"
+                          onError={(e) => {
+                            // Try .png fallback if .jpg failed, then show icon
+                            if (e.currentTarget.src !== fallbackPhoto) {
+                              e.currentTarget.src = fallbackPhoto
+                            } else {
                               e.currentTarget.style.display = 'none'
-                              const fallback = e.currentTarget.nextElementSibling as HTMLElement | null
-                              if (fallback) fallback.style.display = 'flex'
-                            }}
-                          />
-                        ) : null}
+                              const fallbackEl = e.currentTarget.nextElementSibling as HTMLElement | null
+                              if (fallbackEl) fallbackEl.style.display = 'flex'
+                            }
+                          }}
+                        />
                         <span
-                          style={{ display: firstPhoto ? 'none' : 'flex' }}
+                          style={{ display: 'none' }}
                           className="items-center justify-center w-full h-full"
                         >
                           <Home size={18} className={active ? 'text-white/60' : 'text-gray-400'} />
