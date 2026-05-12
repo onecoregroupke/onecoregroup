@@ -287,6 +287,17 @@ export default function PropertiesAdminPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Auto-load site photos when a property is selected and photos are empty
+  // or only contain stale Supabase storage URLs.
+  useEffect(() => {
+    if (!form.id || !form.slug) return
+    const urls = linesToArray(form.photos)
+    const needsLoad =
+      urls.length === 0 || urls.every((u) => u.includes('supabase.co/storage'))
+    if (needsLoad) void fetchSitePhotos(form.slug)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.id])
+
   async function saveProperty() {
     setSaving(true)
     setError('')
@@ -373,6 +384,20 @@ export default function PropertiesAdminPage() {
     }
   }
 
+  /** Core fetcher — called both automatically and from the manual button. */
+  async function fetchSitePhotos(slug: string): Promise<void> {
+    if (!slug) return
+    try {
+      const res = await fetch(`${NUURANEST_URL}/api/photos/${slug}`)
+      const json = (await res.json()) as { photos?: string[] }
+      const photos = json.photos ?? []
+      if (photos.length) update('photos', photos.join('\n'))
+    } catch {
+      // silent — manual button will show an error if needed
+    }
+  }
+
+  /** Manual "Load from site" button handler — shows user-visible feedback. */
   async function loadSitePhotos() {
     const slug = form.slug.trim()
     if (!slug) {
@@ -391,7 +416,7 @@ export default function PropertiesAdminPage() {
         return
       }
       update('photos', photos.join('\n'))
-      setMessage(`${photos.length} site photo${photos.length === 1 ? '' : 's'} loaded. Save to publish.`)
+      setMessage(`${photos.length} photo${photos.length === 1 ? '' : 's'} loaded. Drag to reorder, then Save.`)
     } catch {
       setError('Could not reach the Nuuranest site. Check that it is deployed and try again.')
     } finally {
@@ -607,11 +632,7 @@ export default function PropertiesAdminPage() {
                           src={url}
                           alt=""
                           className="h-full w-full object-cover"
-                          onError={(e) => {
-                            const t = e.currentTarget
-                            t.style.display = 'none'
-                            t.parentElement?.classList.add('broken-img')
-                          }}
+                          onError={(e) => { e.currentTarget.style.opacity = '0' }}
                         />
                         {/* Position badge */}
                         <span className="absolute top-1 left-1 bg-black/60 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center">
