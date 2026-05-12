@@ -31,7 +31,7 @@ export async function GET(
         })
 
       if (files.length > 0) {
-        const base = process.env['NEXT_PUBLIC_SITE_URL'] ?? ''
+        const base = process.env['NEXT_PUBLIC_SITE_URL'] ?? 'https://nuuranest.vercel.app'
         const photos = files.map((f) => `${base}/properties/${candidate}/${f}`)
         return NextResponse.json({ photos }, {
           headers: {
