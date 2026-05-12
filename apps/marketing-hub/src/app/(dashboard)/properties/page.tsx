@@ -11,16 +11,27 @@ const NUURANEST_URL =
 const PROPERTY_PHOTOS_BUCKET = 'nuuranest-properties'
 
 /** Tries multiple URL patterns (jpg/png, full slug and base slug without
- *  common suffixes) so folder names don't have to exactly match DB slugs. */
-function PropertyThumbnail({ slug, active }: { slug: string; active: boolean }) {
+ *  common suffixes) so folder names don't have to exactly match DB slugs.
+ *  When a dbPhotoUrl is provided (e.g. from property.photos[0]), it is
+ *  tried first so uploaded Supabase photos show immediately. */
+function PropertyThumbnail({
+  slug,
+  active,
+  dbPhotoUrl,
+}: {
+  slug: string
+  active: boolean
+  dbPhotoUrl?: string
+}) {
   // Strip common suffixes so e.g. "coral-view-nuuranest" → "coral-view"
   const baseSlug = slug.replace(/-(nuuranest(-stays)?|stays)$/, '')
-  const dedupe = (arr: string[]) => [...new Set(arr)]
+  const dedupe = (arr: string[]) => [...new Set(arr.filter(Boolean))]
   const sources = dedupe([
-    `${NUURANEST_URL}/properties/${slug}/01.jpg`,
-    `${NUURANEST_URL}/properties/${slug}/01.png`,
+    ...(dbPhotoUrl ? [dbPhotoUrl] : []),
     `${NUURANEST_URL}/properties/${baseSlug}/01.jpg`,
     `${NUURANEST_URL}/properties/${baseSlug}/01.png`,
+    `${NUURANEST_URL}/properties/${slug}/01.jpg`,
+    `${NUURANEST_URL}/properties/${slug}/01.png`,
   ])
   const [idx, setIdx] = useState(0)
   const failed = idx >= sources.length
@@ -287,17 +298,6 @@ export default function PropertiesAdminPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Auto-load site photos when a property is selected and photos are empty
-  // or only contain stale Supabase storage URLs.
-  useEffect(() => {
-    if (!form.id || !form.slug) return
-    const urls = linesToArray(form.photos)
-    const needsLoad =
-      urls.length === 0 || urls.every((u) => u.includes('supabase.co/storage'))
-    if (needsLoad) void fetchSitePhotos(form.slug)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.id])
-
   async function saveProperty() {
     setSaving(true)
     setError('')
@@ -484,7 +484,11 @@ export default function PropertiesAdminPage() {
                   >
                     <div className="flex gap-3">
                       <div className={`h-14 w-14 rounded-lg overflow-hidden flex items-center justify-center ${active ? 'bg-white/10' : 'bg-gray-100'}`}>
-                        <PropertyThumbnail slug={property.slug} active={active} />
+                        <PropertyThumbnail
+                          slug={property.slug}
+                          active={active}
+                          dbPhotoUrl={property.photos[0] ?? undefined}
+                        />
                       </div>
                       <div className="min-w-0 flex-1">
                         <p className={`truncate text-sm font-semibold ${active ? 'text-white' : 'text-gray-900'}`}>
