@@ -15,28 +15,37 @@ export async function GET(
     return NextResponse.json({ error: 'Invalid slug' }, { status: 400 })
   }
 
-  try {
-    const dir = path.join(process.cwd(), 'public', 'properties', slug)
-    const files = fs
-      .readdirSync(dir)
-      .filter((f) => /\.(jpg|jpeg|png|webp)$/i.test(f))
-      .sort((a, b) => {
-        const n = (s: string) => parseInt(s.replace(/\D/g, ''), 10) || 0
-        return n(a) - n(b)
-      })
+  // Try exact slug, then strip common brand suffixes (e.g. "coral-view-nuuranest" → "coral-view")
+  const folderSlug = slug.replace(/-(nuuranest(-stays)?|stays)$/, '')
+  const candidates = [...new Set([slug, folderSlug])]
 
-    const base = process.env['NEXT_PUBLIC_SITE_URL'] ?? ''
-    const photos = files.map((f) => `${base}/properties/${slug}/${f}`)
+  for (const candidate of candidates) {
+    try {
+      const dir = path.join(process.cwd(), 'public', 'properties', candidate)
+      const files = fs
+        .readdirSync(dir)
+        .filter((f) => /\.(jpg|jpeg|png|webp)$/i.test(f))
+        .sort((a, b) => {
+          const n = (s: string) => parseInt(s.replace(/\D/g, ''), 10) || 0
+          return n(a) - n(b)
+        })
 
-    return NextResponse.json({ photos }, {
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Cache-Control': 'public, max-age=60',
-      },
-    })
-  } catch {
-    return NextResponse.json({ photos: [] }, {
-      headers: { 'Access-Control-Allow-Origin': '*' },
-    })
+      if (files.length > 0) {
+        const base = process.env['NEXT_PUBLIC_SITE_URL'] ?? ''
+        const photos = files.map((f) => `${base}/properties/${candidate}/${f}`)
+        return NextResponse.json({ photos }, {
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Cache-Control': 'public, max-age=60',
+          },
+        })
+      }
+    } catch {
+      // folder doesn't exist, try next
+    }
   }
+
+  return NextResponse.json({ photos: [] }, {
+    headers: { 'Access-Control-Allow-Origin': '*' },
+  })
 }

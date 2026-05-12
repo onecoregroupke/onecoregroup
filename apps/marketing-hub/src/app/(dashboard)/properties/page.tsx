@@ -10,13 +10,18 @@ const NUURANEST_URL =
 
 const PROPERTY_PHOTOS_BUCKET = 'nuuranest-properties'
 
-/** Tries jpg → png → house icon in sequence using React state, bypassing
- *  broken Supabase URLs that return 200 HTML and never fire onError. */
+/** Tries multiple URL patterns (jpg/png, full slug and base slug without
+ *  common suffixes) so folder names don't have to exactly match DB slugs. */
 function PropertyThumbnail({ slug, active }: { slug: string; active: boolean }) {
-  const sources = [
+  // Strip common suffixes so e.g. "coral-view-nuuranest" → "coral-view"
+  const baseSlug = slug.replace(/-(nuuranest(-stays)?|stays)$/, '')
+  const dedupe = (arr: string[]) => [...new Set(arr)]
+  const sources = dedupe([
     `${NUURANEST_URL}/properties/${slug}/01.jpg`,
     `${NUURANEST_URL}/properties/${slug}/01.png`,
-  ]
+    `${NUURANEST_URL}/properties/${baseSlug}/01.jpg`,
+    `${NUURANEST_URL}/properties/${baseSlug}/01.png`,
+  ])
   const [idx, setIdx] = useState(0)
   const failed = idx >= sources.length
 
