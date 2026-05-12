@@ -3,7 +3,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { Property } from '@ocg/db'
 import { getClient } from '@/lib/supabase'
-import { AlertCircle, CheckCircle, Eye, Home, Plus, Save, Upload } from 'lucide-react'
+import { AlertCircle, CheckCircle, Eye, Home, Plus, RefreshCw, Save, Upload } from 'lucide-react'
+
+const NUURANEST_URL =
+  process.env['NEXT_PUBLIC_NUURANEST_URL'] ?? 'https://nuuranest.vercel.app'
 
 const PROPERTY_PHOTOS_BUCKET = 'nuuranest-properties'
 
@@ -200,6 +203,7 @@ export default function PropertiesAdminPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [loadingSitePhotos, setLoadingSitePhotos] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
 
@@ -338,6 +342,32 @@ export default function PropertiesAdminPage() {
     }
   }
 
+  async function loadSitePhotos() {
+    const slug = form.slug.trim()
+    if (!slug) {
+      setError('Save the property slug first before loading site photos.')
+      return
+    }
+    setLoadingSitePhotos(true)
+    setError('')
+    setMessage('')
+    try {
+      const res = await fetch(`${NUURANEST_URL}/api/photos/${slug}`)
+      const json = (await res.json()) as { photos?: string[] }
+      const photos = json.photos ?? []
+      if (!photos.length) {
+        setMessage('No local photos found for this slug on the site.')
+        return
+      }
+      update('photos', photos.join('\n'))
+      setMessage(`${photos.length} site photo${photos.length === 1 ? '' : 's'} loaded. Save to publish.`)
+    } catch {
+      setError('Could not reach the Nuuranest site. Check that it is deployed and try again.')
+    } finally {
+      setLoadingSitePhotos(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -401,10 +431,23 @@ export default function PropertiesAdminPage() {
                       <div className={`h-14 w-14 rounded-lg overflow-hidden flex items-center justify-center ${active ? 'bg-white/10' : 'bg-gray-100'}`}>
                         {firstPhoto ? (
                           // eslint-disable-next-line @next/next/no-img-element
-                          <img src={firstPhoto} alt="" className="h-full w-full object-cover" />
-                        ) : (
+                          <img
+                            src={firstPhoto}
+                            alt=""
+                            className="h-full w-full object-cover"
+                            onError={(e) => {
+                              e.currentTarget.style.display = 'none'
+                              const fallback = e.currentTarget.nextElementSibling as HTMLElement | null
+                              if (fallback) fallback.style.display = 'flex'
+                            }}
+                          />
+                        ) : null}
+                        <span
+                          style={{ display: firstPhoto ? 'none' : 'flex' }}
+                          className="items-center justify-center w-full h-full"
+                        >
                           <Home size={18} className={active ? 'text-white/60' : 'text-gray-400'} />
-                        )}
+                        </span>
                       </div>
                       <div className="min-w-0 flex-1">
                         <p className={`truncate text-sm font-semibold ${active ? 'text-white' : 'text-gray-900'}`}>
@@ -491,28 +534,40 @@ export default function PropertiesAdminPage() {
                   Photos
                 </span>
 
-                {/* Upload button */}
-                <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-4">
-                  <label className="flex cursor-pointer flex-col items-center justify-center gap-2 text-center">
-                    <Upload size={22} className="text-ocg-navy" />
-                    <span className="text-sm font-semibold text-gray-900">
-                      {uploading ? 'Uploading…' : 'Upload photos'}
+                {/* Upload + load from site */}
+                <div className="flex gap-2">
+                  <div className="flex-1 rounded-xl border border-dashed border-gray-300 bg-gray-50 p-3">
+                    <label className="flex cursor-pointer flex-col items-center justify-center gap-1.5 text-center">
+                      <Upload size={20} className="text-ocg-navy" />
+                      <span className="text-sm font-semibold text-gray-900">
+                        {uploading ? 'Uploading…' : 'Upload photos'}
+                      </span>
+                      <span className="text-xs text-gray-500">JPG, PNG or WebP</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        disabled={uploading}
+                        onChange={(event) => {
+                          void uploadPhotos(event.target.files)
+                          event.currentTarget.value = ''
+                        }}
+                        className="sr-only"
+                      />
+                    </label>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void loadSitePhotos()}
+                    disabled={loadingSitePhotos}
+                    title="Pull photos from the public folder on the Nuuranest site"
+                    className="flex flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-green-300 bg-green-50 px-3 py-3 text-center hover:bg-green-100 transition-colors disabled:opacity-60 min-w-[90px]"
+                  >
+                    <RefreshCw size={20} className={`text-green-700 ${loadingSitePhotos ? 'animate-spin' : ''}`} />
+                    <span className="text-xs font-semibold text-green-800">
+                      {loadingSitePhotos ? 'Loading…' : 'Load from site'}
                     </span>
-                    <span className="text-xs text-gray-500">
-                      JPG, PNG or WebP. Drag thumbnails below to reorder.
-                    </span>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      disabled={uploading}
-                      onChange={(event) => {
-                        void uploadPhotos(event.target.files)
-                        event.currentTarget.value = ''
-                      }}
-                      className="sr-only"
-                    />
-                  </label>
+                  </button>
                 </div>
 
                 {/* Draggable photo grid */}
@@ -536,7 +591,16 @@ export default function PropertiesAdminPage() {
                         className="group relative aspect-square overflow-hidden rounded-lg bg-gray-100 cursor-grab active:cursor-grabbing"
                       >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={url} alt="" className="h-full w-full object-cover" />
+                        <img
+                          src={url}
+                          alt=""
+                          className="h-full w-full object-cover"
+                          onError={(e) => {
+                            const t = e.currentTarget
+                            t.style.display = 'none'
+                            t.parentElement?.classList.add('broken-img')
+                          }}
+                        />
                         {/* Position badge */}
                         <span className="absolute top-1 left-1 bg-black/60 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center">
                           {i + 1}
