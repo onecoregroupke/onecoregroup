@@ -19,5 +19,6 @@ export type {
   Order,
   OrderItem,
   Lead,
+  PianoCatalogue,
   Database,
 } from './types'
