@@ -216,6 +216,28 @@ export interface OrderItem {
   total_ksh: number
 }
 
+// ─── Piano Catalogue ─────────────────────────────────────────────────────────
+export interface PianoCatalogue {
+  id: string
+  slug: string
+  name: string
+  model: string | null
+  serial: string | null
+  category: string           // 'Upright' | 'Grand' | 'Digital'
+  condition: string | null
+  price: string
+  status: string             // 'Available' | 'Reserved' | 'Sold'
+  description: string | null
+  highlights: string[]
+  finish: string | null
+  size: string | null
+  images: string[]
+  featured: boolean
+  is_active: boolean
+  sort_order: number
+  created_at: string
+}
+
 // ─── Leads ───────────────────────────────────────────────────────────────────
 export interface Lead {
   id: string
@@ -253,6 +275,7 @@ export interface Database {
       orders: DbTable<Order, Omit<Order, 'id' | 'order_number' | 'created_at'>, Partial<Omit<Order, 'id' | 'order_number'>>>
       order_items: DbTable<OrderItem, Omit<OrderItem, 'id'>, Partial<Omit<OrderItem, 'id'>>>
       leads: DbTable<Lead, Omit<Lead, 'id' | 'created_at'>, Partial<Omit<Lead, 'id'>>>
+      piano_catalogue: DbTable<PianoCatalogue, Omit<PianoCatalogue, 'id' | 'created_at'>, Partial<Omit<PianoCatalogue, 'id' | 'created_at'>>>
     }
     Views: Record<string, never>
     Functions: Record<string, never>

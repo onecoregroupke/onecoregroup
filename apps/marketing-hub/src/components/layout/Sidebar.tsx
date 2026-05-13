@@ -30,6 +30,7 @@ const mainNav = [
   { href: '/compliance', label: 'Compliance', icon: CheckSquare },
   { href: '/properties', label: 'Properties', icon: Home },
   { href: '/glitz', label: 'Glitz N\' Glim', icon: Sparkles },
+  { href: '/npt', label: 'NPT Catalogue', icon: BarChart2 },
   { href: '/reports', label: 'Reports', icon: FileText },
 ]
 
