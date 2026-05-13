@@ -1,6 +1,10 @@
 import Image from 'next/image'
 import Link from 'next/link'
-import { categories, WHATSAPP } from '@/lib/products'
+import { fetchActiveProducts, groupByCategory, WHATSAPP } from '@/lib/products'
+import type { Product } from '@/lib/products'
+
+// Always render server-side so the catalogue reflects the latest DB state
+export const dynamic = 'force-dynamic'
 
 const WA_ICON = (
   <svg className="w-4 h-4 shrink-0" fill="currentColor" viewBox="0 0 24 24" aria-hidden>
@@ -8,7 +12,95 @@ const WA_ICON = (
   </svg>
 )
 
-export default function CataloguePage() {
+function ProductCard({ p, accent }: { p: Product; accent: string }) {
+  const mainImage = p.images?.[0] ?? null
+  const waMsg = `Hi! I'd like to order *${p.variant ? `${p.name} (${p.variant})` : p.name}*. Please confirm the price and available sizes.`
+  const startingPrice = p.sizes?.[0]?.price_ksh ?? p.price_ksh ?? null
+
+  return (
+    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden flex flex-col hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 group">
+      {/* Clickable area → product page */}
+      <Link href={`/products/${p.slug}`} className="flex flex-col flex-1">
+        {/* Image */}
+        <div className="relative w-full aspect-[3/4] sm:aspect-[2/3] bg-gray-50">
+          {mainImage ? (
+            <Image
+              src={mainImage}
+              alt={p.variant ? `${p.name} ${p.variant}` : p.name}
+              fill
+              className="object-cover object-center group-hover:scale-[1.02] transition-transform duration-300"
+              sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+            />
+          ) : (
+            <div
+              className="absolute inset-0 flex items-center justify-center"
+              style={{ background: `linear-gradient(135deg, ${accent}18 0%, ${accent}08 100%)` }}
+            >
+              <svg className="w-10 h-10 text-gray-300" fill="none" stroke="currentColor" strokeWidth={1} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 18h16.5M21 12V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12" />
+              </svg>
+            </div>
+          )}
+        </div>
+
+        {/* Info */}
+        <div className="p-3 sm:p-4 flex flex-col gap-2">
+          {/* Name + variant */}
+          <div className="space-y-1.5">
+            <h3 className="text-xs sm:text-sm font-bold text-gray-900 leading-tight">{p.name}</h3>
+            {p.variant && (
+              <span
+                className="inline-block text-[10px] font-bold px-2 py-0.5 rounded-full"
+                style={{ backgroundColor: `${accent}18`, color: accent }}
+              >
+                {p.variant}
+              </span>
+            )}
+          </div>
+
+          {/* Sizes */}
+          {p.sizes && p.sizes.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {p.sizes.map(s => (
+                <span key={s.label} className="text-[10px] font-medium px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded-md">
+                  {s.label}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* Price */}
+          <div className="pt-1 border-t border-gray-100">
+            <p className="text-[9px] text-gray-400 uppercase tracking-wide leading-none mb-0.5">
+              {p.sizes && p.sizes.length > 1 ? 'From' : 'Price'}
+            </p>
+            <p className="text-sm font-extrabold text-gray-900">
+              {startingPrice != null ? `Ksh ${startingPrice.toLocaleString()}` : 'Contact for price'}
+            </p>
+          </div>
+        </div>
+      </Link>
+
+      {/* WhatsApp CTA — outside the Link to avoid nested <a> */}
+      <div className="px-3 sm:px-4 pb-3 sm:pb-4">
+        <a
+          href={`https://wa.me/${WHATSAPP}?text=${encodeURIComponent(waMsg)}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center justify-center gap-1.5 bg-[#25d366] text-white text-xs font-bold w-full py-2.5 rounded-xl hover:bg-[#1da851] transition-colors"
+        >
+          {WA_ICON}
+          Order on WhatsApp
+        </a>
+      </div>
+    </div>
+  )
+}
+
+export default async function CataloguePage() {
+  const products = await fetchActiveProducts()
+  const categories = groupByCategory(products)
+
   return (
     <div className="min-h-screen bg-[#f7f7f5]">
 
@@ -43,124 +135,70 @@ export default function CataloguePage() {
               {WA_ICON}
               Order on WhatsApp
             </a>
-            <a href="#handwash" className="text-white/70 text-sm font-medium hover:text-white transition-colors underline underline-offset-4">
-              Browse catalogue ↓
-            </a>
+            {categories.length > 0 && (
+              <a href={`#${categories[0].id}`} className="text-white/70 text-sm font-medium hover:text-white transition-colors underline underline-offset-4">
+                Browse catalogue ↓
+              </a>
+            )}
           </div>
         </div>
       </header>
 
       {/* ── Category nav ── */}
-      <nav className="sticky top-0 z-20 bg-white/95 backdrop-blur border-b border-gray-200 shadow-sm">
-        <div className="max-w-7xl mx-auto flex overflow-x-auto gap-1 px-4 py-2.5 no-scrollbar">
-          {categories.map(cat => (
-            <a
-              key={cat.id}
-              href={`#${cat.id}`}
-              className="whitespace-nowrap text-xs font-semibold px-3.5 py-1.5 rounded-full bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors flex-shrink-0"
-            >
-              {cat.name}
-            </a>
-          ))}
-        </div>
-      </nav>
+      {categories.length > 0 && (
+        <nav className="sticky top-0 z-20 bg-white/95 backdrop-blur border-b border-gray-200 shadow-sm">
+          <div className="max-w-7xl mx-auto flex overflow-x-auto gap-1 px-4 py-2.5 no-scrollbar">
+            {categories.map(cat => (
+              <a
+                key={cat.id}
+                href={`#${cat.id}`}
+                className="whitespace-nowrap text-xs font-semibold px-3.5 py-1.5 rounded-full bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors flex-shrink-0"
+              >
+                {cat.name}
+              </a>
+            ))}
+          </div>
+        </nav>
+      )}
 
       {/* ── Catalogue ── */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-12 space-y-16">
-        {categories.map((cat) => (
-          <section key={cat.id} id={cat.id} className="scroll-mt-14">
-
-            {/* Category divider */}
-            <div className="flex items-stretch gap-5 mb-7">
-              <div className="w-[3px] rounded-full shrink-0" style={{ backgroundColor: cat.accent }} />
-              <div className="flex-1 min-w-0 py-1">
-                <h2 className="text-2xl sm:text-3xl font-extrabold text-gray-900 leading-tight tracking-tight">
-                  {cat.name}
-                </h2>
-              </div>
-              <div className="self-center shrink-0">
-                <span
-                  className="text-xs font-bold px-3 py-1 rounded-full"
-                  style={{ backgroundColor: `${cat.accent}18`, color: cat.accent }}
-                >
-                  {cat.products.length} item{cat.products.length !== 1 ? 's' : ''}
-                </span>
-              </div>
-            </div>
-            <div className="h-px bg-gray-200 mb-7" />
-
-            {/* Product grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-5">
-              {cat.products.map(p => {
-                const waMsg = `Hi! I'd like to order *${p.variant ? `${p.name} (${p.variant})` : p.name}*. Please confirm the price and available sizes.`
-                return (
-                  <div
-                    key={p.id}
-                    className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden flex flex-col hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 group"
+        {categories.length === 0 ? (
+          <div className="text-center py-24 text-gray-400">
+            <p className="text-lg font-semibold mb-2">Catalogue coming soon</p>
+            <p className="text-sm">Check back shortly or reach us on WhatsApp.</p>
+          </div>
+        ) : (
+          categories.map((cat) => (
+            <section key={cat.id} id={cat.id} className="scroll-mt-14">
+              {/* Category divider */}
+              <div className="flex items-stretch gap-5 mb-7">
+                <div className="w-[3px] rounded-full shrink-0" style={{ backgroundColor: cat.accent }} />
+                <div className="flex-1 min-w-0 py-1">
+                  <h2 className="text-2xl sm:text-3xl font-extrabold text-gray-900 leading-tight tracking-tight">
+                    {cat.name}
+                  </h2>
+                </div>
+                <div className="self-center shrink-0">
+                  <span
+                    className="text-xs font-bold px-3 py-1 rounded-full"
+                    style={{ backgroundColor: `${cat.accent}18`, color: cat.accent }}
                   >
-                    {/* Clickable area → product page */}
-                    <Link href={`/products/${p.id}`} className="flex flex-col flex-1">
-                      {/* Image */}
-                      <div className="relative w-full aspect-[3/4] sm:aspect-[2/3] bg-gray-50">
-                        <Image
-                          src={p.image}
-                          alt={p.variant ? `${p.name} ${p.variant}` : p.name}
-                          fill
-                          className="object-cover object-center group-hover:scale-[1.02] transition-transform duration-300"
-                          sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-                        />
-                      </div>
+                    {cat.products.length} item{cat.products.length !== 1 ? 's' : ''}
+                  </span>
+                </div>
+              </div>
+              <div className="h-px bg-gray-200 mb-7" />
 
-                      {/* Info */}
-                      <div className="p-3 sm:p-4 flex flex-col gap-2">
-                        {/* Name + variant */}
-                        <div className="space-y-1.5">
-                          <h3 className="text-xs sm:text-sm font-bold text-gray-900 leading-tight">{p.name}</h3>
-                          {p.variant && (
-                            <span
-                              className="inline-block text-[10px] font-bold px-2 py-0.5 rounded-full"
-                              style={{ backgroundColor: `${cat.accent}18`, color: cat.accent }}
-                            >
-                              {p.variant}
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Sizes */}
-                        <div className="flex flex-wrap gap-1">
-                          {p.sizes.map(s => (
-                            <span key={s} className="text-[10px] font-medium px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded-md">
-                              {s}
-                            </span>
-                          ))}
-                        </div>
-
-                        {/* Price */}
-                        <div className="pt-1 border-t border-gray-100">
-                          <p className="text-[9px] text-gray-400 uppercase tracking-wide leading-none mb-0.5">From</p>
-                          <p className="text-sm font-extrabold text-gray-900">Ksh 100</p>
-                        </div>
-                      </div>
-                    </Link>
-
-                    {/* WhatsApp CTA — outside the Link to avoid nested <a> */}
-                    <div className="px-3 sm:px-4 pb-3 sm:pb-4">
-                      <a
-                        href={`https://wa.me/${WHATSAPP}?text=${encodeURIComponent(waMsg)}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center justify-center gap-1.5 bg-[#25d366] text-white text-xs font-bold w-full py-2.5 rounded-xl hover:bg-[#1da851] transition-colors"
-                      >
-                        {WA_ICON}
-                        Order on WhatsApp
-                      </a>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          </section>
-        ))}
+              {/* Product grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-5">
+                {cat.products.map(p => (
+                  <ProductCard key={p.id} p={p} accent={cat.accent} />
+                ))}
+              </div>
+            </section>
+          ))
+        )}
       </main>
 
       {/* ── Footer ── */}

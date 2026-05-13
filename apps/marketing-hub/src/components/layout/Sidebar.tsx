@@ -8,6 +8,7 @@ import {
   CheckSquare,
   FileText,
   Home,
+  Sparkles,
   Settings,
   LogOut,
   X,
@@ -28,6 +29,7 @@ const mainNav = [
   { href: '/input', label: 'Input Portal', icon: PenSquare },
   { href: '/compliance', label: 'Compliance', icon: CheckSquare },
   { href: '/properties', label: 'Properties', icon: Home },
+  { href: '/glitz', label: 'Glitz N\' Glim', icon: Sparkles },
   { href: '/reports', label: 'Reports', icon: FileText },
 ]
 

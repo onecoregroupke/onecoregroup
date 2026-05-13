@@ -11,6 +11,7 @@ export type {
   PropertyEnquiryInsert,
   PropertyReview,
   Product,
+  ProductSize,
   Order,
   OrderItem,
   Lead,

@@ -160,15 +160,25 @@ export interface PropertyReview {
 }
 
 // ─── Products ────────────────────────────────────────────────────────────────
+export interface ProductSize {
+  label: string
+  price_ksh: number
+}
+
 export interface Product {
   id: string
   slug: string
   name: string
+  variant: string | null
   description: string | null
   short_description: string | null
+  usage_instructions: string | null
   price_ksh: number | null
   compare_price_ksh: number | null
   category: string | null
+  category_display_name: string | null
+  category_accent: string | null
+  sizes: ProductSize[]
   images: string[]
   before_after_images: string[]
   features: string[]
@@ -239,7 +249,7 @@ export interface Database {
       properties: DbTable<Property, Omit<Property, 'id' | 'created_at' | 'updated_at'>, Partial<Omit<Property, 'id'>>>
       property_enquiries: DbTable<PropertyEnquiry, PropertyEnquiryInsert, Partial<PropertyEnquiryInsert>>
       property_reviews: DbTable<PropertyReview, Omit<PropertyReview, 'id' | 'created_at'>, Partial<Omit<PropertyReview, 'id'>>>
-      products: DbTable<Product, Omit<Product, 'id' | 'created_at'>, Partial<Omit<Product, 'id'>>>
+      products: DbTable<Product, Omit<Product, 'id' | 'created_at'>, Partial<Omit<Product, 'id' | 'created_at'>>>
       orders: DbTable<Order, Omit<Order, 'id' | 'order_number' | 'created_at'>, Partial<Omit<Order, 'id' | 'order_number'>>>
       order_items: DbTable<OrderItem, Omit<OrderItem, 'id'>, Partial<Omit<OrderItem, 'id'>>>
       leads: DbTable<Lead, Omit<Lead, 'id' | 'created_at'>, Partial<Omit<Lead, 'id'>>>
