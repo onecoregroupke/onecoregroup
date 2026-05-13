@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { allProducts, getProduct, WHATSAPP, waLink } from '@/lib/products'
 
-export function generateStaticParams() {
+export async function generateStaticParams() {
   return allProducts.map(p => ({ id: p.id }))
 }
 
@@ -31,8 +31,9 @@ function GalleryPlaceholder({ accent, label }: { accent: string; label?: string 
   )
 }
 
-export default function ProductPage({ params }: { params: { id: string } }) {
-  const product = getProduct(params.id)
+export default async function ProductPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
+  const product = getProduct(id)
   if (!product) notFound()
 
   const { accent } = product
