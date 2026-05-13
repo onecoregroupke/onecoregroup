@@ -25,30 +25,40 @@ export interface GroupedCategory {
 
 /** Fetch all active products ordered by sort_order */
 export async function fetchActiveProducts(): Promise<Product[]> {
-  const supabase = createBrowserClient()
-  const { data, error } = await supabase
-    .from('products')
-    .select('*')
-    .eq('is_active', true)
-    .order('sort_order', { ascending: true })
-  if (error) {
-    console.error('[glitz] fetchActiveProducts error:', error.message)
+  try {
+    const supabase = createBrowserClient()
+    const { data, error } = await supabase
+      .from('products')
+      .select('*')
+      .eq('is_active', true)
+      .order('sort_order', { ascending: true })
+    if (error) {
+      console.error('[glitz] fetchActiveProducts error:', error.message)
+      return []
+    }
+    return (data as Product[]) ?? []
+  } catch (err) {
+    console.error('[glitz] fetchActiveProducts:', err)
     return []
   }
-  return (data as Product[]) ?? []
 }
 
 /** Fetch a single active product by slug */
 export async function fetchProductBySlug(slug: string): Promise<Product | null> {
-  const supabase = createBrowserClient()
-  const { data, error } = await supabase
-    .from('products')
-    .select('*')
-    .eq('slug', slug)
-    .eq('is_active', true)
-    .single()
-  if (error) return null
-  return data as Product
+  try {
+    const supabase = createBrowserClient()
+    const { data, error } = await supabase
+      .from('products')
+      .select('*')
+      .eq('slug', slug)
+      .eq('is_active', true)
+      .single()
+    if (error) return null
+    return data as Product
+  } catch (err) {
+    console.error('[glitz] fetchProductBySlug:', err)
+    return null
+  }
 }
 
 /** Group a flat product list into categories, preserving insertion order */
