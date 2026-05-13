@@ -5,8 +5,10 @@ import type { Product, ProductSize } from '@ocg/db'
 import { getClient, getSession } from '@/lib/supabase'
 import {
   AlertCircle, CheckCircle, Download, Eye, Package,
-  Plus, RefreshCw, Save, Sparkles, Trash2, Upload, X,
+  Plus, RefreshCw, Save, Sparkles, Upload, X,
 } from 'lucide-react'
+
+const GLITZ_BUCKET = 'glitz-products'
 
 const GLITZ_URL = process.env['NEXT_PUBLIC_GLITZ_URL'] ?? 'http://localhost:3002'
 
@@ -143,6 +145,7 @@ export default function GlitzAdminPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [importing, setImporting] = useState(false)
+  const [uploading, setUploading] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const importRef = useRef<HTMLInputElement>(null)
@@ -264,6 +267,43 @@ export default function GlitzAdminPage() {
     } finally {
       setImporting(false)
       if (importRef.current) importRef.current.value = ''
+    }
+  }
+
+  async function uploadImages(files: FileList | null) {
+    if (!files?.length) return
+    setUploading(true); setError(''); setMessage('')
+    try {
+      const supabase = getClient()
+      const folder = (form.slug.trim() || 'new-product')
+        .toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '')
+
+      const urls: string[] = []
+      for (const file of Array.from(files)) {
+        if (!file.type.startsWith('image/')) continue
+        const ext = file.name.split('.').pop()?.toLowerCase() ?? 'jpg'
+        const safeName = file.name
+          .replace(/\.[^/.]+$/, '').toLowerCase()
+          .replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '')
+        const path = `${folder}/${Date.now()}-${safeName || 'photo'}.${ext}`
+
+        const { error: uploadError } = await supabase.storage
+          .from(GLITZ_BUCKET)
+          .upload(path, file, { cacheControl: '31536000', upsert: false })
+        if (uploadError) throw new Error(uploadError.message)
+
+        const { data } = supabase.storage.from(GLITZ_BUCKET).getPublicUrl(path)
+        urls.push(data.publicUrl)
+      }
+      if (!urls.length) throw new Error('No image files were selected.')
+
+      const existing = linesToArray(form.images)
+      update('images', [...existing, ...urls].join('\n'))
+      setMessage(`${urls.length} image${urls.length === 1 ? '' : 's'} uploaded. Save the product to publish.`)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Upload failed.')
+    } finally {
+      setUploading(false)
     }
   }
 
@@ -495,52 +535,94 @@ export default function GlitzAdminPage() {
             <TextArea label="Key Features — one per line" value={form.features} onChange={v => update('features', v)} rows={5} />
 
             {/* Images */}
-            <div>
-              <Field label="Images — one URL per line (first = main image)">
-                <textarea
-                  value={form.images}
-                  rows={4}
-                  onChange={e => update('images', e.target.value)}
-                  className={`${inputCls} font-mono text-xs`}
-                  placeholder="/products/handwash-lavender.png&#10;https://cdn.example.com/photo2.jpg"
-                />
-              </Field>
-              {/* Thumbnail preview */}
+            <div className="space-y-3">
+              <span className="block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                Images
+              </span>
+
+              {/* Upload dropzone */}
+              <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-4">
+                <label className={`flex cursor-pointer flex-col items-center justify-center gap-1.5 text-center ${uploading ? 'pointer-events-none opacity-60' : ''}`}>
+                  <Upload size={22} className="text-amber-500" />
+                  <span className="text-sm font-semibold text-gray-900">
+                    {uploading ? 'Uploading…' : 'Upload product images'}
+                  </span>
+                  <span className="text-xs text-gray-500">JPG, PNG or WebP · multiple allowed</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    disabled={uploading}
+                    onChange={e => { void uploadImages(e.target.files); e.currentTarget.value = '' }}
+                    className="sr-only"
+                  />
+                </label>
+              </div>
+
+              {/* Draggable image grid */}
               {linesToArray(form.images).length > 0 && (
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {linesToArray(form.images).map((url, i) => (
-                    <div key={url} className="relative group">
-                      <div className="h-16 w-16 rounded-lg overflow-hidden bg-gray-100 border-2 border-transparent group-first:border-amber-400">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={url.startsWith('/') ? `${GLITZ_URL}${url}` : url}
-                          alt=""
-                          className="h-full w-full object-cover"
-                          onError={e => { e.currentTarget.style.opacity = '0.2' }}
-                        />
-                      </div>
+                <div className="grid grid-cols-4 gap-2">
+                  {linesToArray(form.images).map((url, i, arr) => (
+                    <div
+                      key={url}
+                      draggable
+                      onDragStart={e => e.dataTransfer.setData('text/plain', String(i))}
+                      onDragOver={e => e.preventDefault()}
+                      onDrop={e => {
+                        e.preventDefault()
+                        const from = Number(e.dataTransfer.getData('text/plain'))
+                        if (from === i) return
+                        const next = [...arr]
+                        const [moved] = next.splice(from, 1)
+                        next.splice(i, 0, moved)
+                        update('images', next.join('\n'))
+                      }}
+                      className="group relative aspect-square overflow-hidden rounded-lg bg-gray-100 cursor-grab active:cursor-grabbing"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={url.startsWith('/') ? `${GLITZ_URL}${url}` : url}
+                        alt=""
+                        className="h-full w-full object-cover"
+                        onError={e => { e.currentTarget.style.opacity = '0' }}
+                      />
+                      {/* Position badge */}
+                      <span className="absolute top-1 left-1 bg-black/60 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center">
+                        {i + 1}
+                      </span>
+                      {/* Delete button */}
+                      <button
+                        type="button"
+                        onClick={() => update('images', arr.filter((_, j) => j !== i).join('\n'))}
+                        className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-xs leading-none"
+                        aria-label="Remove image"
+                      >
+                        ×
+                      </button>
+                      {/* Main badge */}
                       {i === 0 && (
-                        <span className="absolute -top-1.5 -right-1.5 bg-amber-400 text-white text-[9px] font-bold px-1 rounded-full">
+                        <span className="absolute bottom-1 left-1 right-1 bg-amber-500 text-white text-[9px] text-center rounded py-0.5 font-semibold">
                           MAIN
                         </span>
                       )}
-                      <button
-                        onClick={() => {
-                          const urls = linesToArray(form.images).filter((_, j) => j !== i)
-                          update('images', urls.join('\n'))
-                        }}
-                        className="absolute inset-0 bg-red-500/80 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
-                      >
-                        <Trash2 size={14} className="text-white" />
-                      </button>
                     </div>
                   ))}
                 </div>
               )}
-              <p className="mt-1.5 text-[11px] text-gray-400">
-                Drag images in the text area to reorder. The first URL is the main catalogue image.
-                Images can be full URLs (CDN/Supabase storage) or local paths like <code>/products/filename.png</code>.
-              </p>
+
+              {/* Raw URL textarea — collapsed */}
+              <details className="text-xs text-gray-400">
+                <summary className="cursor-pointer select-none hover:text-gray-600 transition-colors py-1">
+                  Edit URLs manually
+                </summary>
+                <textarea
+                  value={form.images}
+                  rows={4}
+                  onChange={e => update('images', e.target.value)}
+                  className="mt-2 w-full rounded-lg border border-gray-200 px-3 py-2 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-ocg-navy font-mono"
+                  placeholder={`/products/handwash-lavender.png\nhttps://storage.supabase.co/...`}
+                />
+              </details>
             </div>
 
             {/* Toggles */}
