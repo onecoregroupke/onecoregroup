@@ -1,3 +1,22 @@
+// ─── User Permissions (RBAC) ─────────────────────────────────────────────────
+export type SectionKey =
+  | 'dashboard' | 'input' | 'compliance' | 'properties'
+  | 'glitz' | 'npt' | 'reports' | 'brands' | 'users'
+
+export type AccessLevel = 'none' | 'view' | 'edit'
+
+export type PermissionsMap = Partial<Record<SectionKey, AccessLevel>>
+
+export interface UserPermission {
+  id: string
+  user_id: string
+  display_name: string | null
+  permissions: PermissionsMap
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
 // ─── Brands ─────────────────────────────────────────────────────────────────
 export interface Brand {
   id: string

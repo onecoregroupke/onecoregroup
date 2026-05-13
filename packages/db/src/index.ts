@@ -1,5 +1,9 @@
 export { createBrowserClient, createServerClient } from './client'
 export type {
+  SectionKey,
+  AccessLevel,
+  PermissionsMap,
+  UserPermission,
   Brand,
   DailyMetric,
   DailyMetricInsert,
