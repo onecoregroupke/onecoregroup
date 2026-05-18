@@ -104,45 +104,45 @@ export default async function CataloguePage() {
   return (
     <div className="min-h-screen bg-[#f7f7f5]">
 
-      {/* ── Hero ── */}
-      <header className="relative min-h-[72vh] flex items-end overflow-hidden bg-gray-950">
+      {/* ── Hero image — fully visible, no overlay ── */}
+      <header className="w-full bg-[#a8dff0]">
         <Image
           src="/hero.jpg"
           alt="Glitz N' Glim product range"
-          fill
+          width={1500}
+          height={630}
           priority
-          className="object-cover object-center"
+          className="w-full h-auto object-contain"
           sizes="100vw"
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-gray-950 via-gray-950/55 to-gray-950/10" />
-        <div className="absolute inset-0 bg-gradient-to-r from-gray-950/50 to-transparent" />
-
-        <div className="relative z-10 w-full max-w-3xl px-6 sm:px-10 pb-14 pt-24">
-          <p className="text-amber-400 text-[10px] font-black tracking-[0.35em] uppercase mb-4">Iceland Geysers</p>
-          <h1 className="text-5xl sm:text-6xl lg:text-7xl font-black text-white tracking-tight leading-[0.95] mb-5">
-            Glitz N&apos;<br />Glim
-          </h1>
-          <p className="text-gray-300 text-sm sm:text-base max-w-xs leading-relaxed mb-8">
-            Premium cleaning &amp; personal care — powered by the purity of Iceland Geysers.
-          </p>
-          <div className="flex flex-wrap gap-3 items-center">
-            <a
-              href={`https://wa.me/${WHATSAPP}?text=${encodeURIComponent("Hi! I'd like to browse the Glitz N' Glim product catalogue.")}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 bg-[#25d366] text-white font-bold px-6 py-3 rounded-full hover:bg-[#1da851] transition-colors text-sm shadow-lg shadow-green-900/30"
-            >
-              {WA_ICON}
-              Order on WhatsApp
-            </a>
-            {categories.length > 0 && (
-              <a href={`#${categories[0].id}`} className="text-white/70 text-sm font-medium hover:text-white transition-colors underline underline-offset-4">
-                Browse catalogue ↓
-              </a>
-            )}
-          </div>
-        </div>
       </header>
+
+      {/* ── Brand intro — below the hero ── */}
+      <div className="bg-white border-b border-gray-100 py-8 px-6 text-center">
+        <p className="text-[#1a8abf] text-[11px] font-black tracking-[0.35em] uppercase mb-2">Iceland Geysers</p>
+        <h1 className="text-4xl sm:text-5xl font-black text-gray-900 tracking-tight leading-tight mb-3">
+          Glitz N&apos; Glim
+        </h1>
+        <p className="text-gray-500 text-sm sm:text-base max-w-sm mx-auto leading-relaxed mb-6">
+          Premium cleaning &amp; personal care — powered by the purity of Iceland Geysers.
+        </p>
+        <div className="flex flex-wrap gap-3 items-center justify-center">
+          <a
+            href={`https://wa.me/${WHATSAPP}?text=${encodeURIComponent("Hi! I'd like to browse the Glitz N' Glim product catalogue.")}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 bg-[#25d366] text-white font-bold px-6 py-3 rounded-full hover:bg-[#1da851] transition-colors text-sm shadow-lg shadow-green-900/30"
+          >
+            {WA_ICON}
+            Order on WhatsApp
+          </a>
+          {categories.length > 0 && (
+            <a href={`#${categories[0].id}`} className="text-gray-500 text-sm font-medium hover:text-gray-800 transition-colors underline underline-offset-4">
+              Browse catalogue ↓
+            </a>
+          )}
+        </div>
+      </div>
 
       {/* ── Category nav ── */}
       {categories.length > 0 && (
@@ -152,7 +152,7 @@ export default async function CataloguePage() {
               <a
                 key={cat.id}
                 href={`#${cat.id}`}
-                className="whitespace-nowrap text-xs font-semibold px-3.5 py-1.5 rounded-full bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors flex-shrink-0"
+                className="whitespace-nowrap text-sm font-bold px-4 py-2 rounded-full bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors flex-shrink-0"
               >
                 {cat.name}
               </a>
@@ -173,9 +173,9 @@ export default async function CataloguePage() {
             <section key={cat.id} id={cat.id} className="scroll-mt-14">
               {/* Category divider */}
               <div className="flex items-stretch gap-5 mb-7">
-                <div className="w-[3px] rounded-full shrink-0" style={{ backgroundColor: cat.accent }} />
+                <div className="w-1 sm:w-[3px] rounded-full shrink-0" style={{ backgroundColor: cat.accent }} />
                 <div className="flex-1 min-w-0 py-1">
-                  <h2 className="text-2xl sm:text-3xl font-extrabold text-gray-900 leading-tight tracking-tight">
+                  <h2 className="text-3xl sm:text-4xl font-black text-gray-900 leading-tight tracking-tight">
                     {cat.name}
                   </h2>
                 </div>
