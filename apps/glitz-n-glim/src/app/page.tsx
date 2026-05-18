@@ -107,7 +107,7 @@ export default async function CataloguePage() {
       {/* ── Hero image — fully visible, no overlay ── */}
       <header className="w-full bg-[#a8dff0]">
         <Image
-          src="/hero.jpg"
+          src="/hero.png"
           alt="Glitz N' Glim product range"
           width={1500}
           height={630}
