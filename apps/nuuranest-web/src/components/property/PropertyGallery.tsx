@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import Image from 'next/image'
 import { X, ChevronLeft, ChevronRight } from 'lucide-react'
 
@@ -12,6 +12,7 @@ interface PropertyGalleryProps {
 export function PropertyGallery({ photos, propertyName }: PropertyGalleryProps) {
   const [lightboxOpen, setLightboxOpen] = useState(false)
   const [lightboxIndex, setLightboxIndex] = useState(0)
+  const touchStartX = useRef<number | null>(null)
 
   const mainPhoto = photos[0] ?? ''
   const thumbs = photos.slice(1, 3)
@@ -21,12 +22,37 @@ export function PropertyGallery({ photos, propertyName }: PropertyGalleryProps) 
     setLightboxOpen(true)
   }
 
-  function prev() {
+  const prev = useCallback(() => {
     setLightboxIndex((i) => (i === 0 ? photos.length - 1 : i - 1))
-  }
+  }, [photos.length])
 
-  function next() {
+  const next = useCallback(() => {
     setLightboxIndex((i) => (i === photos.length - 1 ? 0 : i + 1))
+  }, [photos.length])
+
+  // Keyboard navigation
+  useEffect(() => {
+    if (!lightboxOpen) return
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'ArrowLeft') prev()
+      else if (e.key === 'ArrowRight') next()
+      else if (e.key === 'Escape') setLightboxOpen(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [lightboxOpen, prev, next])
+
+  // Touch swipe handlers
+  function onTouchStart(e: React.TouchEvent) {
+    touchStartX.current = e.touches[0].clientX
+  }
+  function onTouchEnd(e: React.TouchEvent) {
+    if (touchStartX.current === null) return
+    const dx = touchStartX.current - e.changedTouches[0].clientX
+    if (Math.abs(dx) > 50) {
+      if (dx > 0) next(); else prev()
+    }
+    touchStartX.current = null
   }
 
   return (
@@ -86,24 +112,35 @@ export function PropertyGallery({ photos, propertyName }: PropertyGalleryProps) 
 
       {/* Lightbox */}
       {lightboxOpen && (
-        <div className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center">
+        <div
+          className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center"
+          onClick={() => setLightboxOpen(false)}
+          onTouchStart={onTouchStart}
+          onTouchEnd={onTouchEnd}
+        >
+          {/* Close */}
           <button
             onClick={() => setLightboxOpen(false)}
-            className="absolute top-4 right-4 text-white hover:text-gray-300 transition-colors"
+            className="absolute top-4 right-4 text-white hover:text-gray-300 transition-colors z-10"
             aria-label="Close gallery"
           >
             <X size={28} />
           </button>
 
+          {/* Prev — hidden on mobile (swipe available) */}
           <button
-            onClick={prev}
-            className="absolute left-4 text-white hover:text-gray-300 p-2 transition-colors"
+            onClick={(e) => { e.stopPropagation(); prev() }}
+            className="hidden sm:block absolute left-4 text-white hover:text-gray-300 p-2 transition-colors"
             aria-label="Previous"
           >
             <ChevronLeft size={36} />
           </button>
 
-          <div className="relative w-full max-w-4xl h-[70vh] mx-16">
+          {/* Image */}
+          <div
+            className="relative w-full max-w-4xl h-[70vh] mx-4 sm:mx-16"
+            onClick={(e) => e.stopPropagation()}
+          >
             <Image
               src={photos[lightboxIndex] ?? ''}
               alt={`${propertyName} — photo ${lightboxIndex + 1}`}
@@ -113,14 +150,21 @@ export function PropertyGallery({ photos, propertyName }: PropertyGalleryProps) 
             />
           </div>
 
+          {/* Next — hidden on mobile (swipe available) */}
           <button
-            onClick={next}
-            className="absolute right-4 text-white hover:text-gray-300 p-2 transition-colors"
+            onClick={(e) => { e.stopPropagation(); next() }}
+            className="hidden sm:block absolute right-4 text-white hover:text-gray-300 p-2 transition-colors"
             aria-label="Next"
           >
             <ChevronRight size={36} />
           </button>
 
+          {/* Swipe hint — mobile only */}
+          <p className="sm:hidden absolute top-4 left-1/2 -translate-x-1/2 text-white/50 text-xs pointer-events-none">
+            Swipe to browse
+          </p>
+
+          {/* Counter */}
           <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-white text-sm opacity-70">
             {lightboxIndex + 1} / {photos.length}
           </div>

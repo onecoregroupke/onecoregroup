@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import Image from 'next/image'
 import { X, ChevronLeft, ChevronRight } from 'lucide-react'
 
@@ -11,6 +11,7 @@ interface CataloguePhotoSliderProps {
 
 export function CataloguePhotoSlider({ photos, propertyName }: CataloguePhotoSliderProps) {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
+  const touchStartX = useRef<number | null>(null)
 
   const main = photos[0] ?? ''
   const small1 = photos[1] ?? null
@@ -33,6 +34,7 @@ export function CataloguePhotoSlider({ photos, propertyName }: CataloguePhotoSli
     setLightboxIndex((i) => (i === null ? 0 : i === photos.length - 1 ? 0 : i + 1))
   }, [photos.length])
 
+  // Keyboard navigation
   useEffect(() => {
     if (lightboxIndex === null) return
     function onKey(e: KeyboardEvent) {
@@ -44,9 +46,22 @@ export function CataloguePhotoSlider({ photos, propertyName }: CataloguePhotoSli
     return () => window.removeEventListener('keydown', onKey)
   }, [lightboxIndex, prev, next])
 
+  // Touch swipe handlers
+  function onTouchStart(e: React.TouchEvent) {
+    touchStartX.current = e.touches[0].clientX
+  }
+  function onTouchEnd(e: React.TouchEvent) {
+    if (touchStartX.current === null) return
+    const dx = touchStartX.current - e.changedTouches[0].clientX
+    if (Math.abs(dx) > 50) {
+      if (dx > 0) next(); else prev()
+    }
+    touchStartX.current = null
+  }
+
   return (
     <>
-      {/* Default view */}
+      {/* Default view: 1 main + 2 small */}
       <div className="flex aspect-[4/3] lg:aspect-auto lg:h-full min-h-[280px] gap-0.5">
         {/* Main image */}
         <div
@@ -108,6 +123,8 @@ export function CataloguePhotoSlider({ photos, propertyName }: CataloguePhotoSli
         <div
           className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center"
           onClick={closeLightbox}
+          onTouchStart={onTouchStart}
+          onTouchEnd={onTouchEnd}
         >
           {/* Close */}
           <button
@@ -118,11 +135,11 @@ export function CataloguePhotoSlider({ photos, propertyName }: CataloguePhotoSli
             <X size={28} />
           </button>
 
-          {/* Prev */}
+          {/* Prev — hidden on mobile (swipe available) */}
           {photos.length > 1 && (
             <button
               onClick={(e) => { e.stopPropagation(); prev() }}
-              className="absolute left-4 top-1/2 -translate-y-1/2 text-white hover:text-gray-300 p-2 transition-colors z-10"
+              className="hidden sm:block absolute left-4 top-1/2 -translate-y-1/2 text-white hover:text-gray-300 p-2 transition-colors z-10"
               aria-label="Previous"
             >
               <ChevronLeft size={36} />
@@ -131,7 +148,7 @@ export function CataloguePhotoSlider({ photos, propertyName }: CataloguePhotoSli
 
           {/* Image */}
           <div
-            className="relative w-full max-w-4xl h-[75vh] mx-16"
+            className="relative w-full max-w-4xl h-[75vh] mx-4 sm:mx-16"
             onClick={(e) => e.stopPropagation()}
           >
             <Image
@@ -143,16 +160,21 @@ export function CataloguePhotoSlider({ photos, propertyName }: CataloguePhotoSli
             />
           </div>
 
-          {/* Next */}
+          {/* Next — hidden on mobile (swipe available) */}
           {photos.length > 1 && (
             <button
               onClick={(e) => { e.stopPropagation(); next() }}
-              className="absolute right-4 top-1/2 -translate-y-1/2 text-white hover:text-gray-300 p-2 transition-colors z-10"
+              className="hidden sm:block absolute right-4 top-1/2 -translate-y-1/2 text-white hover:text-gray-300 p-2 transition-colors z-10"
               aria-label="Next"
             >
               <ChevronRight size={36} />
             </button>
           )}
+
+          {/* Swipe hint — mobile only, fades out */}
+          <p className="sm:hidden absolute top-4 left-1/2 -translate-x-1/2 text-white/50 text-xs pointer-events-none">
+            Swipe to browse
+          </p>
 
           {/* Counter */}
           <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-white text-sm opacity-70">

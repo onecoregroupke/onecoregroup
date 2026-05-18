@@ -72,6 +72,19 @@ export default async function CataloguePage() {
                   key={property.id}
                   className="bg-white rounded-2xl overflow-hidden shadow-sm"
                 >
+                  {/* Descriptor — always at the very top, above the image on every screen size */}
+                  <div className="px-6 pt-5 pb-4 flex items-center gap-2 border-b border-gray-50">
+                    <MapPin size={13} className="text-nn-green flex-shrink-0" />
+                    <p className="text-nn-green text-sm font-semibold uppercase tracking-wide flex-1">
+                      {getPropertyDescriptor(property)}
+                    </p>
+                    {property.is_featured && (
+                      <span className="flex-shrink-0 bg-nn-gold text-white text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wide">
+                        Featured
+                      </span>
+                    )}
+                  </div>
+
                   <div
                     className={`flex flex-col ${isEven ? 'lg:flex-row' : 'lg:flex-row-reverse'}`}
                   >
@@ -91,25 +104,11 @@ export default async function CataloguePage() {
                           />
                         </div>
                       )}
-                      {property.is_featured && (
-                        <div className="absolute top-4 left-4 z-10">
-                          <span className="bg-nn-gold text-white text-xs font-medium px-3 py-1 rounded-full">
-                            Featured
-                          </span>
-                        </div>
-                      )}
                     </div>
 
                     {/* Details block */}
                     <div className="lg:w-1/2 flex flex-col justify-between p-6 lg:p-10">
                       <div>
-                        {/* Prominent descriptor — neighbourhood + floor */}
-                        <div className="flex items-center gap-1.5 mb-3">
-                          <MapPin size={13} className="text-nn-green flex-shrink-0" />
-                          <p className="text-nn-green text-sm font-semibold uppercase tracking-wide">
-                            {getPropertyDescriptor(property)}
-                          </p>
-                        </div>
                         <h2 className="font-heading text-2xl lg:text-3xl font-bold text-nn-dark mb-1">
                           {property.name}
                         </h2>
