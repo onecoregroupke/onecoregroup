@@ -1,7 +1,8 @@
 import Image from 'next/image'
 import Link from 'next/link'
-import { Bed, Bath, Users } from 'lucide-react'
+import { Bed, Bath, Users, MapPin } from 'lucide-react'
 import type { Property } from '@ocg/db'
+import { getPropertyDescriptor } from '@/lib/property-descriptors'
 
 interface PropertyCardProps {
   property: Property
@@ -18,8 +19,26 @@ export function PropertyCard({ property, compact = false }: PropertyCardProps) {
       ? (property.photos[0] as string)
       : 'https://images.unsplash.com/photo-1499793983690-e29da59ef1c2?w=800'
 
+  const descriptor = getPropertyDescriptor(property)
+
   return (
     <div className="bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow group">
+      {/* Descriptor — outside and above the image */}
+      <div className="px-4 pt-4 pb-3 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <MapPin size={12} className="text-nn-green flex-shrink-0" />
+          <p className="text-xs font-semibold text-nn-green uppercase tracking-wide truncate">
+            {descriptor}
+          </p>
+        </div>
+        {property.is_featured && (
+          <span className="flex-shrink-0 bg-nn-gold text-white text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wide">
+            Featured
+          </span>
+        )}
+      </div>
+
+      {/* Photo */}
       <div className={`relative overflow-hidden ${compact ? 'aspect-[16/10]' : 'aspect-[4/3]'}`}>
         <Image
           src={photo}
@@ -28,18 +47,6 @@ export function PropertyCard({ property, compact = false }: PropertyCardProps) {
           className="object-cover group-hover:scale-105 transition-transform duration-500"
           sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
         />
-        <div className="absolute top-3 left-3">
-          <span className="bg-nn-green text-white text-xs font-medium px-3 py-1 rounded-full">
-            {property.neighbourhood}
-          </span>
-        </div>
-        {property.is_featured && (
-          <div className="absolute top-3 right-3">
-            <span className="bg-nn-gold text-white text-xs font-medium px-3 py-1 rounded-full">
-              Featured
-            </span>
-          </div>
-        )}
       </div>
 
       <div className={compact ? 'p-3.5' : 'p-5'}>

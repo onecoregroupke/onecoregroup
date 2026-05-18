@@ -7,6 +7,7 @@ import type { Property } from '@ocg/db'
 import { Bed, Bath, Users, MapPin, ArrowRight } from 'lucide-react'
 import { WhatsAppButton } from '@/components/ui/WhatsAppButton'
 import { resolvePhotos } from '@/lib/photos'
+import { getPropertyDescriptor } from '@/lib/property-descriptors'
 import { CataloguePhotoSlider } from './CataloguePhotoSlider'
 
 export const metadata = {
@@ -90,24 +91,25 @@ export default async function CataloguePage() {
                           />
                         </div>
                       )}
-                      <div className="absolute top-4 left-4 flex gap-2 z-10">
-                        <span className="bg-nn-green text-white text-xs font-medium px-3 py-1 rounded-full">
-                          {property.neighbourhood}
-                        </span>
-                        {property.is_featured && (
+                      {property.is_featured && (
+                        <div className="absolute top-4 left-4 z-10">
                           <span className="bg-nn-gold text-white text-xs font-medium px-3 py-1 rounded-full">
                             Featured
                           </span>
-                        )}
-                      </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* Details block */}
                     <div className="lg:w-1/2 flex flex-col justify-between p-6 lg:p-10">
                       <div>
-                        <p className="text-nn-gold text-xs font-semibold uppercase tracking-widest mb-2">
-                          {property.location}
-                        </p>
+                        {/* Prominent descriptor — neighbourhood + floor */}
+                        <div className="flex items-center gap-1.5 mb-3">
+                          <MapPin size={13} className="text-nn-green flex-shrink-0" />
+                          <p className="text-nn-green text-sm font-semibold uppercase tracking-wide">
+                            {getPropertyDescriptor(property)}
+                          </p>
+                        </div>
                         <h2 className="font-heading text-2xl lg:text-3xl font-bold text-nn-dark mb-1">
                           {property.name}
                         </h2>

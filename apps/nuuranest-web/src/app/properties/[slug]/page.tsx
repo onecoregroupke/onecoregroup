@@ -5,7 +5,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { createServerClient } from '@ocg/db'
 import type { Property, PropertyReview } from '@ocg/db'
-import { Bed, Bath, Users, ArrowLeft, Wifi, Wind, UtensilsCrossed, Car, Tv, WashingMachine, CheckCircle } from 'lucide-react'
+import { Bed, Bath, Users, ArrowLeft, MapPin, Wifi, Wind, UtensilsCrossed, Car, Tv, WashingMachine, CheckCircle } from 'lucide-react'
 import { StarRating } from '@/components/ui/StarRating'
 import { EnquiryForm } from '@/components/property/EnquiryForm'
 import { BookingSidebar } from '@/components/property/BookingSidebar'
@@ -13,6 +13,7 @@ import { PropertyGallery } from '@/components/property/PropertyGallery'
 import { NearbyProperties } from '@/components/property/NearbyProperties'
 import { formatKsh } from '@/lib/format'
 import { resolvePhotos } from '@/lib/photos'
+import { getPropertyDescriptor } from '@/lib/property-descriptors'
 
 interface PageProps {
   params: Promise<{ slug: string }>
@@ -104,9 +105,12 @@ export default async function PropertyDetailPage({ params }: PageProps) {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-6">
           <div className="flex items-start justify-between flex-wrap gap-4">
             <div>
-              <span className="inline-block bg-nn-green text-white text-xs font-medium px-3 py-1 rounded-full mb-3">
-                {property.neighbourhood}
-              </span>
+              <div className="flex items-center gap-1.5 mb-3">
+                <MapPin size={14} className="text-nn-green flex-shrink-0" />
+                <p className="text-sm font-semibold text-nn-green uppercase tracking-wide">
+                  {getPropertyDescriptor(property)}
+                </p>
+              </div>
               <h1 className="font-heading text-3xl lg:text-4xl font-bold text-nn-dark">
                 {property.name}
               </h1>
