@@ -117,30 +117,30 @@ export default async function CataloguePage() {
         />
       </header>
 
-      {/* ── Brand intro — below the hero ── */}
-      <div className="bg-white border-b border-gray-100 py-8 px-6 text-center">
-        <p className="text-[#1a8abf] text-[11px] font-black tracking-[0.35em] uppercase mb-2">Iceland Geysers</p>
-        <h1 className="text-4xl sm:text-5xl font-black text-gray-900 tracking-tight leading-tight mb-3">
-          Glitz N&apos; Glim
-        </h1>
-        <p className="text-gray-500 text-sm sm:text-base max-w-sm mx-auto leading-relaxed mb-6">
-          Premium cleaning &amp; personal care — powered by the purity of Iceland Geysers.
-        </p>
-        <div className="flex flex-wrap gap-3 items-center justify-center">
-          <a
-            href={`https://wa.me/${WHATSAPP}?text=${encodeURIComponent("Hi! I'd like to browse the Glitz N' Glim product catalogue.")}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 bg-[#25d366] text-white font-bold px-6 py-3 rounded-full hover:bg-[#1da851] transition-colors text-sm shadow-lg shadow-green-900/30"
-          >
-            {WA_ICON}
-            Order on WhatsApp
-          </a>
-          {categories.length > 0 && (
-            <a href={`#${categories[0].id}`} className="text-gray-500 text-sm font-medium hover:text-gray-800 transition-colors underline underline-offset-4">
-              Browse catalogue ↓
+      {/* ── Brand intro — compact bar below hero ── */}
+      <div className="bg-white border-b border-gray-100 py-4 px-6">
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <span className="text-[#1a8abf] text-[10px] font-black tracking-[0.3em] uppercase mr-3">Iceland Geysers</span>
+            <span className="text-xl font-black text-gray-900 tracking-tight">Glitz N&apos; Glim</span>
+            <p className="text-gray-400 text-xs mt-0.5">Premium cleaning &amp; personal care products</p>
+          </div>
+          <div className="flex flex-wrap gap-2 items-center">
+            <a
+              href={`https://wa.me/${WHATSAPP}?text=${encodeURIComponent("Hi! I'd like to browse the Glitz N' Glim product catalogue.")}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 bg-[#25d366] text-white font-bold px-4 py-2 rounded-full hover:bg-[#1da851] transition-colors text-sm"
+            >
+              {WA_ICON}
+              Order on WhatsApp
             </a>
-          )}
+            {categories.length > 0 && (
+              <a href={`#${categories[0].id}`} className="text-gray-400 text-sm font-medium hover:text-gray-700 transition-colors underline underline-offset-4">
+                Browse ↓
+              </a>
+            )}
+          </div>
         </div>
       </div>
 
