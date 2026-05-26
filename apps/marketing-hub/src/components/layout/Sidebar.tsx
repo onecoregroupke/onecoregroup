@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, PenSquare, CheckSquare, FileText,
   Home, Sparkles, Settings, LogOut, X, Users, BarChart2,
+  Calendar, Layers, Share2, Megaphone, Contact, MessageCircle, FileBarChart,
 } from 'lucide-react'
 import { usePermissions } from '@/contexts/PermissionsContext'
 import type { SectionKey } from '@/lib/permissions'
@@ -29,6 +30,18 @@ const MAIN_NAV: { href: string; label: string; icon: React.ElementType; section:
   { href: '/users',       label: 'Users',         icon: Users,           section: 'users'      },
 ]
 
+// Marketing hub sub-pages. All gated by the single 'marketing' section.
+const MARKETING_NAV: { href: string; label: string; icon: React.ElementType }[] = [
+  { href: '/marketing/calendar',  label: 'Calendar',  icon: Calendar  },
+  { href: '/marketing/content',   label: 'Content',   icon: PenSquare },
+  { href: '/marketing/campaigns', label: 'Campaigns', icon: Megaphone },
+  { href: '/marketing/crm',       label: 'CRM',       icon: Contact   },
+  { href: '/marketing/reports',   label: 'Reports',   icon: FileBarChart },
+  { href: '/marketing/whatsapp',  label: 'WhatsApp',  icon: MessageCircle },
+  { href: '/marketing/pillars',   label: 'Pillars',   icon: Layers    },
+  { href: '/marketing/platforms', label: 'Platforms', icon: Share2    },
+]
+
 interface SidebarProps {
   open: boolean
   onClose: () => void
@@ -44,6 +57,10 @@ export function Sidebar({ open, onClose, onSignOut }: SidebarProps) {
 
   // Brands section: only visible if user has brands access
   const showBrands = can('brands', 'view')
+
+  // Marketing hub: one section gate covers all marketing sub-pages
+  const showMarketing = can('marketing', 'view')
+  const marketingEditable = can('marketing', 'edit')
 
   return (
     <>
@@ -100,6 +117,38 @@ export function Sidebar({ open, onClose, onSignOut }: SidebarProps) {
               </Link>
             )
           })}
+
+          {/* Marketing section */}
+          {showMarketing && (
+            <div className="pt-4 mt-2 border-t border-white/10">
+              <div className="flex items-center justify-between px-3 mb-2">
+                <p className="text-white/30 text-xs uppercase tracking-wider">Marketing</p>
+                {!isAdmin && !marketingEditable && (
+                  <span className="text-[9px] font-bold uppercase tracking-wide text-white/30 bg-white/10 px-1.5 py-0.5 rounded">
+                    View
+                  </span>
+                )}
+              </div>
+              {MARKETING_NAV.map(({ href, label, icon: Icon }) => {
+                const active = path === href
+                return (
+                  <Link
+                    key={href}
+                    href={href}
+                    onClick={onClose}
+                    className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+                      active
+                        ? 'bg-white/10 text-white font-medium'
+                        : 'text-white/60 hover:text-white hover:bg-white/5'
+                    }`}
+                  >
+                    <Icon size={16} />
+                    <span className="flex-1">{label}</span>
+                  </Link>
+                )
+              })}
+            </div>
+          )}
 
           {/* Brands section */}
           {showBrands && (

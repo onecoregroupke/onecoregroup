@@ -1,7 +1,7 @@
 // ─── User Permissions (RBAC) ─────────────────────────────────────────────────
 export type SectionKey =
   | 'dashboard' | 'input' | 'compliance' | 'properties'
-  | 'glitz' | 'npt' | 'reports' | 'brands' | 'users'
+  | 'glitz' | 'npt' | 'reports' | 'brands' | 'users' | 'marketing'
 
 export type AccessLevel = 'none' | 'view' | 'edit'
 
@@ -31,6 +31,7 @@ export interface Brand {
   whatsapp_number: string | null
   color_hex: string
   is_active: boolean
+  sort_order?: number
   created_at: string
 }
 
@@ -271,6 +272,221 @@ export interface Lead {
   created_at: string
 }
 
+// ─── Marketing: Platforms ─────────────────────────────────────────────────────
+export interface MarketingPlatformRow {
+  id: string
+  brand_id: string
+  platform: string
+  handle: string | null
+  external_id: string | null
+  monthly_post_target: number
+  current_health: string
+  posting_mode: string
+  is_active: boolean
+  metadata: Record<string, unknown>
+  created_at: string
+  updated_at: string
+}
+
+// ─── Marketing: Pillars ───────────────────────────────────────────────────────
+export interface MarketingPillarRow {
+  id: string
+  slug: string
+  name: string
+  description: string | null
+  color_hex: string
+  target_share_pct: number | null
+  is_active: boolean
+  sort_order: number
+  created_at: string
+  updated_at: string
+}
+
+// ─── Marketing: Content ───────────────────────────────────────────────────────
+export interface MarketingContentRow {
+  id: string
+  brand_id: string
+  platform_id: string | null
+  campaign_id: string | null
+  campaign_label: string | null
+  content_type: string
+  status: string
+  posted_via: string
+  title: string | null
+  hook: string | null
+  body_markdown: string
+  hashtags: string | null
+  asset_urls: string[]
+  notes: string | null
+  scheduled_at: string | null
+  published_at: string | null
+  external_url: string | null
+  external_post_id: string | null
+  publish_error: string | null
+  owner_email: string | null
+  created_by_email: string | null
+  approved_by_email: string | null
+  metadata: Record<string, unknown>
+  created_at: string
+  updated_at: string
+}
+
+export interface MarketingContentPillarRow {
+  content_id: string
+  pillar_id: string
+  created_at: string
+}
+
+// ─── Marketing: Campaigns ─────────────────────────────────────────────────────
+export interface MarketingCampaignRow {
+  id: string
+  brand_id: string
+  slug: string
+  name: string
+  goal: string | null
+  audience_summary: string | null
+  primary_channel: string | null
+  secondary_channels: string[]
+  start_date: string | null
+  end_date: string | null
+  status: string
+  utm_campaign: string | null
+  budget_ksh: number | null
+  target_leads: number | null
+  target_revenue_ksh: number | null
+  kpis: Record<string, unknown>
+  owner_email: string | null
+  notes: string | null
+  created_by_email: string | null
+  metadata: Record<string, unknown>
+  created_at: string
+  updated_at: string
+}
+
+// Insert shapes: only truly-required columns are mandatory; everything else has
+// a database default and is optional.
+type MarketingPlatformInsert = Pick<MarketingPlatformRow, 'brand_id' | 'platform'> &
+  Partial<MarketingPlatformRow>
+type MarketingPillarInsert = Pick<MarketingPillarRow, 'slug' | 'name'> & Partial<MarketingPillarRow>
+type MarketingContentInsert = Pick<MarketingContentRow, 'brand_id'> & Partial<MarketingContentRow>
+type MarketingContentPillarInsert = Pick<MarketingContentPillarRow, 'content_id' | 'pillar_id'> &
+  Partial<MarketingContentPillarRow>
+type MarketingCampaignInsert = Pick<MarketingCampaignRow, 'brand_id' | 'slug' | 'name'> &
+  Partial<MarketingCampaignRow>
+
+// ─── Marketing: CRM ───────────────────────────────────────────────────────────
+export interface MarketingContactRow {
+  id: string
+  full_name: string | null
+  email: string | null
+  phone: string | null
+  company: string | null
+  role: string | null
+  linkedin_url: string | null
+  source: string | null
+  source_detail: string | null
+  lifecycle_stage: string
+  owner_email: string | null
+  tags: string[]
+  last_contact_at: string | null
+  next_contact_at: string | null
+  notes: string | null
+  lead_id: string | null
+  metadata: Record<string, unknown>
+  created_by_email: string | null
+  created_at: string
+  updated_at: string
+}
+type MarketingContactInsert = Partial<MarketingContactRow>
+
+export interface MarketingDealRow {
+  id: string
+  contact_id: string
+  campaign_id: string | null
+  brand_id: string | null
+  name: string
+  value_ksh: number | null
+  stage: string
+  expected_close_date: string | null
+  closed_at: string | null
+  lost_reason: string | null
+  order_id: string | null
+  owner_email: string | null
+  notes: string | null
+  created_by_email: string | null
+  metadata: Record<string, unknown>
+  created_at: string
+  updated_at: string
+}
+type MarketingDealInsert = Pick<MarketingDealRow, 'contact_id' | 'name'> & Partial<MarketingDealRow>
+
+export interface MarketingActivityRow {
+  id: string
+  contact_id: string
+  deal_id: string | null
+  kind: string
+  subject: string | null
+  body: string | null
+  occurred_at: string
+  by_email: string | null
+  metadata: Record<string, unknown>
+  created_at: string
+}
+type MarketingActivityInsert = Pick<MarketingActivityRow, 'contact_id' | 'kind'> &
+  Partial<MarketingActivityRow>
+
+// ─── Marketing: WhatsApp flows ──────────────────────────────────────────────
+export interface MarketingWhatsappFlowRow {
+  id: string
+  brand_id: string
+  slug: string
+  name: string
+  description: string | null
+  trigger_keywords: string[]
+  trigger_type: string
+  trigger_config: Record<string, unknown>
+  flow_definition: Record<string, unknown>
+  status: string
+  last_triggered_at: string | null
+  triggered_count: number
+  owner_email: string | null
+  notes: string | null
+  created_by_email: string | null
+  metadata: Record<string, unknown>
+  created_at: string
+  updated_at: string
+}
+type MarketingWhatsappFlowInsert = Pick<MarketingWhatsappFlowRow, 'brand_id' | 'slug' | 'name'> &
+  Partial<MarketingWhatsappFlowRow>
+
+// ─── Marketing: Executive reports ───────────────────────────────────────────
+export interface MarketingExecutiveReportRow {
+  id: string
+  period_start: string
+  period_end: string
+  subject: string
+  preheader: string | null
+  body_markdown: string
+  ai_narrative: string | null
+  metrics_json: Record<string, unknown>
+  status: string
+  scheduled_for: string | null
+  sent_at: string | null
+  sent_count: number
+  failed_count: number
+  recipients: string[]
+  created_by_email: string | null
+  approved_by_email: string | null
+  metadata: Record<string, unknown>
+  created_at: string
+  updated_at: string
+}
+type MarketingExecutiveReportInsert = Pick<
+  MarketingExecutiveReportRow,
+  'period_start' | 'period_end' | 'subject'
+> &
+  Partial<MarketingExecutiveReportRow>
+
 type DbTable<Row, Insert, Update> = {
   Row: Row & Record<string, unknown>
   Insert: Insert & Record<string, unknown>
@@ -295,6 +511,16 @@ export interface Database {
       order_items: DbTable<OrderItem, Omit<OrderItem, 'id'>, Partial<Omit<OrderItem, 'id'>>>
       leads: DbTable<Lead, Omit<Lead, 'id' | 'created_at'>, Partial<Omit<Lead, 'id'>>>
       piano_catalogue: DbTable<PianoCatalogue, Omit<PianoCatalogue, 'id' | 'created_at'>, Partial<Omit<PianoCatalogue, 'id' | 'created_at'>>>
+      marketing_platforms: DbTable<MarketingPlatformRow, MarketingPlatformInsert, Partial<MarketingPlatformRow>>
+      marketing_pillars: DbTable<MarketingPillarRow, MarketingPillarInsert, Partial<MarketingPillarRow>>
+      marketing_content: DbTable<MarketingContentRow, MarketingContentInsert, Partial<MarketingContentRow>>
+      marketing_content_pillars: DbTable<MarketingContentPillarRow, MarketingContentPillarInsert, Partial<MarketingContentPillarRow>>
+      marketing_campaigns: DbTable<MarketingCampaignRow, MarketingCampaignInsert, Partial<MarketingCampaignRow>>
+      marketing_contacts: DbTable<MarketingContactRow, MarketingContactInsert, Partial<MarketingContactRow>>
+      marketing_deals: DbTable<MarketingDealRow, MarketingDealInsert, Partial<MarketingDealRow>>
+      marketing_activities: DbTable<MarketingActivityRow, MarketingActivityInsert, Partial<MarketingActivityRow>>
+      marketing_whatsapp_flows: DbTable<MarketingWhatsappFlowRow, MarketingWhatsappFlowInsert, Partial<MarketingWhatsappFlowRow>>
+      marketing_executive_reports: DbTable<MarketingExecutiveReportRow, MarketingExecutiveReportInsert, Partial<MarketingExecutiveReportRow>>
     }
     Views: Record<string, never>
     Functions: Record<string, never>

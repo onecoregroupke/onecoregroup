@@ -17,6 +17,7 @@ export const SECTIONS: SectionDef[] = [
   { key: 'glitz',       label: "Glitz N' Glim",  href: '/glitz' },
   { key: 'npt',         label: 'NPT Catalogue',  href: '/npt' },
   { key: 'reports',     label: 'Reports',        href: '/reports' },
+  { key: 'marketing',   label: 'Marketing',      href: '/marketing/calendar' },
   { key: 'brands',      label: 'Brands',         href: '/brands' },
   { key: 'users',       label: 'Users',          href: '/users' },
 ]
