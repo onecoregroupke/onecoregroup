@@ -12,8 +12,7 @@ import { CataloguePhotoSlider } from './CataloguePhotoSlider'
 
 export const metadata = {
   title: 'Property Catalogue',
-  description:
-    'Browse the full Nuuranest Stays catalogue — five fully furnished short-stay properties in Nyali and Bamburi, Mombasa.',
+  description: 'Browse the full Nuuranest Stays catalogue — five fully furnished short-stay properties in Nyali and Bamburi, Mombasa.',
 }
 
 async function getAllProperties(): Promise<Property[]> {
@@ -35,7 +34,56 @@ function formatKsh(amount: number) {
 }
 
 export default async function CataloguePage() {
-  const properties = await getAllProperties()
+  const propertiesRaw = await getAllProperties()
+
+  // Utility to get floor number from FLOOR_LABELS
+  const FLOOR_ORDER: Record<string, number> = {
+    'First Floor': 1,
+    'Second Floor': 2,
+    'Third Floor': 3,
+    'Fourth Floor': 4,
+    'Fifth Floor': 5,
+    'Sixth Floor': 6
+  }
+
+  // Separate properties by location
+  const nyaliProperties = []
+  const bamburiProperties = []
+
+  for (const prop of propertiesRaw) {
+    if (prop.neighbourhood.toLowerCase().includes('nyali')) {
+      nyaliProperties.push(prop)
+    } else if (prop.neighbourhood.toLowerCase().includes('bamburi')) {
+      bamburiProperties.push(prop)
+    }
+  }
+
+  // Helper to extract floor number from descriptor
+  function getFloorNumber(property) {
+    const desc = getPropertyDescriptor(property)
+    for (const floor in FLOOR_ORDER) {
+      if (desc.includes(floor)) {
+        return FLOOR_ORDER[floor]
+      }
+    }
+    return 999 // default if not found
+  }
+
+  // Sort each set by floor
+  nyaliProperties.sort((a, b) => getFloorNumber(a) - getFloorNumber(b))
+  bamburiProperties.sort((a, b) => getFloorNumber(a) - getFloorNumber(b))
+
+  // Recombine with Nyali first
+  const properties = [...nyaliProperties, ...bamburiProperties]
+
+  // Override price per neighbourhood
+  for (const prop of properties) {
+    if (prop.neighbourhood.toLowerCase().includes('nyali')) {
+      prop.price_per_night_ksh = 12000
+    } else if (prop.neighbourhood.toLowerCase().includes('bamburi')) {
+      prop.price_per_night_ksh = 3000
+    }
+  }
 
   return (
     <div className="min-h-screen bg-nn-bg">
