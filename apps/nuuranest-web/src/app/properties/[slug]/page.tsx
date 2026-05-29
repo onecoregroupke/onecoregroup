@@ -13,6 +13,7 @@ import { PropertyGallery } from '@/components/property/PropertyGallery'
 import { NearbyProperties } from '@/components/property/NearbyProperties'
 import { formatKsh } from '@/lib/format'
 import { resolvePhotos } from '@/lib/photos'
+import { withListingPrice } from '@/lib/property-listing'
 import { getPropertyDescriptor } from '@/lib/property-descriptors'
 
 interface PageProps {
@@ -28,7 +29,7 @@ async function getProperty(slug: string): Promise<Property | null> {
       .eq('slug', slug)
       .eq('is_active', true)
       .single()
-    return data as Property | null
+    return data ? withListingPrice(data as Property) : null
   } catch {
     return null
   }

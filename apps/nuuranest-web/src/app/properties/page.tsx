@@ -3,12 +3,13 @@ export const dynamic = 'force-dynamic'
 import { createServerClient } from '@ocg/db'
 import type { Property } from '@ocg/db'
 import { withResolvedPhotos } from '@/lib/photos'
+import { sortAndPriceListings } from '@/lib/property-listing'
 import { PropertiesClient } from './PropertiesClient'
 
 export const metadata = {
   title: 'Our Properties',
   description:
-    'Browse all five Nuuranest Stays properties in Nyali and Bamburi, Mombasa. Fully furnished, prime locations.',
+    'Browse Nuuranest Stays properties in Nyali and Bamburi, Mombasa. Fully furnished, prime locations.',
 }
 
 async function getAllProperties(): Promise<Property[]> {
@@ -26,7 +27,7 @@ async function getAllProperties(): Promise<Property[]> {
 }
 
 export default async function PropertiesPage() {
-  const properties = await getAllProperties()
+  const properties = sortAndPriceListings(await getAllProperties())
 
   return (
     <div className="min-h-screen bg-nn-bg">
@@ -38,7 +39,7 @@ export default async function PropertiesPage() {
           </p>
           <h1 className="font-heading text-4xl lg:text-5xl font-bold mb-4">Our Properties</h1>
           <p className="text-green-200 text-lg max-w-xl leading-relaxed">
-            Five fully furnished short-stay units in Nyali and Bamburi — each personally curated
+            Fully furnished short-stay units in Nyali and Bamburi — each personally curated
             for comfort, cleanliness, and a genuine coastal experience.
           </p>
         </div>

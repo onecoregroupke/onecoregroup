@@ -1,6 +1,7 @@
 import { createServerClient } from '@ocg/db'
 import type { Property } from '@ocg/db'
 import { withResolvedPhotos } from '@/lib/photos'
+import { sortAndPriceListings } from '@/lib/property-listing'
 import { PropertyCard } from './PropertyCard'
 
 interface NearbyPropertiesProps {
@@ -19,7 +20,7 @@ export async function NearbyProperties({ currentSlug, neighbourhood }: NearbyPro
       .neq('slug', currentSlug)
       .order('sort_order')
       .limit(3)
-    nearby = ((data as Property[]) ?? []).map(withResolvedPhotos)
+    nearby = sortAndPriceListings(((data as Property[]) ?? []).map(withResolvedPhotos))
   } catch {
     return null
   }

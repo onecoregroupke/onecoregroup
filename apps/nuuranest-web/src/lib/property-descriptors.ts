@@ -1,25 +1,33 @@
 import type { Property } from '@ocg/db'
 
 /**
- * Temporary floor/level labels per slug.
- * Update these once the actual floor numbers are confirmed.
+ * Floor/level labels shown above Nuuranest property listings.
  */
 const FLOOR_LABELS: Record<string, string> = {
-  'sunset-suite-nuuranest': 'First Floor',
-  'palm-retreat-nuuranest': 'Third Floor',
-  'coastal-haven-nuuranest': 'Second Floor',
-  'ocean-breeze-nuuranest': 'Sixth Floor',
-  'coral-view-nuuranest': 'Fourth Floor',
+  'sunset-suite-nuuranest': '1st Floor',
+  'palm-retreat-nuuranest': '2nd Floor',
+  'ocean-waves-nuuranest': '5th Floor',
+  'ocean-waves-bamburi': '5th Floor',
+  'coastal-haven-nuuranest': '6th Floor',
+  'ocean-breeze-nuuranest': '2nd Floor',
+  'coral-view-nuuranest': '1st Floor',
+}
+
+function getFloorLabelByName(name?: string | null): string | undefined {
+  const normalizedName = name?.toLowerCase() ?? ''
+  if (normalizedName.includes('ocean waves')) return '5th Floor'
+  return undefined
 }
 
 /**
  * Returns a short, prominent descriptor for a property listing.
- * e.g. "Nyali 3 Bedroom Apartment · First Floor"
+ * e.g. "Nyali 3 Bedroom Apartment · 1st Floor"
  */
 export function getPropertyDescriptor(
-  property: Pick<Property, 'slug' | 'neighbourhood' | 'bedrooms'>,
+  property: Pick<Property, 'slug' | 'neighbourhood' | 'bedrooms'> &
+    Partial<Pick<Property, 'name'>>,
 ): string {
-  const floor = FLOOR_LABELS[property.slug]
+  const floor = FLOOR_LABELS[property.slug] ?? getFloorLabelByName(property.name)
   const beds = property.bedrooms ? `${property.bedrooms} Bedroom ` : ''
   const base = `${property.neighbourhood} ${beds}Apartment`
   return floor ? `${base} · ${floor}` : base
