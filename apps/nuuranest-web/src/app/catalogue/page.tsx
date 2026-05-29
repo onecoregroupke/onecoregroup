@@ -47,8 +47,8 @@ export default async function CataloguePage() {
   }
 
   // Separate properties by location
-  const nyaliProperties = []
-  const bamburiProperties = []
+  const nyaliProperties: Property[] = []
+  const bamburiProperties: Property[] = []
 
   for (const prop of propertiesRaw) {
     if (prop.neighbourhood.toLowerCase().includes('nyali')) {
@@ -59,7 +59,7 @@ export default async function CataloguePage() {
   }
 
   // Helper to extract floor number from descriptor
-  function getFloorNumber(property) {
+  function getFloorNumber(property: Property) {
     const desc = getPropertyDescriptor(property)
     for (const floor in FLOOR_ORDER) {
       if (desc.includes(floor)) {
