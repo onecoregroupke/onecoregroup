@@ -40,8 +40,12 @@ export async function submitArtifact(opts: {
       try {
         const project = await getProject(task.project_id)
         const owner = brand?.name || task.client_id || project?.client_name || 'Unsorted'
+        const ownerAliases = brand
+          ? [brand.name, brand.short_name, brand.slug].filter((s): s is string => Boolean(s))
+          : []
         const res = await deliverDoc({
           ownerFolderName: owner,
+          ownerAliases,
           projectId: task.project_id,
           projectName: task.project_name,
           projectFolderId: project?.drive_folder_id ?? null,
