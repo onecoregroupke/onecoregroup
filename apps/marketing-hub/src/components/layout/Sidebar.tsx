@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, PenSquare, CheckSquare, FileText,
   Home, Sparkles, Settings, LogOut, X, Users, BarChart2,
-  Calendar, Layers, Share2, Megaphone, Contact, MessageCircle, FileBarChart, Clapperboard,
+  Calendar, Layers, Share2, Megaphone, Contact, MessageCircle, FileBarChart, Clapperboard, Eye,
 } from 'lucide-react'
 import { usePermissions } from '@/contexts/PermissionsContext'
 import type { SectionKey } from '@/lib/permissions'
@@ -33,6 +33,7 @@ const MAIN_NAV: { href: string; label: string; icon: React.ElementType; section:
 // Marketing hub sub-pages. All gated by the single 'marketing' section.
 const MARKETING_NAV: { href: string; label: string; icon: React.ElementType }[] = [
   { href: '/marketing/calendar',  label: 'Calendar',  icon: Calendar  },
+  { href: '/marketing/preview',   label: 'Preview',   icon: Eye       },
   { href: '/marketing/content',   label: 'Content',   icon: PenSquare },
   { href: '/marketing/episodes',  label: 'Episodes',  icon: Clapperboard },
   { href: '/marketing/campaigns', label: 'Campaigns', icon: Megaphone },

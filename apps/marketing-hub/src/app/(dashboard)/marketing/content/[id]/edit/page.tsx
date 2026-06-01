@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
 import ContentEditor from '@/components/marketing/ContentEditor'
 import SendToTaskAgent from '@/components/marketing/SendToTaskAgent'
+import MediaUpload from '@/components/marketing/MediaUpload'
 
 export default function EditContentPage() {
   const params = useParams<{ id: string }>()
@@ -17,6 +18,7 @@ export default function EditContentPage() {
       {id ? (
         <>
           <ContentEditor contentId={id} />
+          <MediaUpload contentId={id} />
           <SendToTaskAgent contentId={id} />
         </>
       ) : (
