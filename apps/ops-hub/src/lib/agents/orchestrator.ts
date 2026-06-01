@@ -1,9 +1,10 @@
 import crypto from 'node:crypto'
 import { db, nowIso } from '@/lib/serverClient'
 import { getTask, setTaskStatus } from '@/lib/tasks'
-import { getProjectContext } from '@/lib/projects'
+import { getProject, getProjectContext } from '@/lib/projects'
 import { resolveBrand } from '@/lib/brands'
 import { uploadArtifact, storageConfigured } from '@/lib/storage'
+import { deliverDoc, driveConfigured } from '@/lib/drive'
 import { runInternalSpecialist } from './groq'
 import { SPECIALIST_PROFILES, type AgentTaskType } from './specialistRegistry'
 import type { OpsAgentArtifactRow, OpsAgentJobRow } from '@ocg/db'
@@ -32,22 +33,50 @@ export async function submitArtifact(opts: {
 
   let delivery: Record<string, unknown> | undefined
   let deliveryNote: string | undefined
-  if (opts.deliver !== false && storageConfigured()) {
-    try {
-      const brand = task.brand_id ? await resolveBrand(task.brand_id) : null
-      const ownerSlug = brand?.slug || task.client_id || 'unsorted'
-      const res = await uploadArtifact({
-        ownerSlug,
-        projectId: task.project_id,
-        title: opts.title,
-        markdown: opts.content,
-      })
-      delivery = res as unknown as Record<string, unknown>
-    } catch (e) {
-      deliveryNote = `Storage delivery failed: ${(e as Error).message}. Draft saved in-app.`
+  if (opts.deliver !== false) {
+    const brand = task.brand_id ? await resolveBrand(task.brand_id) : null
+    // 1) Prefer Drive — produces a sharable Google Doc owned by the connected account.
+    if (driveConfigured()) {
+      try {
+        const project = await getProject(task.project_id)
+        const owner = brand?.name || task.client_id || project?.client_name || 'Unsorted'
+        const res = await deliverDoc({
+          ownerFolderName: owner,
+          projectId: task.project_id,
+          projectName: task.project_name,
+          projectFolderId: project?.drive_folder_id ?? null,
+          docTitle: opts.title,
+          markdown: opts.content,
+        })
+        delivery = { kind: 'drive', ...res }
+        if (project && !project.drive_folder_id) {
+          await supabase
+            .from('ops_projects')
+            .update({ drive_folder_id: res.folder_id, folder_status: 'done', updated_at: nowIso() })
+            .eq('project_id', task.project_id)
+        }
+      } catch (e) {
+        deliveryNote = `Drive delivery failed (${(e as Error).message}); falling back to storage.`
+      }
     }
-  } else if (opts.deliver !== false) {
-    deliveryNote = 'Storage not configured — draft saved in-app only.'
+    // 2) Fallback — Supabase Storage (private bucket + signed URL).
+    if (!delivery && storageConfigured()) {
+      try {
+        const ownerSlug = brand?.slug || task.client_id || 'unsorted'
+        const res = await uploadArtifact({
+          ownerSlug,
+          projectId: task.project_id,
+          title: opts.title,
+          markdown: opts.content,
+        })
+        delivery = res as unknown as Record<string, unknown>
+        if (deliveryNote) deliveryNote += ' Saved to storage.'
+      } catch (e) {
+        deliveryNote = `${deliveryNote ? deliveryNote + ' ' : ''}Storage delivery failed: ${(e as Error).message}. Draft saved in-app.`
+      }
+    } else if (!delivery && !deliveryNote) {
+      deliveryNote = 'No Drive/storage configured — draft saved in-app only.'
+    }
   }
 
   const { data, error } = await supabase
