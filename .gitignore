@@ -11,6 +11,9 @@ build
 .turbo
 *.tsbuildinfo
 
+# graphify knowledge-graph output (generated locally)
+graphify-out/
+
 # Environment variables
 .env
 .env.local
