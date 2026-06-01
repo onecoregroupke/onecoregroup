@@ -1,0 +1,16 @@
+{
+  "voice_id": "wm_academy_narrator",
+  "name": "WM Academy Narrator",
+  "provider": "piper",
+  "voice_model_path": "reference/voice/piper/voices",
+  "style": {
+    "tone": "calm, warm, professional, clear, encouraging",
+    "pace": "medium",
+    "energy": "low-medium",
+    "use_case": "internal training and academy videos"
+  },
+  "language": "en",
+  "license_type": "manual_review_required",
+  "commercial_use_status": "review_required",
+  "notes": "Default narrator profile for WM Academy videos. Add a Piper .onnx voice model before generation."
+}

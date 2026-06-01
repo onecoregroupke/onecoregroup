@@ -74,7 +74,7 @@ export function TaskControls({
 
       {agentEligible && (
         <div className="border-t border-gray-100 pt-4">
-          <label className="mb-1 block text-xs font-medium text-gray-500">Run a specialist</label>
+          <label className="mb-1 block text-xs font-medium text-gray-500">Queue for the agent</label>
           <select
             className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
             value={specialist}
@@ -87,8 +87,11 @@ export function TaskControls({
             disabled={busy !== null}
             className="mt-2 w-full rounded-lg border border-ocg-gold py-2 text-sm font-medium text-ocg-gold hover:bg-ocg-gold/10 disabled:opacity-60"
           >
-            {busy === 'run' ? 'Dispatching…' : 'Draft with AI'}
+            {busy === 'run' ? 'Queuing…' : 'Queue for agent'}
           </button>
+          <p className="mt-2 text-[11px] text-gray-400">
+            Queues this task for an orchestrating agent (Codex / Hermes / Claude Code) to draft via the oc-* skills.
+          </p>
         </div>
       )}
 

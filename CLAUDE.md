@@ -62,8 +62,9 @@ Type-check everything: `npm run type-check`.
 | Monorepo | Turborepo + npm workspaces (Node ≥ 20) |
 | Database | Supabase (Postgres + RLS), one project shared by all apps |
 | Auth | Supabase Auth + `user_permissions` (per-section `none｜view｜edit`) |
-| AI | Groq — Llama 3.3 70B (specialist drafts) |
-| Files | Google Drive (service account) for delivered docs |
+| Task agent | Orchestrated by **Codex / Hermes / Claude Code** (best model per task) via the `oc-*` skills — **not** Groq |
+| AI (reports) | **Groq — Llama 3.3 70B, reports only** (daily/weekly/monthly ops narration) |
+| Files | Google Drive (OAuth, sharable Docs) → Supabase Storage fallback |
 | Email | Resend |
 | Deploy | Vercel (one project per app) |
 
@@ -118,11 +119,16 @@ branded assignment email with a **no-login completion link** (HMAC of
 `taskId:targetDate` via `OPS_TASK_TOKEN_SECRET`, expires target+14d). Team members
 also see `/my-tasks`.
 
-**Agent stack** (`lib/agents/*`): a specialist registry with runtime routing —
-`internal` (Groq, runs inline) vs `hermes` (queued in `ops_agent_jobs` for a worker
-or the oc-ops agent to draft) vs `none` (manual). `lib/agents/orchestrator.ts`
-runs a specialist, writes an `ops_agent_artifacts` row, delivers `.gdoc`+`.docx`
-to the project's Drive folder (`lib/drive.ts`), and flips the task to `AI Draft Ready`.
+**Agent stack** (`lib/agents/*`): a specialist registry with two runtimes —
+`agent` (queued in `ops_agent_jobs` for an orchestrating agent — Codex / Hermes /
+Claude Code — to draft via the `oc-*` skills) vs `none` (manual). **The task agent
+never uses Groq.** `lib/agents/orchestrator.ts` queues the job and sets the task
+`Ongoing`; the agent drafts and calls `submit-artifact`, which delivers a sharable
+Google Doc (`lib/drive.ts`, OAuth) or a Supabase Storage file (`lib/storage.ts`),
+flips the task to `AI Draft Ready`, and (if the task came from a content row) fires
+the marketing callback to auto-schedule. **Reporting** (`lib/reporting.ts`) is the
+only Groq user: `/api/reports/{daily,weekly,monthly}` gather completed tasks +
+project updates, Groq narrates, Resend emails, logged to `ops_report_logs`.
 
 **API surface:**
 - UI routes (Supabase Bearer): `/api/clients`, `/api/projects`, `/api/tasks`,
@@ -161,6 +167,24 @@ node scripts/oc-ops.mjs <command>   # list-work, lookup-task, create-client,
 - Draft-only: never send external messages, never post to brand socials, never mark
   `Completed` without explicit human confirmation. Approved content flows to the
   Marketing Hub calendar; the oc-ops agent proposes, it does not publish.
+
+### Production skills (deliver designs & videos)
+
+Two more repo-tracked skills let the orchestrating agent actually **produce** the
+deliverables a task asks for, then return them via `oc-ops submit-artifact`:
+
+- **`.claude/skills/oc-design`** — brand guidelines, decks, posters, social kits,
+  SVG/overlays. CLI: `node .claude/skills/oc-design/scripts/oc-design.mjs`.
+  Providers: Open Design (default) · Claude Design (handoff) · code-native.
+- **`.claude/skills/oc-video`** — code-native motion graphics, reels, talking-head,
+  and general edit mode (HTML/CSS/SVG + Chrome + FFmpeg + Piper voice + WhisperX).
+  CLI: `node .claude/skills/oc-video/src/cli.mjs`. Six brand profiles under
+  `reference/brands/<slug>/`.
+
+Both adapted from the WM & Co `wm-design`/`wm-video` skills and reconfigured for
+OCG (6 brands, `oc-ops` delivery, OCG Drive/Storage). They are **executed by the
+best model in Codex / Hermes / Claude Code — never Groq.** Refresh from upstream
+or sync to other harnesses as the WM skills evolve.
 
 ---
 

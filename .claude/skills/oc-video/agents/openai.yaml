@@ -1,0 +1,7 @@
+interface:
+  display_name: "WM Video"
+  short_description: "Create WM Task Ops video drafts"
+  default_prompt: "Use $wm-video to initialize, render, compile, and draft-deliver a video task."
+
+policy:
+  allow_implicit_invocation: true

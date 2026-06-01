@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "WM Video Audio Plan",
+  "type": "object",
+  "required": ["task_id", "target_loudness_lufs", "true_peak_db", "music", "sfx"],
+  "properties": {
+    "task_id": { "type": "string" },
+    "target_loudness_lufs": { "type": "number" },
+    "true_peak_db": { "type": "number" },
+    "allow_silent_export": { "type": "boolean" },
+    "voiceover_required": { "type": "boolean" },
+    "voiceover": { "type": "object" },
+    "voice": { "type": ["object", "string", "null"] },
+    "music": { "type": "array" },
+    "sfx": { "type": "array" },
+    "missing_policy": { "type": "string" }
+  }
+}

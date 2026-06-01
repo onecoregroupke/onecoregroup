@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>WM Video Audio Console</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <div class="app">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="mark">WM</div>
+          <div>
+            <h1>Audio Console</h1>
+            <p>Platform sounds and licensed mixes</p>
+          </div>
+        </div>
+        <label class="field">
+          <span>Task</span>
+          <select id="taskSelect"></select>
+        </label>
+        <div class="status-grid">
+          <div>
+            <span>Project</span>
+            <strong id="projectStatus">Loading</strong>
+          </div>
+          <div>
+            <span>Handoff</span>
+            <strong id="handoffStatus">Loading</strong>
+          </div>
+        </div>
+        <button id="generateHandoff" class="primary">Generate handoff</button>
+        <p class="guardrail">Native platform sounds stay as posting instructions. Only cleared local audio is embedded into MP4 exports.</p>
+      </aside>
+
+      <main>
+        <nav class="tabs" aria-label="Audio workflow">
+          <button class="tab active" data-tab="platform">Platform Sounds</button>
+          <button class="tab" data-tab="licensed">Licensed Library</button>
+          <button class="tab" data-tab="youtube">YouTube Search</button>
+          <button class="tab" data-tab="handoff">Timeline Handoff</button>
+        </nav>
+
+        <section id="platform" class="panel active">
+          <div class="panel-head">
+            <div>
+              <h2>TikTok and Instagram Sound Links</h2>
+              <p>Save the sound you want added natively at posting time.</p>
+            </div>
+          </div>
+          <form id="soundForm" class="form-grid">
+            <label class="field">
+              <span>Platform</span>
+              <select name="platform">
+                <option value="instagram">Instagram</option>
+                <option value="tiktok">TikTok</option>
+                <option value="youtube">YouTube reference</option>
+                <option value="meta_sound_collection">Meta Sound Collection</option>
+                <option value="tiktok_commercial_music_library">TikTok Commercial Music Library</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Sound title</span>
+              <input name="title" placeholder="Track or sound name" required>
+            </label>
+            <label class="field">
+              <span>Creator/source</span>
+              <input name="creator" placeholder="Artist, creator, channel, or library">
+            </label>
+            <label class="field wide">
+              <span>URL</span>
+              <input name="url" placeholder="https://..." type="url">
+            </label>
+            <label class="field">
+              <span>Start time</span>
+              <input name="start_time" placeholder="0:00">
+            </label>
+            <label class="field">
+              <span>Volume note</span>
+              <input name="suggested_volume" placeholder="native default">
+            </label>
+            <label class="field">
+              <span>Usage</span>
+              <select name="usage_mode">
+                <option value="native_platform_sound">Native platform sound</option>
+                <option value="reference_only">Reference only</option>
+                <option value="licensed_embed_candidate">Licensed embed candidate</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Rights status</span>
+              <select name="rights_status">
+                <option value="platform_native_only">Platform native only</option>
+                <option value="manual_review_required">Manual review required</option>
+                <option value="licensed_to_embed">Licensed to embed</option>
+              </select>
+            </label>
+            <label class="field wide">
+              <span>Notes</span>
+              <textarea name="notes" placeholder="Posting notes, exact cue, campaign fit, alternative sound"></textarea>
+            </label>
+            <button class="primary wide" type="submit">Save sound</button>
+          </form>
+          <div id="platformList" class="list"></div>
+        </section>
+
+        <section id="licensed" class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>Embeddable Audio Registry</h2>
+              <p>Assets here can be planned into mixes only when rights are clear.</p>
+            </div>
+          </div>
+          <div id="licensedList" class="asset-grid"></div>
+        </section>
+
+        <section id="youtube" class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>YouTube Discovery</h2>
+              <p>Search metadata for references. This console does not download arbitrary YouTube audio.</p>
+            </div>
+          </div>
+          <form id="youtubeForm" class="search-row">
+            <input name="q" placeholder="Search track, artist, mood, campaign sound">
+            <button class="primary" type="submit">Search</button>
+          </form>
+          <div id="youtubeMessage" class="notice"></div>
+          <div id="youtubeResults" class="list"></div>
+        </section>
+
+        <section id="handoff" class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>Task Audio Handoff</h2>
+              <p>What the editor/poster needs to know before publishing.</p>
+            </div>
+          </div>
+          <div class="handoff-layout">
+            <div>
+              <h3>Exports</h3>
+              <div id="exportsList" class="list compact"></div>
+            </div>
+            <div>
+              <h3>Embedded Audio Plan</h3>
+              <pre id="audioPlan"></pre>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>

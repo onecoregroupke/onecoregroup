@@ -1,0 +1,6 @@
+{
+  "voice_id": "wm_male_strategy",
+  "alias_for": "wm_voice_male",
+  "deprecated": true,
+  "notes": "Backward-compatible alias. Use wm_voice_male for new work."
+}

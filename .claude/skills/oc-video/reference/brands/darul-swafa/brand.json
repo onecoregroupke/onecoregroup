@@ -1,0 +1,15 @@
+{
+  "brand_id": "darul-swafa",
+  "name": "Darul Swafa",
+  "colors": {
+    "deep": "#06120a",
+    "background": "#0a1c10",
+    "elevated": "#102816",
+    "accent": "#2a6a2a",
+    "highlight": "#d4af37",
+    "text": "#F3F8F2",
+    "muted": "#A4B8A4"
+  },
+  "fonts": { "sans": "Inter", "serif": "DM Serif Display", "mono": "JetBrains Mono" },
+  "voice": "respectful, knowledge-rich; short Islamic teachings, programme news, student progress, enrollment CTAs"
+}

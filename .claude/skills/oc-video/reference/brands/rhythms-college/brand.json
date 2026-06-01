@@ -1,0 +1,15 @@
+{
+  "brand_id": "rhythms-college",
+  "name": "Rhythms College",
+  "colors": {
+    "deep": "#160606",
+    "background": "#200a0a",
+    "elevated": "#2c1010",
+    "accent": "#9a2a2a",
+    "highlight": "#e9c46a",
+    "text": "#FBF4F2",
+    "muted": "#C2A8A4"
+  },
+  "fonts": { "sans": "Inter", "serif": "DM Serif Display", "mono": "JetBrains Mono" },
+  "voice": "passionate, achievement-focused; student wins, teacher spotlights, recitals, enrollment CTAs"
+}

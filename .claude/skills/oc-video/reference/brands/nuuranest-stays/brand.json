@@ -1,0 +1,15 @@
+{
+  "brand_id": "nuuranest-stays",
+  "name": "Nuuranest Stays",
+  "colors": {
+    "deep": "#04130d",
+    "background": "#091a13",
+    "elevated": "#0f241a",
+    "accent": "#1a6b42",
+    "highlight": "#e9c46a",
+    "text": "#F4F9F6",
+    "muted": "#9FB3A8"
+  },
+  "fonts": { "sans": "Inter", "serif": "DM Serif Display", "mono": "JetBrains Mono" },
+  "voice": "warm coastal hospitality; booking-driven, nudges toward WhatsApp booking, Booking.com or Airbnb"
+}

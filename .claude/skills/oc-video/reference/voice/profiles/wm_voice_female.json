@@ -1,0 +1,19 @@
+{
+  "voice_id": "wm_voice_female",
+  "name": "WM Voice Female",
+  "provider": "piper",
+  "upstream_voice_path": "en/en_US/hfc_female/medium",
+  "upstream_model_name": "en_US-hfc_female-medium",
+  "voice_model": "reference/voice/piper/voices/wm_voice_female/voice.onnx",
+  "voice_config": "reference/voice/piper/voices/wm_voice_female/voice.onnx.json",
+  "style": {
+    "tone": "warm, clear, professional, patient, encouraging",
+    "pace": "medium",
+    "energy": "low-medium",
+    "use_case": "academy, onboarding, training, explainers, strategy, client education"
+  },
+  "language": "en_US",
+  "license_type": "manual_review_required",
+  "commercial_use_status": "review_required",
+  "notes": "Official reusable WM female narrator voice. Selected from rhasspy/piper-voices: en/en_US/hfc_female/medium."
+}

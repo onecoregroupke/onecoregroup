@@ -1,0 +1,9 @@
+{
+  "presets": {
+    "landscape_1080p": { "width": 1920, "height": 1080, "fps": 30, "aspect_ratio": "16:9" },
+    "vertical_1080x1920": { "width": 1080, "height": 1920, "fps": 30, "aspect_ratio": "9:16" },
+    "portrait_1080x1350": { "width": 1080, "height": 1350, "fps": 30, "aspect_ratio": "4:5" },
+    "portrait_2160x2700": { "width": 2160, "height": 2700, "fps": 30, "aspect_ratio": "4:5" }
+  },
+  "default": "landscape_1080p"
+}

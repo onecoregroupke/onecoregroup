@@ -1,12 +1,11 @@
 import crypto from 'node:crypto'
 import { db, nowIso } from '@/lib/serverClient'
 import { getTask, setTaskStatus } from '@/lib/tasks'
-import { getProject, getProjectContext } from '@/lib/projects'
+import { getProject } from '@/lib/projects'
 import { resolveBrand } from '@/lib/brands'
 import { uploadArtifact, storageConfigured } from '@/lib/storage'
 import { deliverDoc, driveConfigured } from '@/lib/drive'
 import { notifyMarketingOnApproval } from '@/lib/marketingSync'
-import { runInternalSpecialist } from './groq'
 import { SPECIALIST_PROFILES, type AgentTaskType } from './specialistRegistry'
 import type { OpsAgentArtifactRow, OpsAgentJobRow } from '@ocg/db'
 
@@ -149,66 +148,19 @@ export async function runSpecialistForTask(
     return { job: data as OpsAgentJobRow, note: 'This specialist is manual-only.' }
   }
 
-  if (profile.runtime === 'hermes') {
-    const { data } = await supabase
-      .from('ops_agent_jobs')
-      .insert({ ...baseJob, status: 'pending' })
-      .select('*')
-      .single()
-    await setTaskStatus(taskId, 'Ongoing', { note: `Queued ${profile.name}`, by: 'orchestrator' })
-    return {
-      job: data as OpsAgentJobRow,
-      note: 'Queued for the Hermes runtime. A worker or the oc-ops agent will draft and submit it.',
-    }
-  }
-
-  // internal runtime → run inline with Groq
-  const { data: jobData } = await supabase
+  // agent runtime → queue the job for an orchestrating agent (Codex / Hermes /
+  // Claude Code) to pick up via oc-ops list-work, draft using the best model +
+  // the oc-* skills (oc-design / oc-video / …), and submit back via submit-artifact.
+  // The task agent never uses Groq.
+  const { data } = await supabase
     .from('ops_agent_jobs')
-    .insert({ ...baseJob, status: 'running', started_at: nowIso() })
+    .insert({ ...baseJob, status: 'pending' })
     .select('*')
     .single()
-  const job = jobData as OpsAgentJobRow
-
-  try {
-    const projectContext = await getProjectContext(task.project_id)
-    const brand = task.brand_id ? await resolveBrand(task.brand_id) : null
-    const content = await runInternalSpecialist(specialist, {
-      taskName: task.task_name,
-      taskDescription: task.task_description,
-      projectName: task.project_name,
-      brandName: brand?.name,
-      projectContext,
-      priority: task.priority,
-    })
-    const title = `${profile.name} — ${task.task_name}`
-    const { artifact, deliveryNote } = await submitArtifact({
-      taskId,
-      specialist,
-      title,
-      content,
-      runId,
-      jobId: job.id,
-      summary: `Drafted by ${profile.name}`,
-    })
-
-    await supabase
-      .from('ops_agent_jobs')
-      .update({
-        status: 'draft_ready',
-        output: content.slice(0, 4000),
-        delivery_status: artifact.delivery ? 'delivered' : 'draft_only',
-        completed_at: nowIso(),
-      })
-      .eq('id', job.id)
-
-    return { job, artifactId: artifact.id, note: deliveryNote }
-  } catch (e) {
-    await supabase
-      .from('ops_agent_jobs')
-      .update({ status: 'error', error_message: (e as Error).message, failed_at: nowIso() })
-      .eq('id', job.id)
-    throw e
+  await setTaskStatus(taskId, 'Ongoing', { note: `Queued ${profile.name} for the agent`, by: 'orchestrator' })
+  return {
+    job: data as OpsAgentJobRow,
+    note: 'Queued for the agent runtime — an orchestrating agent (Codex / Hermes / Claude Code) will draft via the oc-* skills and submit the deliverable.',
   }
 }
 

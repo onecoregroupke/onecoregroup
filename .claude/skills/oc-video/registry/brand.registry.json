@@ -1,0 +1,10 @@
+{
+  "brands": [
+    { "brand_id": "nairobi-piano-technicians", "name": "Nairobi Piano Technicians", "path": "reference/brands/nairobi-piano-technicians/brand.json", "motion_style": "reference/brands/_shared/motion_style.json", "caption_style": "reference/brands/_shared/caption_style.ass" },
+    { "brand_id": "glitz-n-glim", "name": "Glitz N' Glim", "path": "reference/brands/glitz-n-glim/brand.json", "motion_style": "reference/brands/_shared/motion_style.json", "caption_style": "reference/brands/_shared/caption_style.ass" },
+    { "brand_id": "nuuranest-stays", "name": "Nuuranest Stays", "path": "reference/brands/nuuranest-stays/brand.json", "motion_style": "reference/brands/_shared/motion_style.json", "caption_style": "reference/brands/_shared/caption_style.ass" },
+    { "brand_id": "ar-rayyan-playhouse", "name": "Ar-Rayyan Playhouse & Daycare", "path": "reference/brands/ar-rayyan-playhouse/brand.json", "motion_style": "reference/brands/_shared/motion_style.json", "caption_style": "reference/brands/_shared/caption_style.ass" },
+    { "brand_id": "rhythms-college", "name": "Rhythms College", "path": "reference/brands/rhythms-college/brand.json", "motion_style": "reference/brands/_shared/motion_style.json", "caption_style": "reference/brands/_shared/caption_style.ass" },
+    { "brand_id": "darul-swafa", "name": "Darul Swafa", "path": "reference/brands/darul-swafa/brand.json", "motion_style": "reference/brands/_shared/motion_style.json", "caption_style": "reference/brands/_shared/caption_style.ass" }
+  ]
+}

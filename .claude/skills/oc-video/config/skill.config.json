@@ -1,0 +1,20 @@
+{
+  "name": "oc-video",
+  "version": "0.1.0",
+  "default_mode": "motion_graphics",
+  "default_brand": "nairobi-piano-technicians",
+  "default_delivery_mode": "local_drive_sync",
+  "default_voice": "wm_voice_female",
+  "available_voices": [
+    "wm_voice_female",
+    "wm_voice_male"
+  ],
+  "allow_fallback_voice": false,
+  "draft_status": "AI Draft Ready",
+  "rules": {
+    "code_native_visuals_only": true,
+    "manual_audio_only": true,
+    "never_publish": true,
+    "never_mark_completed": true
+  }
+}

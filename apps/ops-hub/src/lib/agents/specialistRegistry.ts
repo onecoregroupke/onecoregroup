@@ -1,10 +1,13 @@
 // Specialist registry for the Ops Hub agent stack. Adapted from WM Task Ops.
 //
 // Runtime rules:
-//   internal — run inline in Next.js with Groq (fast, analysis-shaped work).
-//   hermes   — queue into ops_agent_jobs for a worker/skill to execute later
-//              (heavyweight drafts). The job sits 'pending' until claimed.
-//   none     — manual review only; no automation.
+//   agent — queued into ops_agent_jobs (status 'pending') for an orchestrating
+//           agent to execute: Codex, Hermes, or Claude Code, using the best
+//           model + the oc-* skill set (oc-ops, oc-design, oc-video). The agent
+//           drafts the deliverable and submits it back via oc-ops submit-artifact.
+//           NOTE: the task agent does NOT use Groq. Groq is reserved for the
+//           automated daily/weekly/monthly report narration only.
+//   none  — manual review only; no automation.
 
 export type AgentTaskType =
   | 'analysis'
@@ -22,7 +25,7 @@ export type AgentTaskType =
 
 export type SpecialistProfile = {
   name: string
-  runtime: 'internal' | 'hermes' | 'none'
+  runtime: 'agent' | 'none'
   outputTypes: string[]
   riskLevel: string
   expectedOutput: string
@@ -33,7 +36,7 @@ export type SpecialistProfile = {
 export const SPECIALIST_PROFILES: Record<AgentTaskType, SpecialistProfile> = {
   analysis: {
     name: 'Analysis Specialist',
-    runtime: 'internal',
+    runtime: 'agent',
     outputTypes: ['analysis_note', 'recommendations'],
     riskLevel: 'draft_only',
     expectedOutput: 'Structured analysis with facts, assumptions, risks, gaps, recommendations, next actions.',
@@ -41,7 +44,7 @@ export const SPECIALIST_PROFILES: Record<AgentTaskType, SpecialistProfile> = {
   },
   research: {
     name: 'Research Specialist',
-    runtime: 'internal',
+    runtime: 'agent',
     outputTypes: ['research_note'],
     riskLevel: 'research_only',
     expectedOutput: 'Research plan or summary using provided context. Do not invent sources.',
@@ -49,7 +52,7 @@ export const SPECIALIST_PROFILES: Record<AgentTaskType, SpecialistProfile> = {
   },
   report: {
     name: 'Reporting Specialist',
-    runtime: 'internal',
+    runtime: 'agent',
     outputTypes: ['report', 'executive_summary'],
     riskLevel: 'draft_only',
     expectedOutput: 'Structured report or executive summary from provided context only.',
@@ -57,7 +60,7 @@ export const SPECIALIST_PROFILES: Record<AgentTaskType, SpecialistProfile> = {
   },
   proposal: {
     name: 'Proposal Specialist',
-    runtime: 'hermes',
+    runtime: 'agent',
     outputTypes: ['proposal_outline', 'strategy_note'],
     riskLevel: 'draft_only',
     expectedOutput: 'Proposal draft with scope, assumptions, deliverables, timeline, risks, pricing placeholders, next steps.',
@@ -65,7 +68,7 @@ export const SPECIALIST_PROFILES: Record<AgentTaskType, SpecialistProfile> = {
   },
   content: {
     name: 'Content Operations Specialist',
-    runtime: 'hermes',
+    runtime: 'agent',
     outputTypes: ['content_plan', 'shoot_plan'],
     riskLevel: 'draft_only',
     expectedOutput: 'Content plan, shoot plan, production task list, social breakdown, or campaign notes.',
@@ -73,7 +76,7 @@ export const SPECIALIST_PROFILES: Record<AgentTaskType, SpecialistProfile> = {
   },
   video_clipping: {
     name: 'Video Clipping Specialist',
-    runtime: 'hermes',
+    runtime: 'agent',
     outputTypes: ['clip_plan', 'editing_notes'],
     riskLevel: 'draft_only',
     expectedOutput: 'Clip plan, edit decision list, hook ideas, captions, formats, editor handoff notes.',
@@ -81,7 +84,7 @@ export const SPECIALIST_PROFILES: Record<AgentTaskType, SpecialistProfile> = {
   },
   design_deck: {
     name: 'Design Deck Specialist',
-    runtime: 'hermes',
+    runtime: 'agent',
     outputTypes: ['deck_outline', 'presentation_copy'],
     riskLevel: 'draft_only',
     expectedOutput: 'Deck outline, slide copy, presentation structure, and design direction notes.',
@@ -89,7 +92,7 @@ export const SPECIALIST_PROFILES: Record<AgentTaskType, SpecialistProfile> = {
   },
   client_communication: {
     name: 'Client Communication Specialist',
-    runtime: 'hermes',
+    runtime: 'agent',
     outputTypes: ['client_update', 'message_draft'],
     riskLevel: 'external_communication_draft_only',
     expectedOutput: 'Client-ready message draft for human review. Never send externally.',
@@ -97,7 +100,7 @@ export const SPECIALIST_PROFILES: Record<AgentTaskType, SpecialistProfile> = {
   },
   email_draft: {
     name: 'Email Draft Specialist',
-    runtime: 'hermes',
+    runtime: 'agent',
     outputTypes: ['email_draft'],
     riskLevel: 'external_communication_draft_only',
     expectedOutput: 'Subject line and email body as a draft artifact. Never send externally.',
@@ -105,7 +108,7 @@ export const SPECIALIST_PROFILES: Record<AgentTaskType, SpecialistProfile> = {
   },
   project_admin: {
     name: 'Project Admin Specialist',
-    runtime: 'hermes',
+    runtime: 'agent',
     outputTypes: ['task_breakdown', 'project_update'],
     riskLevel: 'internal_draft',
     expectedOutput: 'Internal task breakdown, blocker analysis, daily brief draft, operational next steps.',
@@ -113,7 +116,7 @@ export const SPECIALIST_PROFILES: Record<AgentTaskType, SpecialistProfile> = {
   },
   finance: {
     name: 'Finance/Admin Specialist',
-    runtime: 'hermes',
+    runtime: 'agent',
     outputTypes: ['finance_brief', 'invoice_followup_draft'],
     riskLevel: 'financial_draft_only',
     expectedOutput: 'Finance/admin brief, invoice follow-up draft, payment status summary, or checklist.',
@@ -131,8 +134,8 @@ export const SPECIALIST_PROFILES: Record<AgentTaskType, SpecialistProfile> = {
 
 export const ALL_SPECIALISTS = Object.keys(SPECIALIST_PROFILES) as AgentTaskType[]
 
-export const HERMES_SPECIALIST_TYPES = ALL_SPECIALISTS.filter(
-  (t) => SPECIALIST_PROFILES[t].runtime === 'hermes',
+export const AGENT_SPECIALIST_TYPES = ALL_SPECIALISTS.filter(
+  (t) => SPECIALIST_PROFILES[t].runtime === 'agent',
 )
 
 export function isSpecialist(value: string): value is AgentTaskType {

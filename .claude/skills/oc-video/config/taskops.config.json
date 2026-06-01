@@ -1,0 +1,12 @@
+{
+  "context_endpoint": "/api/agent/tasks/{task_id}/context",
+  "submit_artifact_endpoint": "/api/agent/artifacts",
+  "attach_context_endpoint": "/api/agent/tasks/{task_id}/attach-context",
+  "status_endpoint": "/api/agent/tasks/{task_id}/status",
+  "auth_header": "x-ops-agent-key",
+  "base_url_env": "OPS_OPS_BASE_URL",
+  "api_key_env": "OPS_AGENT_API_KEY",
+  "specialist_type": "video_clipping",
+  "large_file_delivery": "local_drive_sync",
+  "api_upload_max_bytes": 25000000
+}
