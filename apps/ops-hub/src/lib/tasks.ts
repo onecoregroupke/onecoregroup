@@ -57,6 +57,10 @@ export interface CreateTaskInput {
   notes?: string
   agent_eligible?: 'Yes' | 'No'
   created_by?: string
+  /** Where this task originated (e.g. 'marketing_content' + the content row id),
+   *  so an approval can return the deliverable to the source. */
+  source_kind?: string
+  source_ref?: string
 }
 
 /** Create a task under a project. Inherits brand + client from the project and
@@ -92,6 +96,8 @@ export async function createTask(input: CreateTaskInput): Promise<OpsTaskRow> {
     notes: input.notes ?? '',
     hmac_token: token,
     agent_eligible: input.agent_eligible ?? 'Yes',
+    source_kind: input.source_kind ?? null,
+    source_ref: input.source_ref ?? null,
     updated_at: nowIso(),
   }
   const { data, error } = await supabase.from('ops_tasks').insert(row).select('*').single()

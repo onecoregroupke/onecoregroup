@@ -35,6 +35,7 @@ export type {
   MarketingContentMetricRow,
   MarketingPlatformCredentialRow,
   MarketingPublishJobRow,
+  MarketingOpsProjectRow,
   OpsClientRow,
   OpsProjectRow,
   OpsTeamMemberRow,

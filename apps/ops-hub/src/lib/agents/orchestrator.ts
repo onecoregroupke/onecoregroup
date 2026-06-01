@@ -5,6 +5,7 @@ import { getProject, getProjectContext } from '@/lib/projects'
 import { resolveBrand } from '@/lib/brands'
 import { uploadArtifact, storageConfigured } from '@/lib/storage'
 import { deliverDoc, driveConfigured } from '@/lib/drive'
+import { notifyMarketingOnApproval } from '@/lib/marketingSync'
 import { runInternalSpecialist } from './groq'
 import { SPECIALIST_PROFILES, type AgentTaskType } from './specialistRegistry'
 import type { OpsAgentArtifactRow, OpsAgentJobRow } from '@ocg/db'
@@ -228,5 +229,6 @@ export async function approveArtifact(
     note: opts.note ?? `Approved draft: ${a.title}`,
     by: opts.by ?? 'admin',
   })
+  if (status === 'Approved') await notifyMarketingOnApproval(a.task_id)
   return { taskId: a.task_id, status }
 }

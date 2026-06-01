@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { requireUser } from '@/lib/api-auth'
 import { setTaskStatus } from '@/lib/tasks'
 import { TASK_STATUSES } from '@/lib/taskStatuses'
+import { notifyMarketingOnApproval } from '@/lib/marketingSync'
 
 export async function POST(
   req: NextRequest,
@@ -23,6 +24,7 @@ export async function POST(
       note: body?.note,
       by: user.email ?? 'admin',
     })
+    if (status === 'Approved') await notifyMarketingOnApproval(taskId)
     return NextResponse.json({ ok: true, task })
   } catch (e) {
     return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500 })

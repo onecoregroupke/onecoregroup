@@ -325,6 +325,10 @@ export interface MarketingContentRow {
   external_post_id: string | null
   publish_error: string | null
   episode_id: string | null
+  ops_task_id: string | null
+  production_status: string
+  production_brief: string | null
+  deliverable_url: string | null
   owner_email: string | null
   created_by_email: string | null
   approved_by_email: string | null
@@ -603,6 +607,15 @@ type MarketingPublishJobInsert = Pick<
 > &
   Partial<MarketingPublishJobRow>
 
+// ─── Marketing: Ops production-project map (migration 022) ───────────────────
+export interface MarketingOpsProjectRow {
+  brand_id: string
+  ops_project_id: string
+  created_at: string
+}
+type MarketingOpsProjectInsert = Pick<MarketingOpsProjectRow, 'brand_id' | 'ops_project_id'> &
+  Partial<MarketingOpsProjectRow>
+
 // ─── Ops Hub: task delivery & assignment (migration 017) ─────────────────────
 export interface OpsClientRow {
   client_id: string
@@ -667,6 +680,8 @@ export interface OpsTaskRow {
   notes: string
   hmac_token: string | null
   agent_eligible: string
+  source_kind: string | null
+  source_ref: string | null
   created_at: string
   updated_at: string
 }
@@ -864,6 +879,7 @@ export interface Database {
       marketing_content_metrics: DbTable<MarketingContentMetricRow, MarketingContentMetricInsert, Partial<MarketingContentMetricRow>>
       marketing_platform_credentials: DbTable<MarketingPlatformCredentialRow, MarketingPlatformCredentialInsert, Partial<MarketingPlatformCredentialRow>>
       marketing_publish_jobs: DbTable<MarketingPublishJobRow, MarketingPublishJobInsert, Partial<MarketingPublishJobRow>>
+      marketing_ops_projects: DbTable<MarketingOpsProjectRow, MarketingOpsProjectInsert, Partial<MarketingOpsProjectRow>>
       ops_clients: DbTable<OpsClientRow, OpsClientInsert, Partial<OpsClientRow>>
       ops_projects: DbTable<OpsProjectRow, OpsProjectInsert, Partial<OpsProjectRow>>
       ops_team_members: DbTable<OpsTeamMemberRow, OpsTeamMemberInsert, Partial<OpsTeamMemberRow>>
