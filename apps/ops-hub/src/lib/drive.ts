@@ -40,12 +40,17 @@ async function findOrCreateFolder(
     q: `'${parentId}' in parents and mimeType = 'application/vnd.google-apps.folder' and name = '${safe}' and trashed = false`,
     fields: 'files(id, name)',
     pageSize: 1,
+    // Shared Drive support: a service account has no personal storage quota, so
+    // files must live in a Shared Drive. These flags let the search traverse it.
+    supportsAllDrives: true,
+    includeItemsFromAllDrives: true,
   })
   const existing = res.data.files?.[0]?.id
   if (existing) return existing
   const created = await drive.files.create({
     requestBody: { name, mimeType: 'application/vnd.google-apps.folder', parents: [parentId] },
     fields: 'id',
+    supportsAllDrives: true,
   })
   return created.data.id!
 }
@@ -93,6 +98,7 @@ export async function deliverDoc(input: DeliverInput): Promise<DeliverResult> {
     },
     media: { mimeType: 'text/plain', body: input.markdown },
     fields: 'id, webViewLink',
+    supportsAllDrives: true,
   })
   const docId = docRes.data.id!
 
@@ -108,6 +114,7 @@ export async function deliverDoc(input: DeliverInput): Promise<DeliverResult> {
       body: Buffer.from(exported.data as ArrayBuffer),
     },
     fields: 'id',
+    supportsAllDrives: true,
   })
 
   return {
