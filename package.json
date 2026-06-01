@@ -13,7 +13,8 @@
     "type-check": "turbo run type-check",
     "dev:nuuranest": "turbo run dev --filter=nuuranest-web",
     "dev:hub": "turbo run dev --filter=marketing-hub",
-    "dev:glitz": "turbo run dev --filter=glitz-n-glim"
+    "dev:glitz": "turbo run dev --filter=glitz-n-glim",
+    "dev:ops": "turbo run dev --filter=ops-hub"
   },
   "devDependencies": {
     "turbo": "^2.3.3",

@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, PenSquare, CheckSquare, FileText,
   Home, Sparkles, Settings, LogOut, X, Users, BarChart2,
-  Calendar, Layers, Share2, Megaphone, Contact, MessageCircle, FileBarChart,
+  Calendar, Layers, Share2, Megaphone, Contact, MessageCircle, FileBarChart, Clapperboard,
 } from 'lucide-react'
 import { usePermissions } from '@/contexts/PermissionsContext'
 import type { SectionKey } from '@/lib/permissions'
@@ -34,6 +34,7 @@ const MAIN_NAV: { href: string; label: string; icon: React.ElementType; section:
 const MARKETING_NAV: { href: string; label: string; icon: React.ElementType }[] = [
   { href: '/marketing/calendar',  label: 'Calendar',  icon: Calendar  },
   { href: '/marketing/content',   label: 'Content',   icon: PenSquare },
+  { href: '/marketing/episodes',  label: 'Episodes',  icon: Clapperboard },
   { href: '/marketing/campaigns', label: 'Campaigns', icon: Megaphone },
   { href: '/marketing/crm',       label: 'CRM',       icon: Contact   },
   { href: '/marketing/reports',   label: 'Reports',   icon: FileBarChart },

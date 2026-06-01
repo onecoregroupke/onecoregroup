@@ -2,6 +2,7 @@
 export type SectionKey =
   | 'dashboard' | 'input' | 'compliance' | 'properties'
   | 'glitz' | 'npt' | 'reports' | 'brands' | 'users' | 'marketing'
+  | 'ops' | 'ops_agents'
 
 export type AccessLevel = 'none' | 'view' | 'edit'
 
@@ -323,6 +324,7 @@ export interface MarketingContentRow {
   external_url: string | null
   external_post_id: string | null
   publish_error: string | null
+  episode_id: string | null
   owner_email: string | null
   created_by_email: string | null
   approved_by_email: string | null
@@ -487,6 +489,342 @@ type MarketingExecutiveReportInsert = Pick<
 > &
   Partial<MarketingExecutiveReportRow>
 
+// ─── Marketing: episodes & clipping (migration 019) ──────────────────────────
+export interface MarketingEpisodeRow {
+  id: string
+  brand_id: string
+  number: number | null
+  slug: string | null
+  title: string
+  hook: string | null
+  guest_name: string | null
+  guest_org: string | null
+  summary_markdown: string
+  record_date: string | null
+  publish_date: string | null
+  edit_status: string
+  status: string
+  youtube_url: string | null
+  podcast_url: string | null
+  transcript_storage_path: string | null
+  cover_storage_path: string | null
+  duration_seconds: number | null
+  campaign_id: string | null
+  created_by_email: string | null
+  metadata: Record<string, unknown>
+  created_at: string
+  updated_at: string
+}
+type MarketingEpisodeInsert = Pick<MarketingEpisodeRow, 'brand_id' | 'title'> &
+  Partial<MarketingEpisodeRow>
+
+export interface MarketingEpisodeClipRow {
+  id: string
+  episode_id: string
+  content_id: string
+  hook: string | null
+  start_seconds: number | null
+  end_seconds: number | null
+  aspect_ratio: string | null
+  storage_path: string | null
+  created_at: string
+  updated_at: string
+}
+type MarketingEpisodeClipInsert = Pick<MarketingEpisodeClipRow, 'episode_id' | 'content_id'> &
+  Partial<MarketingEpisodeClipRow>
+
+// ─── Marketing: per-content metrics (migration 020) ──────────────────────────
+export interface MarketingContentMetricRow {
+  id: string
+  content_id: string
+  brand_id: string
+  captured_at: string
+  reach: number
+  impressions: number
+  likes: number
+  comments: number
+  shares: number
+  saves: number
+  clicks: number
+  video_views: number
+  followers_delta: number
+  source: string
+  metadata: Record<string, unknown>
+  created_at: string
+}
+type MarketingContentMetricInsert = Pick<MarketingContentMetricRow, 'content_id' | 'brand_id'> &
+  Partial<MarketingContentMetricRow>
+
+// ─── Marketing: platform credentials & publish jobs (migration 021) ──────────
+export interface MarketingPlatformCredentialRow {
+  id: string
+  brand_id: string
+  platform_id: string | null
+  platform: string
+  account_handle: string | null
+  external_user_id: string | null
+  encrypted_payload: string
+  refresh_payload: string | null
+  key_version: number
+  scopes: string[]
+  expires_at: string | null
+  last_validated_at: string | null
+  status: string
+  metadata: Record<string, unknown>
+  created_by_email: string | null
+  created_at: string
+  updated_at: string
+}
+type MarketingPlatformCredentialInsert = Pick<
+  MarketingPlatformCredentialRow,
+  'brand_id' | 'platform' | 'encrypted_payload'
+> &
+  Partial<MarketingPlatformCredentialRow>
+
+export interface MarketingPublishJobRow {
+  id: string
+  content_id: string
+  brand_id: string
+  platform: string
+  status: string
+  attempts: number
+  scheduled_at: string | null
+  started_at: string | null
+  completed_at: string | null
+  external_url: string | null
+  external_post_id: string | null
+  error_message: string | null
+  metadata: Record<string, unknown>
+  created_at: string
+}
+type MarketingPublishJobInsert = Pick<
+  MarketingPublishJobRow,
+  'content_id' | 'brand_id' | 'platform'
+> &
+  Partial<MarketingPublishJobRow>
+
+// ─── Ops Hub: task delivery & assignment (migration 017) ─────────────────────
+export interface OpsClientRow {
+  client_id: string
+  client_name: string
+  industry: string
+  country_city: string
+  relationship_status: string
+  drive_folder_id: string | null
+  folder_status: string
+  created_at: string
+  updated_at: string
+}
+type OpsClientInsert = Pick<OpsClientRow, 'client_id' | 'client_name'> & Partial<OpsClientRow>
+
+export interface OpsProjectRow {
+  project_id: string
+  project_name: string
+  brand_id: string | null
+  client_id: string | null
+  client_name: string
+  service_line: string
+  status: string
+  start_date: string
+  notes: string
+  drive_folder_id: string | null
+  folder_status: string
+  created_at: string
+  updated_at: string
+}
+type OpsProjectInsert = Pick<OpsProjectRow, 'project_id' | 'project_name'> & Partial<OpsProjectRow>
+
+export interface OpsTeamMemberRow {
+  id: string
+  name: string
+  email: string | null
+  role: string
+  brand_ids: string[]
+  active: boolean
+  created_at: string
+}
+type OpsTeamMemberInsert = Pick<OpsTeamMemberRow, 'name'> & Partial<OpsTeamMemberRow>
+
+export interface OpsTaskRow {
+  task_id: string
+  dropdown_label: string
+  project_id: string
+  project_name: string
+  brand_id: string | null
+  client_id: string
+  task_name: string
+  task_description: string
+  assigned_to: string
+  category: string
+  priority: string
+  start_date: string
+  target_date: string
+  current_status: string
+  last_updated_by: string
+  last_updated_date: string
+  latest_work_comment: string
+  active: string
+  notes: string
+  hmac_token: string | null
+  agent_eligible: string
+  created_at: string
+  updated_at: string
+}
+type OpsTaskInsert = Pick<OpsTaskRow, 'task_id' | 'project_id' | 'task_name'> & Partial<OpsTaskRow>
+
+export interface OpsProjectContextRow {
+  project_id: string
+  content: string
+  updated_by: string
+  updated_at: string
+}
+
+export interface OpsCompletionRecordRow {
+  id: string
+  task_id: string
+  completion_date: string
+  status: string
+  summary: string
+  outcome: string
+  blockers_notes: string
+  file_urls: string[]
+  submitted_by: string
+  submitted_at: string
+}
+type OpsCompletionRecordInsert = Pick<OpsCompletionRecordRow, 'task_id' | 'completion_date'> &
+  Partial<OpsCompletionRecordRow>
+
+// ─── Ops Hub: agent orchestration (migration 018) ────────────────────────────
+export interface OpsAgentRunRow {
+  id: string
+  mode: string
+  requested_agent_type: string | null
+  brand_id: string | null
+  project_id: string | null
+  task_ids: string[]
+  status: string
+  started_by: string | null
+  started_at: string
+  completed_at: string | null
+  summary: Record<string, unknown>
+}
+type OpsAgentRunInsert = Pick<OpsAgentRunRow, 'id'> & Partial<OpsAgentRunRow>
+
+export interface OpsAgentJobRow {
+  id: string
+  run_id: string
+  task_id: string
+  task_name: string
+  task_type: string
+  brand_id: string | null
+  project_id: string | null
+  client_id: string | null
+  status: string
+  runtime: string
+  output: string | null
+  input_needed: string | null
+  input_provided: string | null
+  respond_token: string | null
+  error_message: string | null
+  assigned_agent: string | null
+  classification: Record<string, unknown> | null
+  payload_json: Record<string, unknown> | null
+  output_artifacts: unknown[]
+  delivery_status: string
+  review_status: string
+  approval_required: boolean
+  claimed_by: string | null
+  claimed_at: string | null
+  started_at: string | null
+  failed_at: string | null
+  created_at: string
+  completed_at: string | null
+}
+type OpsAgentJobInsert = Pick<OpsAgentJobRow, 'run_id' | 'task_id' | 'task_name' | 'task_type'> &
+  Partial<OpsAgentJobRow>
+
+export interface OpsAgentArtifactRow {
+  id: string
+  run_id: string
+  job_id: string | null
+  task_id: string
+  artifact_type: string
+  title: string
+  content: string | null
+  url: string | null
+  delivery: Record<string, unknown> | null
+  metadata: Record<string, unknown>
+  created_at: string
+}
+type OpsAgentArtifactInsert = Pick<OpsAgentArtifactRow, 'run_id' | 'task_id' | 'artifact_type' | 'title'> &
+  Partial<OpsAgentArtifactRow>
+
+export interface OpsAgentContextSourceRow {
+  id: string
+  scope_type: string
+  project_id: string | null
+  task_id: string | null
+  client_id: string | null
+  brand_id: string | null
+  title: string
+  source_type: string
+  url: string | null
+  notes: string | null
+  include_in_agent: boolean
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+type OpsAgentContextSourceInsert = Pick<OpsAgentContextSourceRow, 'title'> &
+  Partial<OpsAgentContextSourceRow>
+
+export interface OpsAgentArtifactDestinationRow {
+  id: string
+  agent_type: string
+  artifact_type: string | null
+  destination_label: string
+  destination_type: string
+  destination_ref: string | null
+  instructions: string | null
+  active: boolean
+  created_at: string
+  updated_at: string
+}
+type OpsAgentArtifactDestinationInsert = Pick<
+  OpsAgentArtifactDestinationRow,
+  'agent_type' | 'destination_label'
+> &
+  Partial<OpsAgentArtifactDestinationRow>
+
+export interface OpsReviewQueueRow {
+  id: string
+  source: string
+  source_detail: string
+  brand_id: string | null
+  inquiry_type: string
+  status: string
+  proposed_fields: Record<string, unknown>
+  original_content: string
+  reviewed_by: string | null
+  reviewed_at: string | null
+  rejection_note: string | null
+  message_id: string | null
+  created_at: string
+}
+type OpsReviewQueueInsert = Pick<OpsReviewQueueRow, 'source'> & Partial<OpsReviewQueueRow>
+
+export interface OpsReportLogRow {
+  id: string
+  report_type: string
+  subject: string
+  html: string
+  recipient: string
+  generated_at: string
+  triggered_by: string
+}
+type OpsReportLogInsert = Pick<OpsReportLogRow, 'report_type' | 'subject' | 'html'> &
+  Partial<OpsReportLogRow>
+
 type DbTable<Row, Insert, Update> = {
   Row: Row & Record<string, unknown>
   Insert: Insert & Record<string, unknown>
@@ -521,6 +859,24 @@ export interface Database {
       marketing_activities: DbTable<MarketingActivityRow, MarketingActivityInsert, Partial<MarketingActivityRow>>
       marketing_whatsapp_flows: DbTable<MarketingWhatsappFlowRow, MarketingWhatsappFlowInsert, Partial<MarketingWhatsappFlowRow>>
       marketing_executive_reports: DbTable<MarketingExecutiveReportRow, MarketingExecutiveReportInsert, Partial<MarketingExecutiveReportRow>>
+      marketing_episodes: DbTable<MarketingEpisodeRow, MarketingEpisodeInsert, Partial<MarketingEpisodeRow>>
+      marketing_episode_clips: DbTable<MarketingEpisodeClipRow, MarketingEpisodeClipInsert, Partial<MarketingEpisodeClipRow>>
+      marketing_content_metrics: DbTable<MarketingContentMetricRow, MarketingContentMetricInsert, Partial<MarketingContentMetricRow>>
+      marketing_platform_credentials: DbTable<MarketingPlatformCredentialRow, MarketingPlatformCredentialInsert, Partial<MarketingPlatformCredentialRow>>
+      marketing_publish_jobs: DbTable<MarketingPublishJobRow, MarketingPublishJobInsert, Partial<MarketingPublishJobRow>>
+      ops_clients: DbTable<OpsClientRow, OpsClientInsert, Partial<OpsClientRow>>
+      ops_projects: DbTable<OpsProjectRow, OpsProjectInsert, Partial<OpsProjectRow>>
+      ops_team_members: DbTable<OpsTeamMemberRow, OpsTeamMemberInsert, Partial<OpsTeamMemberRow>>
+      ops_tasks: DbTable<OpsTaskRow, OpsTaskInsert, Partial<OpsTaskRow>>
+      ops_project_context: DbTable<OpsProjectContextRow, OpsProjectContextRow, Partial<OpsProjectContextRow>>
+      ops_completion_records: DbTable<OpsCompletionRecordRow, OpsCompletionRecordInsert, Partial<OpsCompletionRecordRow>>
+      ops_agent_runs: DbTable<OpsAgentRunRow, OpsAgentRunInsert, Partial<OpsAgentRunRow>>
+      ops_agent_jobs: DbTable<OpsAgentJobRow, OpsAgentJobInsert, Partial<OpsAgentJobRow>>
+      ops_agent_artifacts: DbTable<OpsAgentArtifactRow, OpsAgentArtifactInsert, Partial<OpsAgentArtifactRow>>
+      ops_agent_context_sources: DbTable<OpsAgentContextSourceRow, OpsAgentContextSourceInsert, Partial<OpsAgentContextSourceRow>>
+      ops_agent_artifact_destinations: DbTable<OpsAgentArtifactDestinationRow, OpsAgentArtifactDestinationInsert, Partial<OpsAgentArtifactDestinationRow>>
+      ops_review_queue: DbTable<OpsReviewQueueRow, OpsReviewQueueInsert, Partial<OpsReviewQueueRow>>
+      ops_report_logs: DbTable<OpsReportLogRow, OpsReportLogInsert, Partial<OpsReportLogRow>>
     }
     Views: Record<string, never>
     Functions: Record<string, never>

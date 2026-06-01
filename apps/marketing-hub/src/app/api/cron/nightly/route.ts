@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { runDuePublishes } from '@/lib/marketing/publishers/runner'
 
 export async function GET(req: NextRequest) {
   const auth = req.headers.get('authorization')
@@ -8,21 +9,19 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  // STUB: Instagram + YouTube API calls not yet wired up.
-  // Real implementation requires:
-  // 1. Meta Developer App approval (Instagram Graph API)
-  // 2. Brand-level access tokens stored in brands.instagram_account_id
-  // 3. YouTube Data API key configured
-  // All of the above are pending — will be wired in Phase 2.
-
-  console.log('[CRON] Nightly cron triggered —', new Date().toISOString())
-  console.log('[CRON] Instagram/YouTube API not yet configured — stub only')
-  console.log('[CRON] Would fetch metrics for 6 brands and update daily_metrics table')
+  // Publish runner: posts due API-mode content (or flags remind-mode for manual
+  // posting). Per-platform live API clients are stubbed to remind-only until
+  // each platform's credential + Graph/REST call is wired (see publishers/index.ts).
+  let publish
+  try {
+    publish = await runDuePublishes()
+  } catch (e) {
+    publish = { error: (e as Error).message }
+  }
 
   return NextResponse.json({
-    status: 'stub',
-    message: 'API credentials pending Meta approval',
+    status: 'ok',
     timestamp: new Date().toISOString(),
-    brands_to_sync: ['nairobi-piano-technicians', 'glitz-n-glim', 'nuuranest-stays', 'ar-rayyan-playhouse', 'rhythms-college', 'darul-swafa'],
+    publish,
   })
 }
