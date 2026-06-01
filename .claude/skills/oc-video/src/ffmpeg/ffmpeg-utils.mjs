@@ -48,17 +48,17 @@ export async function doctor() {
     ? {
         ok: true,
         python: py,
-        whisperx: await pyModuleOk("whisperx"),
+        faster_whisper: await pyModuleOk("faster_whisper"),
         scenedetect: await pyModuleOk("scenedetect"),
       }
-    : { ok: false, note: "No .venv. Run scripts/setup-video-env.ps1 (Python 3.11/3.12) for align-voice + reference." };
+    : { ok: false, note: "No .venv. Run scripts/setup-video-env.ps1 (Python 3.11/3.12) for align-voice + edit + reference." };
   return {
     chrome: { ok: !!chromePath(), path: chromePath() },
     ffmpeg: await version(ffmpegPath()),
     ffprobe: await version(ffprobePath()),
     node: process.version,
     python_toolchain: pyEnv,
-    yt_dlp: await commandOk("yt-dlp"),
+    yt_dlp: py ? await pyModuleOk("yt_dlp") : { ok: false, note: "install via setup-video-env.ps1 (.venv)" },
     // 'piper' is optional; only needed for generated narration.
     piper: await commandOk(readEnv().PIPER_BIN || "piper", "--help"),
     readiness: {

@@ -1,10 +1,10 @@
 // align-voice: turn the generated narration into word-level alignment and a
 // reconciled, voice-locked timing plan that the scene generator consumes.
 //
-// Flow: final_voiceover.wav --WhisperX--> alignment.json
+// Flow: final_voiceover.wav --faster-whisper--> alignment.json
 //        + motion_plan.json  --deriveTiming--> derived_timing.json
 // Then (if scenes already exist) patch each scene.json duration + timelines so
-// re-renders are voice-accurate. Honest failure if WhisperX/.venv is missing,
+// re-renders are voice-accurate. Honest failure if faster-whisper/.venv is missing,
 // unless --allow-fallback is passed (proportional timing, clearly marked).
 import fs from "node:fs";
 import path from "node:path";
@@ -25,7 +25,7 @@ export async function alignVoice(taskId, flags = {}) {
 
   if (haveAudio) {
     try {
-      const script = path.join(SKILL_ROOT, "scripts", "whisperx_align.py");
+      const script = path.join(SKILL_ROOT, "scripts", "transcribe_align.py");
       const { stdout } = await runPython([
         script, audio,
         "--language", flags.language || "en",
@@ -33,14 +33,14 @@ export async function alignVoice(taskId, flags = {}) {
         "--device", flags.device || "cpu",
       ], { timeoutMs: Number(flags.timeout) || 0 });
       const parsed = JSON.parse(stdout.trim().split(/\r?\n/).pop());
-      if (!parsed.ok) throw new Error(parsed.error || "whisperx returned not-ok");
+      if (!parsed.ok) throw new Error(parsed.error || "faster-whisper returned not-ok");
       alignment = parsed;
-      alignmentSource = `whisperx:${parsed.model || "small"}`;
+      alignmentSource = `faster-whisper:${parsed.model || "small"}`;
       await writeJson(path.join(paths.voice, "alignment.json"), parsed);
     } catch (e) {
       if (!flags["allow-fallback"]) {
         await appendLog(taskId, "align.log", `Alignment failed: ${e.message}`);
-        throw new Error(`Voice alignment failed: ${e.message}\nFix the .venv/WhisperX, or pass --allow-fallback for proportional timing.`);
+        throw new Error(`Voice alignment failed: ${e.message}\nFix the .venv/faster-whisper, or pass --allow-fallback for proportional timing.`);
       }
       alignmentSource = "proportional_fallback";
     }

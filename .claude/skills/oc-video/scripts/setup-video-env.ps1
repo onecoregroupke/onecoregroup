@@ -1,15 +1,14 @@
-# Sets up the wm-video Python toolchain (.venv) for align-voice + reference.
+# Sets up the wm-video Python toolchain (.venv) for align-voice + edit + reference.
 #
-# WhisperX/PyTorch and PySceneDetect need a pinned Python (3.11 or 3.12) — the
-# system Python (3.14) is too new for the ML wheels. This creates a local .venv
-# under the skill folder so the Node CLI can find it automatically.
+# Lean by design: faster-whisper (CTranslate2 — no PyTorch, no pyannote) for
+# word-level transcription, PySceneDetect for shots, yt-dlp for reference
+# ingest. Installs in a few hundred MB so it fits on the skill's drive.
 #
-# Usage:  pwsh -File scripts/setup-video-env.ps1            (CPU install)
-#         pwsh -File scripts/setup-video-env.ps1 -Gpu       (CUDA torch)
-
-param([switch]$Gpu)
+# Python 3.11/3.12 is pinned (broad CTranslate2/OpenCV wheels); the system 3.14
+# is avoided. Usage:  pwsh -File scripts/setup-video-env.ps1
 
 $ErrorActionPreference = "Stop"
+$PSNativeCommandUseErrorActionPreference = $false
 $SkillRoot = Split-Path -Parent $PSScriptRoot
 $Venv = Join-Path $SkillRoot ".venv"
 
@@ -31,15 +30,18 @@ if (-not (Test-Path $Venv)) {
 $VenvPy = Join-Path $Venv "Scripts\python.exe"
 & $VenvPy -m pip install --upgrade pip wheel
 
-if ($Gpu) {
-  & $VenvPy -m pip install torch torchaudio
-} else {
-  & $VenvPy -m pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu
-}
+# Keep the model cache on C: (the skill drive is small). faster-whisper/HF read
+# HF_HOME; the Node CLI sets the same when invoking.
+$HfHome = Join-Path $env:LOCALAPPDATA "wm-video-models"
+[Environment]::SetEnvironmentVariable("WM_VIDEO_HF_HOME", $HfHome, "User")
+New-Item -ItemType Directory -Force -Path $HfHome | Out-Null
 
-# Core toolchain. whisperx pulls faster-whisper + alignment models on first run.
-& $VenvPy -m pip install whisperx "scenedetect[opencv]" yt-dlp pillow
+# Lean toolchain — no torch, no whisperx. --no-cache-dir avoids doubling disk.
+& $VenvPy -m pip install --no-cache-dir faster-whisper "scenedetect[opencv]" yt-dlp pillow
+if ($LASTEXITCODE -ne 0) { Write-Error "pip install failed (exit $LASTEXITCODE). Check free space on the skill drive." }
 
 Write-Host ""
-Write-Host "Done. Verify with:  node src/cli.mjs doctor"
-Write-Host "First align-voice/reference run will download Whisper + alignment models (one-time)."
+Write-Host "Done. Model cache: $HfHome"
+Write-Host "Verify (run FROM the skill folder):"
+Write-Host "  cd `"$SkillRoot`"; node src/cli.mjs doctor"
+Write-Host "First align-voice/transcribe-source run downloads the Whisper model (~0.5GB) into the cache above (one-time)."

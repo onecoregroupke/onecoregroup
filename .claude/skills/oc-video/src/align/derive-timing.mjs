@@ -1,6 +1,6 @@
 // Voice-first timing engine for wm-video.
 //
-// Turns word-level narration alignment (e.g. from WhisperX) into reconciled
+// Turns word-level narration alignment (e.g. from faster-whisper) into reconciled
 // scene durations and per-scene caption / focus / motion / beat timelines that
 // are LOCKED to the words actually spoken — instead of dividing scene time
 // evenly. This is the core of the "congruency" upgrade: visuals land on the

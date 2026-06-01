@@ -3,7 +3,7 @@
 
 Pipeline: ingest (yt-dlp for URLs, local file otherwise) -> ffprobe metadata
 -> shot detection (PySceneDetect) -> budgeted frame extraction (ffmpeg) ->
-palette (ffmpeg palettegen) -> optional transcript (WhisperX) -> writes
+palette (ffmpeg palettegen) -> optional transcript (faster-whisper) -> writes
 `style_profile.json` plus frame JPEGs the model can Read.
 
 This produces INSPIRATION (pacing, shot rhythm, palette, on-screen cadence) —
@@ -155,23 +155,22 @@ def palette(video: str, out_dir: Path, warnings: list[str]) -> dict:
 
 def transcript(video: str, warnings: list[str], language: str = "en") -> dict:
     try:
-        import whisperx  # type: ignore
+        from faster_whisper import WhisperModel  # type: ignore
     except Exception as e:  # noqa: BLE001
-        warnings.append(f"whisperx unavailable ({e}); transcript skipped.")
+        warnings.append(f"faster-whisper unavailable ({e}); transcript skipped.")
         return {}
     try:
-        model = whisperx.load_model("small", "cpu", compute_type="int8", language=language)
-        audio = whisperx.load_audio(video)
-        result = model.transcribe(audio, language=language)
-        am, meta = whisperx.load_align_model(language_code=language, device="cpu")
-        aligned = whisperx.align(result["segments"], am, meta, audio, "cpu", return_char_alignments=False)
-        words = [
-            {"word": w.get("word", "").strip(), "start": w.get("start"), "end": w.get("end")}
-            for seg in aligned.get("segments", []) for w in seg.get("words", [])
-            if w.get("start") is not None
-        ]
-        text = " ".join(s.get("text", "").strip() for s in aligned.get("segments", []))
-        return {"language": language, "text": text.strip(), "words": words}
+        model = WhisperModel("small", device="cpu", compute_type="int8")
+        segments, info = model.transcribe(video, language=language, word_timestamps=True, vad_filter=True)
+        words = []
+        texts = []
+        for seg in segments:
+            texts.append((seg.text or "").strip())
+            for w in (seg.words or []):
+                if w.start is None or w.end is None:
+                    continue
+                words.append({"word": (w.word or "").strip(), "start": round(float(w.start), 3), "end": round(float(w.end), 3)})
+        return {"language": getattr(info, "language", language), "text": " ".join(texts).strip(), "words": words}
     except Exception as e:  # noqa: BLE001
         warnings.append(f"transcription failed: {e}")
         return {}

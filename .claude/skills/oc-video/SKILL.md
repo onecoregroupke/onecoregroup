@@ -46,7 +46,7 @@ node .claude/skills/oc-video/src/cli.mjs compile --task TASK-XXXX
 node .claude/skills/oc-video/src/cli.mjs deliver --task TASK-XXXX
 ```
 
-Edit mode and reference-video understanding (`reference`, `transcribe-source`, `build-edl`) work as in the upstream skill. Run `doctor` to confirm Chrome/FFmpeg/Python(WhisperX) readiness. See the inline command help and the timeline/voice rules below.
+Edit mode and reference-video understanding (`reference`, `transcribe-source`, `build-edl`) work as in the upstream skill. Transcription/alignment uses **faster-whisper** (lightweight — no torch/WhisperX; set up via `scripts/setup-video-env.ps1`). Run `doctor` to confirm Chrome/FFmpeg/Python(faster-whisper) readiness. See the inline command help and the timeline/voice rules below.
 
 ## Delivery (OCG)
 

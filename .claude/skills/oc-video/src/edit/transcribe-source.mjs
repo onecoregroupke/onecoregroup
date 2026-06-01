@@ -1,5 +1,5 @@
-// transcribe-source: word-level transcript of the edit source video (WhisperX).
-// whisperx.load_audio extracts audio from the video via ffmpeg, so we can point
+// transcribe-source: word-level transcript of the edit source video (faster-whisper).
+// faster-whisper.load_audio extracts audio from the video via ffmpeg, so we can point
 // the aligner straight at the source file. Honest failure if the .venv is missing.
 import fs from "node:fs";
 import path from "node:path";
@@ -13,7 +13,7 @@ export async function transcribeSource(taskId, flags = {}) {
   const src = plan.source_video;
   if (!src || !fs.existsSync(src)) throw new Error(`Source video not found: ${src || "(none)"}`);
 
-  const script = path.join(SKILL_ROOT, "scripts", "whisperx_align.py");
+  const script = path.join(SKILL_ROOT, "scripts", "transcribe_align.py");
   const { stdout } = await runPython([
     script, src,
     "--language", flags.language || "en",
@@ -21,7 +21,7 @@ export async function transcribeSource(taskId, flags = {}) {
     "--device", flags.device || "cpu",
   ], { timeoutMs: Number(flags.timeout) || 0 });
   const parsed = JSON.parse(stdout.trim().split(/\r?\n/).pop());
-  if (!parsed.ok) throw new Error(parsed.error || "whisperx returned not-ok");
+  if (!parsed.ok) throw new Error(parsed.error || "faster-whisper returned not-ok");
 
   const out = path.join(paths.root, "edit", "transcript.json");
   await writeJson(out, parsed);

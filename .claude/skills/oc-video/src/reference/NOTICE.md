@@ -11,7 +11,7 @@ What we reused: the yt-dlp ingest pattern, the auto-fps frame-budget approach
 transcript, then let the model read them" pattern.
 
 What we changed / added: structured `style_profile.json` output (shots via
-PySceneDetect, pacing metrics, palette via ffmpeg), local WhisperX word-level
+PySceneDetect, pacing metrics, palette via ffmpeg), local faster-whisper word-level
 transcript (instead of Whisper API), and integration with the wm-video Task Ops
 project structure and brand-locked, draft-only governance.
 
