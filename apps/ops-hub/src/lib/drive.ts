@@ -31,10 +31,17 @@ function driveClient() {
   const b64 = process.env['GOOGLE_SERVICE_ACCOUNT_JSON_BASE64']
   if (b64) {
     const creds = JSON.parse(Buffer.from(b64, 'base64').toString('utf8'))
+    // Domain-Wide Delegation (Google Workspace only): when GOOGLE_IMPERSONATE_SUBJECT
+    // is set, the service account acts AS that Workspace user, so created files are
+    // owned by them (quota-backed) rather than the quota-less service account.
+    // The SA's Client ID + the Drive scope must be authorized in the Workspace
+    // Admin console → Security → API controls → Domain-wide delegation.
+    const subject = process.env['GOOGLE_IMPERSONATE_SUBJECT']
     const auth = new google.auth.JWT({
       email: creds.client_email,
       key: creds.private_key,
       scopes: SCOPES,
+      ...(subject ? { subject } : {}),
     })
     return google.drive({ version: 'v3', auth })
   }
