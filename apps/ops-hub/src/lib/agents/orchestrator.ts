@@ -1,9 +1,9 @@
 import crypto from 'node:crypto'
 import { db, nowIso } from '@/lib/serverClient'
 import { getTask, setTaskStatus } from '@/lib/tasks'
-import { getProject, getProjectContext } from '@/lib/projects'
+import { getProjectContext } from '@/lib/projects'
 import { resolveBrand } from '@/lib/brands'
-import { deliverDoc, driveConfigured } from '@/lib/drive'
+import { uploadArtifact, storageConfigured } from '@/lib/storage'
 import { runInternalSpecialist } from './groq'
 import { SPECIALIST_PROFILES, type AgentTaskType } from './specialistRegistry'
 import type { OpsAgentArtifactRow, OpsAgentJobRow } from '@ocg/db'
@@ -32,32 +32,22 @@ export async function submitArtifact(opts: {
 
   let delivery: Record<string, unknown> | undefined
   let deliveryNote: string | undefined
-  if (opts.deliver !== false && driveConfigured()) {
+  if (opts.deliver !== false && storageConfigured()) {
     try {
-      const project = await getProject(task.project_id)
       const brand = task.brand_id ? await resolveBrand(task.brand_id) : null
-      const owner = brand?.name || task.client_id || project?.client_name || 'Unsorted'
-      const res = await deliverDoc({
-        ownerFolderName: owner,
+      const ownerSlug = brand?.slug || task.client_id || 'unsorted'
+      const res = await uploadArtifact({
+        ownerSlug,
         projectId: task.project_id,
-        projectName: task.project_name,
-        projectFolderId: project?.drive_folder_id ?? null,
-        docTitle: opts.title,
+        title: opts.title,
         markdown: opts.content,
       })
       delivery = res as unknown as Record<string, unknown>
-      // Cache the resolved project folder for next time.
-      if (project && !project.drive_folder_id) {
-        await supabase
-          .from('ops_projects')
-          .update({ drive_folder_id: res.folder_id, folder_status: 'done', updated_at: nowIso() })
-          .eq('project_id', task.project_id)
-      }
     } catch (e) {
-      deliveryNote = `Drive delivery failed: ${(e as Error).message}. Draft saved in-app.`
+      deliveryNote = `Storage delivery failed: ${(e as Error).message}. Draft saved in-app.`
     }
   } else if (opts.deliver !== false) {
-    deliveryNote = 'Drive not configured — draft saved in-app only.'
+    deliveryNote = 'Storage not configured — draft saved in-app only.'
   }
 
   const { data, error } = await supabase
