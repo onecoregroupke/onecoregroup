@@ -133,6 +133,21 @@ async function resolveRootFolder(drive: ReturnType<typeof driveClient>): Promise
   return findOrCreateFolder(drive, name, 'root')
 }
 
+/** Map a brand slug → its Drive folder id via GOOGLE_DRIVE_BRAND_FOLDERS (a JSON
+ *  object like {"nairobi-piano-technicians":"<id>", ...}). Lets delivery use your
+ *  existing brand folders by EXACT id, regardless of how they're named. */
+export function brandFolderId(slug?: string | null): string | undefined {
+  if (!slug) return undefined
+  const raw = process.env['GOOGLE_DRIVE_BRAND_FOLDERS']
+  if (!raw) return undefined
+  try {
+    const map = JSON.parse(raw) as Record<string, string>
+    return map[slug] || undefined
+  } catch {
+    return undefined
+  }
+}
+
 /** Make a file shareable by link (anyone with the link can view). Best-effort. */
 async function makeShareable(drive: ReturnType<typeof driveClient>, fileId: string): Promise<void> {
   const mode = process.env['OPS_DRIVE_SHARE'] ?? 'anyone'
@@ -152,6 +167,8 @@ export interface DeliverInput {
   ownerFolderName: string // brand or client name (primary, used if no match)
   /** alternate names to match an existing brand/client folder by (name/short_name/slug) */
   ownerAliases?: string[]
+  /** exact Drive folder id for the brand/client folder — wins over name matching */
+  ownerFolderId?: string | null
   projectId: string
   projectName: string
   projectFolderId?: string | null
@@ -173,13 +190,18 @@ export async function deliverDoc(input: DeliverInput): Promise<DeliverResult> {
 
   let projectFolderId = input.projectFolderId ?? null
   if (!projectFolderId) {
-    const root = await resolveRootFolder(drive)
-    const ownerFolder = await findOrCreateFolderByAliases(
-      drive,
-      [input.ownerFolderName, ...(input.ownerAliases ?? [])],
-      input.ownerFolderName || 'Unsorted',
-      root,
-    )
+    // Brand/client folder: exact id (from the brand→folder map) wins; else match
+    // an existing folder under the root by name/alias; else create one.
+    let ownerFolder = input.ownerFolderId ?? null
+    if (!ownerFolder) {
+      const root = await resolveRootFolder(drive)
+      ownerFolder = await findOrCreateFolderByAliases(
+        drive,
+        [input.ownerFolderName, ...(input.ownerAliases ?? [])],
+        input.ownerFolderName || 'Unsorted',
+        root,
+      )
+    }
     projectFolderId = await findOrCreateFolder(
       drive,
       `${input.projectId}  ${input.projectName}`,

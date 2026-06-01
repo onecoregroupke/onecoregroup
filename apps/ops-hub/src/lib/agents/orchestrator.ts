@@ -4,7 +4,7 @@ import { getTask, setTaskStatus } from '@/lib/tasks'
 import { getProject } from '@/lib/projects'
 import { resolveBrand } from '@/lib/brands'
 import { uploadArtifact, storageConfigured } from '@/lib/storage'
-import { deliverDoc, driveConfigured } from '@/lib/drive'
+import { deliverDoc, driveConfigured, brandFolderId } from '@/lib/drive'
 import { notifyMarketingOnApproval } from '@/lib/marketingSync'
 import { SPECIALIST_PROFILES, type AgentTaskType } from './specialistRegistry'
 import type { OpsAgentArtifactRow, OpsAgentJobRow } from '@ocg/db'
@@ -46,6 +46,7 @@ export async function submitArtifact(opts: {
         const res = await deliverDoc({
           ownerFolderName: owner,
           ownerAliases,
+          ownerFolderId: brand ? brandFolderId(brand.slug) : null,
           projectId: task.project_id,
           projectName: task.project_name,
           projectFolderId: project?.drive_folder_id ?? null,
