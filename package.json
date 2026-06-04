@@ -12,6 +12,7 @@
     "lint": "turbo run lint",
     "type-check": "turbo run type-check",
     "dev:nuuranest": "turbo run dev --filter=nuuranest-web",
+    "dev:coastal-comfort": "turbo run dev --filter=coastal-comfort-web",
     "dev:hub": "turbo run dev --filter=marketing-hub",
     "dev:glitz": "turbo run dev --filter=glitz-n-glim",
     "dev:ops": "turbo run dev --filter=ops-hub"
