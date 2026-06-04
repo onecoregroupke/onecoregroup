@@ -36,18 +36,35 @@ export interface CreateProjectInput {
   start_date?: string
 }
 
+/** Resolve the local Design System path for a brand slug from the
+ *  BRAND_DESIGN_SYSTEM_PATHS env var (JSON map of slug → local path). */
+export function brandDesignSystemPath(slug: string | null | undefined): string | null {
+  if (!slug) return null
+  const raw = process.env['BRAND_DESIGN_SYSTEM_PATHS']
+  if (!raw) return null
+  try {
+    const map = JSON.parse(raw) as Record<string, string>
+    return map[slug] ?? null
+  } catch {
+    return null
+  }
+}
+
 /** Create a project under a brand and/or an external client. At least one
- *  owner (brand or client) is required by the DB CHECK constraint. */
+ *  owner (brand or client) is required by the DB CHECK constraint.
+ *  Auto-seeds project context with the brand's local Design System path when known. */
 export async function createProject(input: CreateProjectInput): Promise<OpsProjectRow> {
   const supabase = db()
   const name = input.project_name.trim()
 
   let brandId: string | null = null
+  let brandSlug: string | null = null
   let clientName = ''
   if (input.brand) {
     const brand = await resolveBrand(input.brand)
     if (!brand) throw new Error(`Unknown brand: ${input.brand}`)
     brandId = brand.id
+    brandSlug = brand.slug
     clientName = brand.name
   }
   if (input.client_id) {
@@ -75,6 +92,18 @@ export async function createProject(input: CreateProjectInput): Promise<OpsProje
   }
   const { data, error } = await supabase.from('ops_projects').insert(row).select('*').single()
   if (error) throw new Error(`createProject failed: ${error.message}`)
+
+  // Auto-seed project context with the brand's local Design System path so any
+  // task agent can find brand guidelines without querying Drive.
+  const dsPath = brandDesignSystemPath(brandSlug)
+  if (dsPath) {
+    await setProjectContext(
+      projectId,
+      `## Code references\nDesign system: ${dsPath}\n`,
+      'system',
+    ).catch(() => { /* best-effort; project is still created */ })
+  }
+
   return data as OpsProjectRow
 }
 

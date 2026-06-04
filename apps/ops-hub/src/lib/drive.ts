@@ -1,3 +1,4 @@
+import { Readable } from 'node:stream'
 import { google } from 'googleapis'
 
 /**
@@ -230,7 +231,7 @@ export async function deliverDoc(input: DeliverInput): Promise<DeliverResult> {
     requestBody: { name: `${input.docTitle}.docx`, parents: [projectFolderId] },
     media: {
       mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      body: Buffer.from(exported.data as ArrayBuffer),
+      body: Readable.from(Buffer.from(exported.data as ArrayBuffer)),
     },
     fields: 'id',
     supportsAllDrives: true,

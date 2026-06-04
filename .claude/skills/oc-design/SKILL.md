@@ -55,13 +55,39 @@ For a manual/browser-assisted provider run, use the generated handoff prompt at 
   ```
   This flips the task to `AI Draft Ready`; the Ops Hub callback returns it to the Content Calendar (if sourced from a content row) and auto-schedules.
 
-Configure local delivery + provider (env):
+## Brand design systems (local Drive sync)
+
+Three brands have full design systems extracted at:
+
+| Brand | Slug | Local path |
+|---|---|---|
+| Nairobi Piano Technicians | `nairobi-piano-technicians` | `C:\Users\Administrator\Desktop\OCG DRIVE SYNC\CENTER POINT\NAIROBI PIANO TECHNICIANS DEPARTMENT\DESIGN SYSTEM\NPT Design System (1)\` |
+| Nuuranest Stays | `nuuranest-stays` | `C:\Users\Administrator\Desktop\OCG DRIVE SYNC\CENTER POINT\NUURANEST STAYS DEPARTMENT\DESIGN SYSTEM\Nuuranest Design System (1)\` |
+| Glitz N' Glim | `glitz-n-glim` | `C:\Users\Administrator\Desktop\OCG DRIVE SYNC\CENTER POINT\ICELAND GEYSER DEPARTMENT\DESIGN SYSTEM\Glitz N' Glim Design System (1)\` |
+
+Each contains: `README.md` (brand strategy + visual tokens), `SKILL.md` (agent entry point), `colors_and_type.css` (all CSS tokens), `assets/` (logos), `preview/` (HTML component cards), `ui_kits/website/` (React kit).
+
+**Always read the brand's `SKILL.md` and `colors_and_type.css` before generating any visual asset.** The project context for any brand project will have the path in its `## Code references` section (set automatically on project creation via `BRAND_DESIGN_SYSTEM_PATHS` env var).
+
+## Production scripts (code-native delivery)
+
+```bash
+# 1. Generate a self-contained HTML carousel (embeds logo as base64)
+node scripts/generate-carousel.mjs
+
+# 2. Render PNGs via headless Chrome + upload to Drive
+node scripts/export-carousel-pngs.mjs
+
+# 3. Download / refresh design system zips from Drive
+node scripts/download-design-systems.mjs
+```
+
+## Configure local delivery + provider (env)
 
 ```env
-OPS_OPS_BASE_URL=https://ops.onecoregroup.com
+OPS_OPS_BASE_URL=https://ops-hub-blond.vercel.app
 OPS_AGENT_API_KEY=<the Ops Hub agent key>
-OCG_LOCAL_DELIVERY_ROOT=<a locally-synced Drive folder, optional>
-OPEN_DESIGN_ROOT=<local open-design tool path, optional>
+BRAND_DESIGN_SYSTEM_PATHS={"nairobi-piano-technicians":"<path>","nuuranest-stays":"<path>","glitz-n-glim":"<path>"}
 OD_DAEMON_URL=http://127.0.0.1:17456
 ```
 
