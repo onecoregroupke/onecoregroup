@@ -26,6 +26,7 @@ const coastalNames: Record<string, string> = {
 }
 
 function getDisplayName(property: Property): string {
+  if (property.name.toLowerCase().includes('ocean waves')) return 'Sea Glass Apartment'
   return coastalNames[property.slug] ?? property.name
 }
 

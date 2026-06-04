@@ -1,6 +1,45 @@
 import type { Property } from '@ocg/db'
 import { getPropertyDescriptor } from './property-descriptors'
 
+const BAMBURI_AMENITIES = [
+  'Secure 24/7 Parking',
+  'Walking Distance to Beach',
+  'Daily Room Cleaning (Alternate Days)',
+  'Water & Fan',
+  'Netflix',
+  'High-Speed Internet',
+  'Air Conditioning',
+  'Fully Equipped Kitchen',
+]
+
+const BAMBURI_HIGHLIGHTS = [
+  'Steps from Bamburi Beach',
+  'Secure 24/7 parking on-site',
+  'Netflix & high-speed internet included',
+  'Room cleaning on alternate days',
+  'Convenient location near restaurants & shops',
+  'Clean, well-maintained rooms',
+]
+
+function isOceanWaves(property: Pick<Property, 'slug' | 'name'>): boolean {
+  return (
+    property.slug.toLowerCase().includes('ocean-waves') ||
+    property.name.toLowerCase().includes('ocean waves')
+  )
+}
+
+export function normalizePropertyListing(property: Property): Property {
+  if (!isOceanWaves(property)) return property
+
+  return {
+    ...property,
+    name: 'Ocean Waves by Nuuranest Stays',
+    neighbourhood: 'Bamburi',
+    amenities: BAMBURI_AMENITIES,
+    highlights: BAMBURI_HIGHLIGHTS,
+  }
+}
+
 function locationRank(property: Property): number {
   const neighbourhood = property.neighbourhood.toLowerCase()
   if (neighbourhood.includes('nyali')) return 1
@@ -28,6 +67,7 @@ function floorNumberFromDescriptor(property: Property): number {
 
 export function sortListings(properties: Property[]): Property[] {
   return properties
+    .map(normalizePropertyListing)
     .sort((a, b) => {
       const locationDifference = locationRank(a) - locationRank(b)
       if (locationDifference !== 0) return locationDifference
