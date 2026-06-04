@@ -24,9 +24,14 @@
  *                 Approved, Completed, Blocked, Partially Completed
  */
 
+import dns from 'node:dns'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+
+// IPv6 → IPv4 fallback — required on some Windows hosts where Node's global
+// fetch fails with "fetch failed" against IPv4-only Vercel deployments.
+dns.setDefaultResultOrder('ipv4first')
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = path.resolve(__dirname, '..')
