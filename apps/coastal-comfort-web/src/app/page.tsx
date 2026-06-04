@@ -1,8 +1,8 @@
 export const dynamic = 'force-dynamic'
 
 import Image from 'next/image'
-import { createServerClient } from '@ocg/db'
-import type { Property } from '@ocg/db'
+import { createClient } from '@supabase/supabase-js'
+import type { Database, Property } from '@ocg/db'
 import { Bath, Bed, MapPin, Users } from 'lucide-react'
 import { CataloguePhotoSlider } from '@/components/catalogue/CataloguePhotoSlider'
 import { getPropertyDescriptor } from '@/lib/property-descriptors'
@@ -30,8 +30,16 @@ function getDisplayName(property: Property): string {
 }
 
 async function getAllProperties(): Promise<Property[]> {
+  const url = process.env['NEXT_PUBLIC_SUPABASE_URL']
+  const key =
+    process.env['SUPABASE_SERVICE_ROLE_KEY'] ?? process.env['NEXT_PUBLIC_SUPABASE_ANON_KEY']
+
+  if (!url || !key) return []
+
   try {
-    const supabase = createServerClient()
+    const supabase = createClient<Database>(url, key, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    })
     const { data } = await supabase
       .from('properties')
       .select('*')

@@ -9,20 +9,12 @@ export default function NotFound() {
         <p className="text-gray-600 mb-8">
           {"The page you're looking for doesn't exist. Let's get you back on track."}
         </p>
-        <div className="flex flex-col sm:flex-row gap-3 justify-center">
-          <Link
-            href="/"
-            className="bg-nn-green text-white font-medium px-6 py-3 rounded-full hover:bg-green-900 transition-colors"
-          >
-            Back to Home
-          </Link>
-          <Link
-            href="/properties"
-            className="border-2 border-nn-green text-nn-green font-medium px-6 py-3 rounded-full hover:bg-nn-green hover:text-white transition-colors"
-          >
-            Browse Properties
-          </Link>
-        </div>
+        <Link
+          href="/"
+          className="inline-flex bg-nn-green text-white font-medium px-6 py-3 rounded-full hover:bg-green-900 transition-colors"
+        >
+          Back to Catalogue
+        </Link>
       </div>
     </div>
   )
