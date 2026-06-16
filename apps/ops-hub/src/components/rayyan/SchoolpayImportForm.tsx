@@ -5,7 +5,13 @@ import { useRouter } from 'next/navigation'
 import { Upload } from 'lucide-react'
 import { api } from '@/lib/apiClient'
 
-export function SchoolpayImportForm() {
+export function SchoolpayImportForm({
+  endpoint = '/api/rayyan/schoolpay-import',
+  title = 'Import SchoolPay CSV',
+}: {
+  endpoint?: string
+  title?: string
+}) {
   const router = useRouter()
   const [sourceLabel, setSourceLabel] = useState('SchoolPay export')
   const [notes, setNotes] = useState('')
@@ -35,7 +41,7 @@ export function SchoolpayImportForm() {
       return
     }
     setSaving(true)
-    const { ok, data } = await api<{ error?: string; imported?: number; matched?: number; unmatched?: number; followups?: number }>('/api/rayyan/schoolpay-import', {
+    const { ok, data } = await api<{ error?: string; imported?: number; matched?: number; unmatched?: number; followups?: number }>(endpoint, {
       method: 'POST',
       body: JSON.stringify({ source_label: sourceLabel, notes, rows }),
     })
@@ -52,7 +58,7 @@ export function SchoolpayImportForm() {
   return (
     <section className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
       <div className="mb-4">
-        <h2 className="text-xs font-semibold uppercase tracking-wider text-ocg-gold">Import SchoolPay CSV</h2>
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-ocg-gold">{title}</h2>
         <p className="mt-1 text-sm text-gray-500">Snapshots are matched by SchoolPay code, admission number, then student name. Payments still stay in SchoolPay.</p>
       </div>
       <div className="grid gap-3 lg:grid-cols-[1fr_1fr_1.2fr]">

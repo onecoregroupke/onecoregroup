@@ -23,6 +23,9 @@ import type {
   RayyanFeeFollowupRow,
   RayyanSchoolpayPaymentSnapshotRow,
   RayyanStudentRow,
+  RhythmsSchoolpayImportBatchRow,
+  RhythmsSchoolpayPaymentSnapshotRow,
+  RhythmsStudentRow,
 } from '@ocg/db'
 
 export type ManagementData = {
@@ -47,7 +50,7 @@ export type ManagementData = {
   rayyanSchoolpaySnapshots: RayyanSchoolpayPaymentSnapshotRow[]
 }
 
-async function safeRows<T>(
+export async function safeRows<T>(
   table: keyof import('@ocg/db').Database['public']['Tables'],
   opts: { limit?: number; order?: string; ascending?: boolean } = {},
 ): Promise<T[]> {
@@ -94,6 +97,16 @@ export async function getRayyanAdminData() {
     listTeam(),
   ])
   return { guardians, students, admissions, feeFollowups, batches, snapshots, classes, attendance, adminTasks, team }
+}
+
+export async function getRhythmsAdminData() {
+  const [students, batches, snapshots, team] = await Promise.all([
+    safeRows<RhythmsStudentRow>('rhythms_students', { limit: 500, order: 'created_at' }),
+    safeRows<RhythmsSchoolpayImportBatchRow>('rhythms_schoolpay_import_batches', { limit: 100, order: 'imported_at' }),
+    safeRows<RhythmsSchoolpayPaymentSnapshotRow>('rhythms_schoolpay_payment_snapshots', { limit: 500, order: 'captured_at' }),
+    listTeam(),
+  ])
+  return { students, batches, snapshots, team }
 }
 
 export async function getManagementData(): Promise<ManagementData> {

@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, ListTodo, FolderKanban, Building2, Bot,
   CheckSquare, Settings, LogOut, X, BriefcaseBusiness, Wrench, GraduationCap,
+  UsersRound, BookOpen,
 } from 'lucide-react'
 import { usePermissions } from '@/contexts/PermissionsContext'
 import type { SectionKey } from '@/lib/permissions'
@@ -19,15 +20,17 @@ export const OPS_BRANDS = [
 ]
 
 // section === null → always visible to any signed-in user (their own work)
-const MAIN_NAV: { href: string; label: string; icon: React.ElementType; section: SectionKey | null }[] = [
+export const MAIN_NAV: { href: string; label: string; icon: React.ElementType; section: SectionKey | null }[] = [
   { href: '/',          label: 'Dashboard', icon: LayoutDashboard, section: 'ops' },
   { href: '/management', label: 'Management', icon: BriefcaseBusiness, section: 'management' },
+  { href: '/management/team', label: 'Team', icon: UsersRound, section: 'management' },
   { href: '/my-tasks',  label: 'My Tasks',  icon: CheckSquare,     section: null },
   { href: '/tasks',     label: 'Tasks',     icon: ListTodo,        section: 'ops' },
   { href: '/projects',  label: 'Projects',  icon: FolderKanban,    section: 'ops' },
   { href: '/clients',   label: 'Clients',   icon: Building2,       section: 'ops' },
   { href: '/npt',        label: 'NPT Service', icon: Wrench,        section: 'npt_service' },
   { href: '/rayyan',     label: 'Rayyan Admin', icon: GraduationCap, section: 'rayyan_admin' },
+  { href: '/rhythms',     label: 'Rhythms', icon: BookOpen, section: 'rhythms_admin' },
   { href: '/agents',    label: 'Agents',    icon: Bot,             section: 'ops_agents' },
 ]
 
@@ -67,7 +70,7 @@ export function Sidebar({ open, onClose, onSignOut }: SidebarProps) {
 
         <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
           {visibleNav.map(({ href, label, icon: Icon, section }) => {
-            const active = path === href
+            const active = path === href || (href !== '/' && path.startsWith(`${href}/`))
             const editable = section ? can(section, 'edit') : true
             return (
               <Link

@@ -21,4 +21,44 @@
     font-family: var(--font-inter);
     background-color: #f1f5f9;
   }
+
+  * {
+    min-width: 0;
+  }
+
+  @media (max-width: 767px) {
+    main table {
+      display: block;
+      width: 100%;
+    }
+
+    main thead {
+      display: none;
+    }
+
+    main tbody {
+      display: grid;
+      gap: 0.75rem;
+    }
+
+    main tr {
+      display: block;
+      border: 1px solid #f1f5f9;
+      border-radius: 0.75rem;
+      background: #fff;
+      padding: 0.45rem;
+    }
+
+    main td {
+      display: block;
+      width: 100%;
+      padding: 0.42rem 0.65rem !important;
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+
+    main td:empty {
+      display: none;
+    }
+  }
 }

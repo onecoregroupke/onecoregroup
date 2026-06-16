@@ -3,8 +3,9 @@ import { listTasks, brandIdFromParam } from '@/lib/tasks'
 import { listProjects } from '@/lib/projects'
 import { listBrands } from '@/lib/brands'
 import { listTeam } from '@/lib/team'
-import { statusTone, priorityTone, TASK_STATUSES } from '@/lib/taskStatuses'
+import { TASK_STATUSES } from '@/lib/taskStatuses'
 import { NewTaskButton } from '@/components/tasks/NewTaskButton'
+import { TaskBulkList } from '@/components/tasks/TaskBulkList'
 
 export const dynamic = 'force-dynamic'
 
@@ -28,7 +29,6 @@ export default async function TasksPage({
     listBrands(),
     listTeam(),
   ])
-  const brandById = new Map(brands.map((b) => [b.id, b]))
   const activeBrand = sp.brand ? brands.find((b) => b.slug === sp.brand) : null
 
   return (
@@ -66,61 +66,7 @@ export default async function TasksPage({
         ))}
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm">
-        {tasks.length === 0 ? (
-          <p className="p-6 text-sm text-gray-500">No tasks match these filters.</p>
-        ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-100 text-left text-[11px] uppercase tracking-wider text-gray-400">
-                <th className="px-4 py-3">Task</th>
-                <th className="px-4 py-3">Brand</th>
-                <th className="px-4 py-3">Assignee</th>
-                <th className="px-4 py-3">Priority</th>
-                <th className="px-4 py-3">Due</th>
-                <th className="px-4 py-3">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {tasks.map((t) => {
-                const brand = t.brand_id ? brandById.get(t.brand_id) : undefined
-                return (
-                  <tr key={t.task_id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3">
-                      <Link href={`/tasks/${t.task_id}`} className="font-medium text-gray-800 hover:text-ocg-gold">
-                        {t.task_name}
-                      </Link>
-                      <p className="text-xs text-gray-400">{t.task_id} · {t.project_name}</p>
-                    </td>
-                    <td className="px-4 py-3 text-gray-600">
-                      {brand ? (
-                        <span className="inline-flex items-center gap-1.5">
-                          <span className="h-2 w-2 rounded-full" style={{ backgroundColor: brand.color_hex }} />
-                          {brand.short_name || brand.name}
-                        </span>
-                      ) : (
-                        <span className="text-gray-300">—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-gray-600">{t.assigned_to || '—'}</td>
-                    <td className="px-4 py-3">
-                      <span className={`rounded px-2 py-0.5 text-[10px] font-medium ${priorityTone(t.priority)}`}>
-                        {t.priority}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-gray-500">{t.target_date || '—'}</td>
-                    <td className="px-4 py-3">
-                      <span className={`rounded px-2 py-0.5 text-[10px] font-medium ${statusTone(t.current_status)}`}>
-                        {t.current_status}
-                      </span>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        )}
-      </div>
+      <TaskBulkList tasks={tasks} brands={brands} team={team.map((t) => ({ id: t.id, name: t.name }))} />
     </div>
   )
 }

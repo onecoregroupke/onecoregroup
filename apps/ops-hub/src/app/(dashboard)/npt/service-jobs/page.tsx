@@ -1,4 +1,5 @@
 import { getNptServiceData } from '@/lib/management'
+import { NptActionPanel } from '@/components/npt/NptActionPanel'
 
 export const dynamic = 'force-dynamic'
 
@@ -10,6 +11,12 @@ export default async function NptServiceJobsPage() {
   return (
     <div className="space-y-5">
       <div><h1 className="text-2xl font-semibold text-gray-900">NPT service jobs</h1><p className="text-sm text-gray-500">Gazelle-inspired job workflow for tuning, repairs, assessment, movement, sales viewing, and follow-up.</p></div>
+      <NptActionPanel
+        customers={customers.map((customer) => ({ id: customer.id, label: customer.full_name }))}
+        pianos={pianos.map((piano) => ({ id: piano.id, label: [piano.make, piano.model, piano.piano_type].filter(Boolean).join(' ') || 'Piano' }))}
+        jobs={jobs.map((job) => ({ id: job.id, label: `${job.service_type} · ${job.location || job.status}` }))}
+        team={team.map((member) => ({ id: member.id, label: member.name }))}
+      />
       <div className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm">
         {jobs.length === 0 ? <p className="p-6 text-sm text-gray-500">No service jobs have been entered yet.</p> : (
           <table className="w-full text-sm">

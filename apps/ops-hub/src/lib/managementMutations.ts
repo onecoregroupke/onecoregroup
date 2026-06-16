@@ -21,6 +21,7 @@ const TYPE_TABLE = {
   rayyan_fee_followup: 'rayyan_fee_followups',
   rayyan_class: 'rayyan_classes',
   rayyan_admin_task: 'rayyan_admin_tasks',
+  rhythms_student: 'rhythms_students',
 } as const satisfies Record<string, TableName>
 
 export type MutationType = keyof typeof TYPE_TABLE
@@ -42,6 +43,7 @@ const ALLOWED_FIELDS: Record<MutationType, string[]> = {
   rayyan_fee_followup: ['student_id', 'schoolpay_code', 'expected_fee_item', 'follow_up_status', 'parent_contacted_date', 'last_known_fee_status', 'next_follow_up_date', 'notes'],
   rayyan_class: ['name', 'level', 'teacher_id', 'notes', 'is_active'],
   rayyan_admin_task: ['student_id', 'guardian_id', 'ops_task_id', 'task_type', 'title', 'status', 'priority', 'due_date', 'notes'],
+  rhythms_student: ['full_name', 'admission_number', 'schoolpay_code', 'programme', 'cohort', 'guardian_name', 'phone', 'email', 'enrollment_status', 'start_date', 'notes'],
 }
 
 const REQUIRED_FIELD: Partial<Record<MutationType, string>> = {
@@ -56,6 +58,7 @@ const REQUIRED_FIELD: Partial<Record<MutationType, string>> = {
   rayyan_student: 'full_name',
   rayyan_class: 'name',
   rayyan_admin_task: 'title',
+  rhythms_student: 'full_name',
 }
 
 const UUID_FIELDS = new Set([

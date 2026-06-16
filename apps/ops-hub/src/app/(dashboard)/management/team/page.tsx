@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { activeTasks, getManagementData, isOverdue, workloadLabel } from '@/lib/management'
+import { TeamMemberCreateForm } from '@/components/team/TeamMemberCreateForm'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,6 +20,8 @@ export default async function TeamWorkloadPage() {
           Accountability by person, using existing task assignments and completion records.
         </p>
       </div>
+
+      <TeamMemberCreateForm brands={brands.map((brand) => ({ id: brand.id, label: brand.name }))} />
 
       <div className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm">
         {team.length === 0 ? (

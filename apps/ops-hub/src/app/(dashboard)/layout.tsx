@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { getClient, getSession, signOut } from '@/lib/supabase'
 import { Sidebar } from '@/components/layout/Sidebar'
+import { BottomNav } from '@/components/layout/BottomNav'
 import { Topbar } from '@/components/layout/Topbar'
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
 import { PermissionsContext, makeContextValue } from '@/contexts/PermissionsContext'
@@ -64,7 +65,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} onSignOut={signOut} />
         <div className="flex-1 flex flex-col min-w-0">
           <Topbar onMenuClick={() => setSidebarOpen(true)} />
-          <main className="flex-1 p-4 lg:p-6 overflow-auto">{children}</main>
+          <main className="flex-1 overflow-x-hidden p-4 pb-24 lg:p-6">{children}</main>
+          <BottomNav />
         </div>
       </div>
     </PermissionsContext.Provider>

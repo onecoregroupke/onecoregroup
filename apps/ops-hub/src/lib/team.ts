@@ -23,3 +23,26 @@ export function lookupAssigneeEmail(
   const prefix = team.find((m) => m.name.toLowerCase().startsWith(first ?? ''))
   return prefix?.email ?? undefined
 }
+
+export async function createTeamMember(input: {
+  name: string
+  email?: string
+  role?: string
+  brand_ids?: string[]
+  active?: boolean
+}): Promise<OpsTeamMemberRow> {
+  if (!input.name.trim()) throw new Error('name is required')
+  const { data, error } = await db()
+    .from('ops_team_members')
+    .insert({
+      name: input.name.trim(),
+      email: input.email?.trim() || null,
+      role: input.role?.trim() || 'Team member',
+      brand_ids: input.brand_ids ?? [],
+      active: input.active ?? true,
+    })
+    .select('*')
+    .single()
+  if (error) throw new Error(error.message)
+  return data as OpsTeamMemberRow
+}

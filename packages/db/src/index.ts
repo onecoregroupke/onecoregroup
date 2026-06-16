@@ -69,5 +69,8 @@ export type {
   RayyanClassRow,
   RayyanAttendanceNoteRow,
   RayyanAdminTaskRow,
+  RhythmsStudentRow,
+  RhythmsSchoolpayImportBatchRow,
+  RhythmsSchoolpayPaymentSnapshotRow,
   Database,
 } from './types'

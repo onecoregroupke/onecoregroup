@@ -2,7 +2,7 @@
 export type SectionKey =
   | 'dashboard' | 'input' | 'compliance' | 'properties'
   | 'glitz' | 'npt' | 'reports' | 'brands' | 'users' | 'marketing'
-  | 'ops' | 'ops_agents' | 'management' | 'npt_service' | 'rayyan_admin'
+  | 'ops' | 'ops_agents' | 'management' | 'npt_service' | 'rayyan_admin' | 'rhythms_admin'
 
 export type AccessLevel = 'none' | 'view' | 'edit'
 
@@ -1161,6 +1161,52 @@ export interface RayyanAdminTaskRow {
 }
 type RayyanAdminTaskInsert = Pick<RayyanAdminTaskRow, 'title'> & Partial<RayyanAdminTaskRow>
 
+export interface RhythmsStudentRow {
+  id: string
+  full_name: string
+  admission_number: string | null
+  schoolpay_code: string | null
+  programme: string
+  cohort: string
+  guardian_name: string | null
+  phone: string | null
+  email: string | null
+  enrollment_status: string
+  start_date: string | null
+  notes: string
+  created_at: string
+  updated_at: string
+}
+type RhythmsStudentInsert = Pick<RhythmsStudentRow, 'full_name'> & Partial<RhythmsStudentRow>
+
+export interface RhythmsSchoolpayImportBatchRow {
+  id: string
+  source_label: string
+  imported_by: string
+  imported_at: string
+  row_count: number
+  notes: string
+  metadata: Record<string, unknown>
+}
+type RhythmsSchoolpayImportBatchInsert = Partial<RhythmsSchoolpayImportBatchRow>
+
+export interface RhythmsSchoolpayPaymentSnapshotRow {
+  id: string
+  batch_id: string | null
+  student_id: string | null
+  schoolpay_code: string
+  admission_number: string
+  student_name: string
+  fee_item: string
+  amount_expected_ksh: number | null
+  amount_paid_ksh: number | null
+  balance_ksh: number | null
+  payment_status: string
+  raw_payload: Record<string, unknown>
+  captured_at: string
+}
+type RhythmsSchoolpayPaymentSnapshotInsert = Partial<RhythmsSchoolpayPaymentSnapshotRow>
+
 type DbTable<Row, Insert, Update> = {
   Row: Row & Record<string, unknown>
   Insert: Insert & Record<string, unknown>
@@ -1234,6 +1280,9 @@ export interface Database {
       rayyan_classes: DbTable<RayyanClassRow, RayyanClassInsert, Partial<RayyanClassRow>>
       rayyan_attendance_notes: DbTable<RayyanAttendanceNoteRow, RayyanAttendanceNoteInsert, Partial<RayyanAttendanceNoteRow>>
       rayyan_admin_tasks: DbTable<RayyanAdminTaskRow, RayyanAdminTaskInsert, Partial<RayyanAdminTaskRow>>
+      rhythms_students: DbTable<RhythmsStudentRow, RhythmsStudentInsert, Partial<RhythmsStudentRow>>
+      rhythms_schoolpay_import_batches: DbTable<RhythmsSchoolpayImportBatchRow, RhythmsSchoolpayImportBatchInsert, Partial<RhythmsSchoolpayImportBatchRow>>
+      rhythms_schoolpay_payment_snapshots: DbTable<RhythmsSchoolpayPaymentSnapshotRow, RhythmsSchoolpayPaymentSnapshotInsert, Partial<RhythmsSchoolpayPaymentSnapshotRow>>
     }
     Views: Record<string, never>
     Functions: Record<string, never>
