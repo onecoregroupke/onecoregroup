@@ -39,6 +39,18 @@ OPS_AGENT_API_KEY=<the 64-hex key from the Ops Hub Vercel env>
 
 Every command prints one JSON object with an `"ok"` flag. On `ok:false`, read `error`.
 
+## Portable repo skill setup
+
+These skills are intentionally stored in this repo so any device/account can work the same way after syncing the repository. Configure each device with:
+
+```
+OPS_OPS_BASE_URL=https://ops.onecoregroup.com
+OPS_AGENT_API_KEY=<the Ops Hub agent key>
+OCG_LOCAL_DELIVERY_ROOT=<path to the locally synced One Core Group Drive folder>
+```
+
+If Google Drive Desktop is not connected, guide the setup first. If work must continue, use the relevant skill's local fallback folder (`.claude/skills/<skill>/projects/TASK-XXXX/03_Working-Files`) and attach that fallback path to Task Ops with `attach-context`.
+
 ## Commands
 
 | Need | Command |
@@ -82,7 +94,7 @@ Every command prints one JSON object with an `"ok"` flag. On `ok:false`, read `e
    pricing as `[PRICING — confirm]`).
 3. `submit-artifact --task TASK-XXXX --specialist <type> --title "…" --content-file <tmp> --summary "<one line>"`.
    This delivers `.gdoc` + `.docx` into the brand/project Drive folder and flips the task to `AI Draft Ready`.
-4. Report the `doc_link`, the assumptions you made, and the next step. Remember `artifact_id` for approval.
+4. Report the `doc_link`, the assumptions you made, the next step, and the exact deliverable location. Remember `artifact_id` for approval.
 
 **Review lifecycle**
 - Approve a draft: `approve-artifact <artifact_id>` (task → `Approved`).
@@ -101,3 +113,5 @@ Draft-only and internal. Never send external messages or post to a brand's socia
 accounts, never mark work `Completed` without explicit human confirmation, and
 never invent brand/client facts, pricing, or IDs. The marketing calendar in
 `apps/marketing-hub` is where approved content goes — propose, don't publish.
+
+Every final chat response after a draft delivery must include the deliverable location and confirm whether Task Ops was updated with an artifact, attached context note, or status change. If Task Ops could not be reached, say that plainly and include the local path that needs to be attached later.

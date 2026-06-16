@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import fs from "node:fs";
 import { readEnv } from "../project-fs.mjs";
 import { chromePath } from "../render/chrome-renderer.mjs";
 import { venvPython, pyModuleOk } from "../align/py-env.mjs";
@@ -44,6 +45,9 @@ async function commandOk(cmd, arg = "--version") {
 
 export async function doctor() {
   const py = venvPython();
+  const env = readEnv();
+  const localDeliveryRoot = env.OCG_LOCAL_DELIVERY_ROOT || "";
+  const opsBase = env.OPS_OPS_BASE_URL || env.NEXT_PUBLIC_OPS_URL || "";
   const pyEnv = py
     ? {
         ok: true,
@@ -61,10 +65,20 @@ export async function doctor() {
     yt_dlp: py ? await pyModuleOk("yt_dlp") : { ok: false, note: "install via setup-video-env.ps1 (.venv)" },
     // 'piper' is optional; only needed for generated narration.
     piper: await commandOk(readEnv().PIPER_BIN || "piper", "--help"),
+    ops: {
+      base_url: opsBase || null,
+      api_key_configured: Boolean(env.OPS_AGENT_API_KEY),
+    },
+    local_delivery: {
+      path: localDeliveryRoot || null,
+      exists: Boolean(localDeliveryRoot && fs.existsSync(localDeliveryRoot)),
+    },
     readiness: {
       motion_render: !!chromePath(),
       voice_alignment: !!py,
       reference_analysis: !!py,
+      task_ops_update: Boolean(opsBase && env.OPS_AGENT_API_KEY),
+      local_delivery: Boolean(localDeliveryRoot && fs.existsSync(localDeliveryRoot)),
     },
   };
 }

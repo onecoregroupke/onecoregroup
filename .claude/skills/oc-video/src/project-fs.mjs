@@ -54,8 +54,9 @@ export function readEnv() {
   const out = { ...process.env };
   for (const file of [
     path.join(SKILL_ROOT, ".env"),
+    path.join(SKILL_ROOT, "..", "..", "..", ".env.local"),
+    path.join(SKILL_ROOT, "..", "..", "..", "apps", "ops-hub", ".env.local"),
     path.join(process.cwd(), ".env.local"),
-    "F:\\Cognexa Co\\02_CODE\\WM-INTERNAL\\wm-task-ops\\.env.local",
   ]) {
     try {
       for (const line of fs.readFileSync(file, "utf8").split(/\r?\n/)) {

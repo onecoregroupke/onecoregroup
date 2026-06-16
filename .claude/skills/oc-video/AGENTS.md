@@ -9,3 +9,5 @@
 - Never publish, message clients, or mark `Completed`.
 - Log generated FFmpeg commands and delivery actions.
 - Report missing assets with exact paths the user should fill.
+- Every completion response must include the deliverable location.
+- Attach the deliverable location to Task Ops as an artifact or context note whenever credentials are available.

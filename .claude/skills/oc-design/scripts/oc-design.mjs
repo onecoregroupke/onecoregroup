@@ -7,10 +7,13 @@ import { fileURLToPath } from 'node:url';
 
 const SKILL_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PROJECTS_ROOT = path.join(SKILL_ROOT, 'projects');
+const REPO_ROOT = path.resolve(SKILL_ROOT, '..', '..', '..');
 const DEFAULT_OPEN_DESIGN_ROOT = 'C:\\Cognexa Co\\00_TOOLS\\open-design';
-const DEFAULT_CLIENTS_ROOT = 'F:\\Cognexa Co\\01_DRIVE-SYNC\\WM & Co\\03_CLIENTS';
-const WM_OPS_ROOT = 'F:\\Cognexa Co\\02_CODE\\WM-INTERNAL\\wm-task-ops';
+const OC_OPS_CLI = path.join(REPO_ROOT, 'scripts', 'oc-ops.mjs');
 const DEFAULT_DAEMON_URL = 'http://127.0.0.1:17456';
+const LOCAL_ENV_PATH = path.join(REPO_ROOT, 'apps', 'ops-hub', '.env.local');
+
+if (fs.existsSync(LOCAL_ENV_PATH)) process.loadEnvFile(LOCAL_ENV_PATH);
 
 main().catch((err) => {
   print({ ok: false, error: String(err?.message || err) });
@@ -45,12 +48,12 @@ async function main() {
 
 function usage() {
   return [
-    'node scripts/wm-design.mjs doctor',
-    'node scripts/wm-design.mjs init --task TASK-XXXX --type brand_guidelines [--provider open_design]',
-    'node scripts/wm-design.mjs route --task TASK-XXXX [--daemon-url http://127.0.0.1:7456]',
-    'node scripts/wm-design.mjs collect --task TASK-XXXX --source <file-or-folder>',
-    'node scripts/wm-design.mjs deliver --task TASK-XXXX [--folder <project-folder>]',
-    'node scripts/wm-design.mjs status --task TASK-XXXX',
+    'node .claude/skills/oc-design/scripts/oc-design.mjs doctor',
+    'node .claude/skills/oc-design/scripts/oc-design.mjs init --task TASK-XXXX --type brand_guidelines [--provider open_design]',
+    'node .claude/skills/oc-design/scripts/oc-design.mjs route --task TASK-XXXX [--daemon-url http://127.0.0.1:17456]',
+    'node .claude/skills/oc-design/scripts/oc-design.mjs collect --task TASK-XXXX --source <file-or-folder>',
+    'node .claude/skills/oc-design/scripts/oc-design.mjs deliver --task TASK-XXXX [--folder <project-folder>] [--delivery-name <folder-name>]',
+    'node .claude/skills/oc-design/scripts/oc-design.mjs status --task TASK-XXXX',
   ];
 }
 
@@ -94,11 +97,24 @@ async function doctor(args) {
     package_json: fs.existsSync(path.join(openDesignRoot, 'package.json')),
     data_dir: fs.existsSync(path.join(openDesignRoot, '.od')),
   };
-  const wmOps = {
-    exists: fs.existsSync(path.join(WM_OPS_ROOT, 'scripts', 'wm-ops.mjs')),
-    path: WM_OPS_ROOT,
+  const ocOps = {
+    exists: fs.existsSync(OC_OPS_CLI),
+    path: OC_OPS_CLI,
   };
-  return { ok: true, provider: 'open_design', daemon_url: daemonUrl, daemon_health: health, open_design: repo, wm_ops: wmOps };
+  const deliveryRoot = process.env.OCG_LOCAL_DELIVERY_ROOT || '';
+  const localDelivery = {
+    exists: Boolean(deliveryRoot && fs.existsSync(deliveryRoot)),
+    path: deliveryRoot || null,
+  };
+  return {
+    ok: true,
+    provider: 'open_design',
+    daemon_url: daemonUrl,
+    daemon_health: health,
+    open_design: repo,
+    oc_ops: ocOps,
+    local_delivery: localDelivery,
+  };
 }
 
 async function initProject(args) {
@@ -143,8 +159,8 @@ async function routeOpenDesign(args) {
   const root = taskRoot(task);
   await assertProject(root);
   const daemonUrl = String(args.daemonUrl || process.env.OD_DAEMON_URL || DEFAULT_DAEMON_URL).replace(/\/$/, '');
-  const projectId = String(args.projectId || `wm-${task.toLowerCase()}`);
-  const name = String(args.name || `${task} WM Design`);
+  const projectId = String(args.projectId || `ocg-${task.toLowerCase()}`);
+  const name = String(args.name || `${task} OCG Design`);
 
   const health = await fetchJson(`${daemonUrl}/api/health`, { timeoutMs: 3000 }).catch((err) => ({
     ok: false,
@@ -234,7 +250,9 @@ async function deliver(args) {
     return report;
   }
 
-  const deliveryFolder = path.join(projectFolder, '03_Working-Files');
+  const taskTitle = lookup?.payload?.task?.task_name || 'Design Delivery';
+  const deliveryName = sanitizePathSegment(String(args.deliveryName || `${task} ${taskTitle}`));
+  const deliveryFolder = path.join(projectFolder, deliveryName);
   await fsp.mkdir(deliveryFolder, { recursive: true });
   const outputs = [];
   for (const file of files) {
@@ -299,21 +317,21 @@ function buildBrief({ task, type, provider, taskContext }) {
   const payload = taskContext?.payload || {};
   const taskInfo = payload.task || {};
   const project = payload.project || {};
-  const client = payload.client || {};
+  const brand = payload.brand || {};
   return `# Design Brief - ${task}
 
 ## Task
-- Title: ${taskInfo.title || '[Task title unavailable]'}
+- Title: ${taskInfo.task_name || '[Task title unavailable]'}
 - Type: ${type}
 - Provider: ${provider}
 - Status: Draft production only
 
-## Client / Project
-- Client: ${client.name || '[Client unavailable]'}
-- Project: ${project.name || '[Project unavailable]'}
+## Brand / Project
+- Brand: ${brand.name || '[Brand unavailable]'}
+- Project: ${project.project_name || '[Project unavailable]'}
 
 ## Task Description
-${taskInfo.description || '[No task description supplied]'}
+${taskInfo.task_description || '[No task description supplied]'}
 
 ## Required Output
 - Editable design source or Open Design project files
@@ -335,14 +353,14 @@ function buildOpenDesignPrompt({ task, type, taskContext }) {
   const payload = taskContext?.payload || {};
   const taskInfo = payload.task || {};
   const project = payload.project || {};
-  const client = payload.client || {};
-  return `You are producing a WM & Co design draft inside Open Design.
+  const brand = payload.brand || {};
+  return `You are producing a One Core Group design draft inside Open Design.
 
 Task: ${task}
 Design type: ${type}
-Client: ${client.name || '[Client unavailable]'}
-Project: ${project.name || '[Project unavailable]'}
-Task title: ${taskInfo.title || '[Task title unavailable]'}
+Brand: ${brand.name || '[Brand unavailable]'}
+Project: ${project.project_name || '[Project unavailable]'}
+Task title: ${taskInfo.task_name || '[Task title unavailable]'}
 
 Read the local files in this project folder first:
 - brief/DESIGN-BRIEF.md
@@ -384,13 +402,13 @@ function buildClaudeDesignPrompt({ task, type, taskContext }) {
 
 Use this only as a browser/manual handoff because Claude Design does not currently expose a public product API for project creation/export.
 
-Task title: ${payload.task?.title || '[Task title unavailable]'}
+Task title: ${payload.task?.task_name || '[Task title unavailable]'}
 Design type: ${type}
 
 Paste the Open Design prompt or DESIGN-BRIEF.md into Claude Design, generate the draft, export the source/ZIP/PDF/PPTX/PNG assets, then use:
 
-node scripts/wm-design.mjs collect --task ${task} --source "<downloaded-export-folder-or-file>"
-node scripts/wm-design.mjs deliver --task ${task}
+node .claude/skills/oc-design/scripts/oc-design.mjs collect --task ${task} --source "<downloaded-export-folder-or-file>"
+node .claude/skills/oc-design/scripts/oc-design.mjs deliver --task ${task}
 `;
 }
 
@@ -415,7 +433,7 @@ function buildDeliverySummary({ task, lookup, outputs, deliveryFolder }) {
   return `# ${task} Design Delivery Summary
 
 ## Task
-- Title: ${payload.task?.title || '[Task title unavailable]'}
+- Title: ${payload.task?.task_name || '[Task title unavailable]'}
 - Status: AI Draft Ready / human review required
 
 ## Delivery Folder
@@ -426,50 +444,59 @@ ${outputs.map((o) => `- ${path.basename(o.destination)}`).join('\n')}
 
 ## Notes
 - Draft-only delivery.
-- Do not publish or send externally until Wallace approves.
+- Do not publish or send externally until human approval.
 - Any missing brand assets, legal usage rules, or final copy should be marked during review.
 `;
 }
 
 async function lookupTask(task) {
-  return runWmOps(['lookup-task', task, '--specialist', 'design']);
+  return runOcOps(['lookup-task', task]);
 }
 
 async function attachTaskContext(task, { title, url, notes }) {
-  return runWmOps(['attach-context', '--task', task, '--title', title, '--type', 'note', '--scope', 'task', '--url', url, '--notes', notes]);
+  return runOcOps(['attach-context', '--task', task, '--title', title, '--type', 'note', '--url', url, '--notes', notes]);
 }
 
 async function setTaskStatus(task, status, note) {
-  return runWmOps(['set-status', task, '--status', status, '--note', note]);
+  return runOcOps(['set-status', task, '--status', status, '--note', note]);
 }
 
-async function runWmOps(args) {
-  const cli = path.join(WM_OPS_ROOT, 'scripts', 'wm-ops.mjs');
-  if (!fs.existsSync(cli)) throw new Error(`wm-ops CLI not found: ${cli}`);
-  const result = await runProcess('node', [cli, ...args], { cwd: WM_OPS_ROOT, timeoutMs: 120000 });
+async function runOcOps(args) {
+  if (!fs.existsSync(OC_OPS_CLI)) throw new Error(`oc-ops CLI not found: ${OC_OPS_CLI}`);
+  const result = await runProcess('node', [OC_OPS_CLI, ...args], { cwd: REPO_ROOT, timeoutMs: 120000 });
   const parsed = parseFirstJson(result.stdout);
   if (parsed) return parsed;
-  if (result.code !== 0) throw new Error(result.stderr || result.stdout || `wm-ops exited ${result.code}`);
+  if (result.code !== 0) throw new Error(result.stderr || result.stdout || `oc-ops exited ${result.code}`);
   return { ok: true, stdout: result.stdout.trim() };
 }
 
 async function resolveDeliveryProjectFolder(lookup) {
   const payload = lookup?.payload || {};
-  const clientId = payload.client_id;
-  const projectId = payload.project_id;
-  const clientsRoot = process.env.WM_LOCAL_CLIENTS_ROOT || DEFAULT_CLIENTS_ROOT;
-  if (!clientId || !projectId || !fs.existsSync(clientsRoot)) return null;
-  const clientFolder = await findChildByPrefix(clientsRoot, clientId);
-  if (!clientFolder) return null;
-  const projectDelivery = path.join(clientFolder, '03_Project-Delivery');
-  if (!fs.existsSync(projectDelivery)) return null;
-  return findChildByPrefix(projectDelivery, projectId);
+  const projectId = payload.project?.project_id;
+  const deliveryRoot = process.env.OCG_LOCAL_DELIVERY_ROOT;
+  if (!projectId || !deliveryRoot || !fs.existsSync(deliveryRoot)) return null;
+  return findDirectoryByPrefix(deliveryRoot, projectId);
 }
 
-async function findChildByPrefix(parent, prefix) {
+async function findDirectoryByPrefix(parent, prefix) {
   const entries = await fsp.readdir(parent, { withFileTypes: true });
-  const match = entries.find((entry) => entry.isDirectory() && entry.name.toUpperCase().startsWith(prefix.toUpperCase()));
-  return match ? path.join(parent, match.name) : null;
+  for (const entry of entries) {
+    if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
+    const full = path.join(parent, entry.name);
+    if (entry.name.toUpperCase().startsWith(prefix.toUpperCase())) return full;
+    const nested = await findDirectoryByPrefix(full, prefix);
+    if (nested) return nested;
+  }
+  return null;
+}
+
+function sanitizePathSegment(value) {
+  const sanitized = value
+    .replace(/[<>:"/\\|?*\u0000-\u001F]/g, '-')
+    .replace(/\s+/g, ' ')
+    .replace(/[. ]+$/g, '')
+    .trim();
+  return sanitized || 'Design Delivery';
 }
 
 async function assertProject(root) {

@@ -337,7 +337,7 @@ async function main() {
         break;
       }
       default:
-        console.log(`wm-video commands: init, plan, generate-scenes, align-voice, reference, transcribe-source, build-edl, render-scenes, voice-script, generate-voice, list-voices, validate-voice-bank, audition-voice, validate-voice, voice-report, validate-audio, build-manifest, compile, upload, deliver, status, validate, doctor, audio-console`);
+        console.log(`oc-video commands: init, plan, generate-scenes, align-voice, reference, transcribe-source, build-edl, render-scenes, voice-script, generate-voice, list-voices, validate-voice-bank, audition-voice, validate-voice, voice-report, validate-audio, build-manifest, compile, upload, deliver, status, validate, doctor, audio-console`);
         process.exitCode = cmd ? 1 : 0;
     }
   } catch (e) {

@@ -1,13 +1,13 @@
-# WM Video
+# OC Video
 
-`wm-video` is a code-native video production toolkit for WM Task Ops. It creates motion graphics and talking-head video drafts using HTML/CSS/SVG/JS, Chrome frame rendering, FFmpeg compilation, manual audio assets, and local Drive-sync delivery.
+`oc-video` is a code-native video production toolkit for One Core Group Task Ops. It creates motion graphics and talking-head video drafts using HTML/CSS/SVG/JS, Chrome frame rendering, FFmpeg compilation, manual audio assets, and local Drive-sync delivery.
 
 ## Prerequisites
 
 - Node.js 18+
 - Google Chrome or Chromium
 - FFmpeg and FFprobe
-- Local Drive sync root for WM client folders
+- Local Drive sync root for One Core Group delivery folders
 - Optional Task Ops credentials for context/status updates
 
 ## Install
@@ -15,11 +15,11 @@
 Use the skill folder directly:
 
 ```bash
-cd C:\Users\user\.codex\skills\wm-video
+cd F:\Cognexa Co\02_CODE\CLIENT-IMPLS\ONE CORE GROUP\One Core Group Marketing Admin\one-core-group\.claude\skills\oc-video
 node src/cli.mjs doctor
 ```
 
-Copy `.env.example` to `.env` and set local paths if needed.
+When working from this repo, use `.claude/skills/oc-video` directly. Copy `.env.example` to `.env` or configure the same values in the repo `.env.local`.
 
 ## Project Flow
 
@@ -52,7 +52,7 @@ The renderer should capture frame sequences for animated scenes, not only static
 
 ## Voiceover
 
-`wm-video` supports a CLI-first voiceover layer for WM Academy lessons, explainers, campaign videos, and training videos.
+`oc-video` supports a CLI-first voiceover layer for OCG lessons, explainers, campaign videos, and training videos.
 
 Commands:
 
@@ -108,8 +108,9 @@ Default delivery is local Drive sync:
 2. Copy exports and summaries into the synced project `03_Working-Files` folder.
 3. Attach a Task Ops context note when credentials are available.
 4. Set or recommend `AI Draft Ready`.
+5. Include the actual deliverable location in the chat response.
 
-Hermes API upload is kept as a fallback for small artifacts because the current endpoint has a 25 MB limit.
+If Drive sync is unavailable, delivery falls back to `projects/TASK-XXXX/03_Working-Files` and records that local path in the delivery manifest. The `upload` command is now best treated as Task Ops registration for a local media path, not as a binary media upload.
 
 ## First Test Later
 

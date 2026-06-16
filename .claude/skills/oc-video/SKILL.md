@@ -24,6 +24,8 @@ node .claude/skills/oc-video/src/cli.mjs <command> [options]
 
 All agents must use the same project folder, manifests, logs, and commands. Do not bypass the CLI unless repairing the skill itself.
 
+The repo copy of this skill is canonical. On a new device, use it directly from `.claude/skills/oc-video`; configure `OPS_OPS_BASE_URL`, `OPS_AGENT_API_KEY`, and `OCG_LOCAL_DELIVERY_ROOT` in `.env.local` or the environment.
+
 ## Modes
 
 - `motion_graphics`: A complete animated video with code-native scenes, rendered frames, music/SFX, and FFmpeg compilation.
@@ -58,8 +60,11 @@ Video files are large, so delivery is **local Drive-sync first, then Ops Hub lin
      --title "<Brand> — <piece>" --content-file <delivery-summary.md> --summary "Video draft delivered: <link>"
    ```
    That flips the task to `AI Draft Ready`. The Ops Hub callback then returns the deliverable to the Content Calendar (if the task came from a content row) and auto-schedules.
+3. The final chat response must include the actual deliverable location. The same location must be attached to the Task Ops task as an artifact link or context note.
 
 Config: `config/taskops.config.json` points at the Ops Hub `/api/agent/*` endpoints (`OPS_OPS_BASE_URL` + `OPS_AGENT_API_KEY`, header `x-ops-agent-key`). Set `OCG_LOCAL_DELIVERY_ROOT` if delivering through a locally-synced Drive folder.
+
+If Drive sync is unavailable, deliver into `.claude/skills/oc-video/projects/TASK-XXXX/03_Working-Files`, label it as a local fallback, and attach that fallback path to Task Ops when credentials are available.
 
 ## Visual / Audio / Voice Rules
 
