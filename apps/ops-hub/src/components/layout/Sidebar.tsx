@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, ListTodo, FolderKanban, Building2, Bot,
-  CheckSquare, Settings, LogOut, X,
+  CheckSquare, Settings, LogOut, X, BriefcaseBusiness, Wrench, GraduationCap,
 } from 'lucide-react'
 import { usePermissions } from '@/contexts/PermissionsContext'
 import type { SectionKey } from '@/lib/permissions'
@@ -21,10 +21,13 @@ export const OPS_BRANDS = [
 // section === null → always visible to any signed-in user (their own work)
 const MAIN_NAV: { href: string; label: string; icon: React.ElementType; section: SectionKey | null }[] = [
   { href: '/',          label: 'Dashboard', icon: LayoutDashboard, section: 'ops' },
+  { href: '/management', label: 'Management', icon: BriefcaseBusiness, section: 'management' },
   { href: '/my-tasks',  label: 'My Tasks',  icon: CheckSquare,     section: null },
   { href: '/tasks',     label: 'Tasks',     icon: ListTodo,        section: 'ops' },
   { href: '/projects',  label: 'Projects',  icon: FolderKanban,    section: 'ops' },
   { href: '/clients',   label: 'Clients',   icon: Building2,       section: 'ops' },
+  { href: '/npt',        label: 'NPT Service', icon: Wrench,        section: 'npt_service' },
+  { href: '/rayyan',     label: 'Rayyan Admin', icon: GraduationCap, section: 'rayyan_admin' },
   { href: '/agents',    label: 'Agents',    icon: Bot,             section: 'ops_agents' },
 ]
 
