@@ -4,27 +4,21 @@ import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Bell,
-  Building2,
   CalendarDays,
   CheckCircle2,
+  ChevronLeft,
   ChevronRight,
-  ClipboardList,
   FileText,
   HelpCircle,
   Home,
-  Inbox,
-  MapPin,
   MessageSquare,
-  MoreHorizontal,
   Phone,
   Plus,
   ReceiptText,
   Search,
   Settings,
   SlidersHorizontal,
-  Tags,
   Thermometer,
-  UserRoundPlus,
   UsersRound,
   Wrench,
 } from 'lucide-react'
@@ -103,6 +97,8 @@ export function NptWorkspace({ data }: { data: NptWorkspaceData }) {
   const [query, setQuery] = useState('')
   const [activeAction, setActiveAction] = useState<ActionKey | null>(null)
   const [hiddenTypes, setHiddenTypes] = useState<Set<TimelineType>>(new Set())
+  const [modulesCollapsed, setModulesCollapsed] = useState(false)
+  const [timelineCollapsed, setTimelineCollapsed] = useState(false)
 
   useEffect(() => {
     const next = firstSelectionForModule(module, data)
@@ -140,29 +136,46 @@ export function NptWorkspace({ data }: { data: NptWorkspaceData }) {
   }
 
   return (
-    <div className="-m-4 min-h-[calc(100vh-64px)] bg-[#eef1f4] text-[#263238] lg:-m-6">
-      <div className="grid min-h-[calc(100vh-64px)] lg:grid-cols-[220px_minmax(0,1fr)_360px]">
+    <div className="min-h-screen bg-[#eef1f4] text-[#263238]">
+      <div
+        className="grid min-h-screen"
+        style={{
+          gridTemplateColumns: `${modulesCollapsed ? '64px' : '220px'} minmax(0, 1fr) ${timelineCollapsed ? '46px' : '360px'}`,
+        }}
+      >
         <aside className="border-r border-[#d7dde3] bg-[#f8fafb]">
-          <div className="border-b border-[#d7dde3] px-4 py-4">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#7a8793]">Nairobi Piano</p>
-            <h1 className="mt-1 text-lg font-semibold text-[#1c2833]">Technicians</h1>
+          <div className={`flex items-center border-b border-[#d7dde3] py-4 ${modulesCollapsed ? 'justify-center px-2' : 'justify-between px-4'}`}>
+            {!modulesCollapsed && (
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#7a8793]">Nairobi Piano</p>
+                <h1 className="mt-1 text-lg font-semibold text-[#1c2833]">Technicians</h1>
+              </div>
+            )}
+            <button
+              onClick={() => setModulesCollapsed((value) => !value)}
+              title={modulesCollapsed ? 'Expand NPT menu' : 'Collapse NPT menu'}
+              className="flex h-8 w-8 items-center justify-center rounded border border-[#ccd4dc] bg-white text-[#52606d] hover:text-[#1c2833]"
+            >
+              {modulesCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+            </button>
           </div>
           <nav className="px-2 py-3">
             {MODULES.map(({ key, label, icon: Icon }) => (
               <button
                 key={key}
                 onClick={() => setModule(key)}
-                className={`flex w-full items-center gap-3 rounded px-3 py-2 text-left text-sm ${module === key ? 'bg-[#1c2833] text-white shadow-sm' : 'text-[#52606d] hover:bg-white hover:text-[#1c2833]'}`}
+                title={modulesCollapsed ? label : undefined}
+                className={`flex w-full items-center gap-3 rounded px-3 py-2 text-left text-sm ${modulesCollapsed ? 'justify-center' : ''} ${module === key ? 'bg-[#1c2833] text-white shadow-sm' : 'text-[#52606d] hover:bg-white hover:text-[#1c2833]'}`}
               >
                 <Icon size={16} />
-                <span className="flex-1">{label}</span>
-                {module === key && <ChevronRight size={14} />}
+                {!modulesCollapsed && <span className="flex-1">{label}</span>}
+                {!modulesCollapsed && module === key && <ChevronRight size={14} />}
               </button>
             ))}
           </nav>
-          <div className="mt-auto border-t border-[#d7dde3] px-4 py-3 text-xs text-[#7a8793]">
-            <button className="flex items-center gap-2 hover:text-[#1c2833]"><Plus size={14} /> New</button>
-            <button className="mt-2 flex items-center gap-2 hover:text-[#1c2833]"><HelpCircle size={14} /> Help</button>
+          <div className={`mt-auto border-t border-[#d7dde3] py-3 text-xs text-[#7a8793] ${modulesCollapsed ? 'px-2' : 'px-4'}`}>
+            <button title="New" className={`flex items-center gap-2 hover:text-[#1c2833] ${modulesCollapsed ? 'mx-auto justify-center' : ''}`}><Plus size={14} /> {!modulesCollapsed && 'New'}</button>
+            <button title="Help" className={`mt-2 flex items-center gap-2 hover:text-[#1c2833] ${modulesCollapsed ? 'mx-auto justify-center' : ''}`}><HelpCircle size={14} /> {!modulesCollapsed && 'Help'}</button>
           </div>
         </aside>
 
@@ -230,26 +243,49 @@ export function NptWorkspace({ data }: { data: NptWorkspaceData }) {
         </main>
 
         <aside className="border-l border-[#d7dde3] bg-[#f8fafb]">
-          <div className="flex items-center justify-between border-b border-[#d7dde3] bg-white px-4 py-3">
+          <div className={`flex items-center border-b border-[#d7dde3] bg-white py-3 ${timelineCollapsed ? 'justify-center px-1' : 'justify-between px-4'}`}>
+            {timelineCollapsed ? (
+              <button
+                onClick={() => setTimelineCollapsed(false)}
+                title="Expand timeline"
+                className="flex h-8 w-8 items-center justify-center rounded border border-[#ccd4dc] bg-white text-[#52606d] hover:text-[#1c2833]"
+              >
+                <ChevronLeft size={16} />
+              </button>
+            ) : (
+              <>
             <div>
               <h2 className="text-sm font-semibold text-[#1c2833]">Timeline</h2>
               <p className="text-xs text-[#87929d]">{visibleTimeline.length} visible events</p>
             </div>
-            {hiddenTypes.size > 0 && (
-              <button onClick={() => setHiddenTypes(new Set())} className="text-xs font-medium text-[#3563a9]">Clear all</button>
+            <div className="flex items-center gap-2">
+              {hiddenTypes.size > 0 && (
+                <button onClick={() => setHiddenTypes(new Set())} className="text-xs font-medium text-[#3563a9]">Clear all</button>
+              )}
+              <button
+                onClick={() => setTimelineCollapsed(true)}
+                title="Collapse timeline"
+                className="flex h-8 w-8 items-center justify-center rounded border border-[#ccd4dc] bg-white text-[#52606d] hover:text-[#1c2833]"
+              >
+                <ChevronRight size={16} />
+              </button>
+            </div>
+              </>
             )}
           </div>
-          <div className="grid grid-cols-[1fr_46px]">
-            <div className="max-h-[calc(100vh-123px)] overflow-y-auto p-3">
-              {visibleTimeline.length === 0 ? (
-                <p className="rounded border border-dashed border-[#ccd4dc] bg-white p-4 text-sm text-[#7a8793]">No activity for this record yet.</p>
-              ) : (
-                <ol className="space-y-3">
-                  {visibleTimeline.map((item) => <TimelineCard key={item.id} item={item} />)}
-                </ol>
-              )}
-            </div>
-            <div className="flex flex-col items-center gap-2 border-l border-[#d7dde3] bg-white py-3">
+          <div className={timelineCollapsed ? 'block' : 'grid grid-cols-[1fr_46px]'}>
+            {!timelineCollapsed && (
+              <div className="max-h-[calc(100vh-123px)] overflow-y-auto p-3">
+                {visibleTimeline.length === 0 ? (
+                  <p className="rounded border border-dashed border-[#ccd4dc] bg-white p-4 text-sm text-[#7a8793]">No activity for this record yet.</p>
+                ) : (
+                  <ol className="space-y-3">
+                    {visibleTimeline.map((item) => <TimelineCard key={item.id} item={item} />)}
+                  </ol>
+                )}
+              </div>
+            )}
+            <div className={`flex flex-col items-center gap-2 bg-white py-3 ${timelineCollapsed ? '' : 'border-l border-[#d7dde3]'}`}>
               {TIMELINE_FILTERS.map(({ type, label, icon: Icon }) => {
                 const hidden = hiddenTypes.has(type)
                 return (
