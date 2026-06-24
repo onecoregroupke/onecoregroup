@@ -1,0 +1,14 @@
+{
+  "motion": {
+    "pace": "calm",
+    "transitions": ["fade", "slide", "wipe", "subtle scale"],
+    "default_ease": "cubic-bezier(.2,.8,.2,1)",
+    "grid": true,
+    "avoid": ["cartoon bounce", "random spin", "noisy particle effects"]
+  },
+  "layout": {
+    "safe_margin_percent": 7,
+    "text_scale": "large editorial",
+    "accent_usage": "gold used sparingly for emphasis"
+  }
+}

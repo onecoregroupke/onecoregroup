@@ -1,0 +1,13 @@
+# Generated per-task project folders (drafts, frames, renders, exports)
+projects/
+
+# Python toolchain (created by scripts/setup-video-env.ps1)
+.venv/
+__pycache__/
+*.pyc
+
+# Local Chrome render profiles
+**/_chrome-profile/
+
+# Env
+.env

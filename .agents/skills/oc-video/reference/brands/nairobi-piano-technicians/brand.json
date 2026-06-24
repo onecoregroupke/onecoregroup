@@ -1,0 +1,15 @@
+{
+  "brand_id": "nairobi-piano-technicians",
+  "name": "Nairobi Piano Technicians",
+  "colors": {
+    "deep": "#0a0a14",
+    "background": "#13131f",
+    "elevated": "#1c1c2b",
+    "accent": "#1a1a2e",
+    "highlight": "#c9a84c",
+    "text": "#F8F6F2",
+    "muted": "#A8A39A"
+  },
+  "fonts": { "sans": "Inter", "serif": "DM Serif Display", "mono": "JetBrains Mono" },
+  "voice": "expert, trustworthy, warm; every piece nudges toward a WhatsApp enquiry or showroom visit"
+}

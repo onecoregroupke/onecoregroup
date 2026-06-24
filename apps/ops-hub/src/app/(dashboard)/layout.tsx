@@ -6,6 +6,7 @@ import { getClient, getSession, signOut } from '@/lib/supabase'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { BottomNav } from '@/components/layout/BottomNav'
 import { Topbar } from '@/components/layout/Topbar'
+import { TourLauncher } from '@/components/tour/TourLauncher'
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
 import { PermissionsContext, makeContextValue } from '@/contexts/PermissionsContext'
 import type { PermissionsMap } from '@/lib/permissions'
@@ -67,6 +68,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <Topbar onMenuClick={() => setSidebarOpen(true)} />
           <main className="flex-1 overflow-x-hidden p-4 pb-24 lg:p-6">{children}</main>
           <BottomNav />
+          <TourLauncher />
         </div>
       </div>
     </PermissionsContext.Provider>

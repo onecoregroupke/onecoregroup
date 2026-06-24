@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { api } from '@/lib/apiClient'
 import { statusTone, priorityTone, TASK_STATUSES } from '@/lib/taskStatuses'
+import { MyDuties } from '@/components/duties/MyDuties'
 import type { OpsTaskRow } from '@ocg/db'
 
 export default function MyTasksPage() {
@@ -33,6 +34,8 @@ export default function MyTasksPage() {
         <h1 className="text-2xl font-semibold text-gray-900">My tasks</h1>
         <p className="text-sm text-gray-500">{name ? `Assigned to ${name}` : 'Your assigned work'}</p>
       </div>
+
+      <MyDuties />
 
       {loading ? (
         <p className="text-sm text-gray-500">Loading…</p>

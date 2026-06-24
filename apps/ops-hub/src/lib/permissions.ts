@@ -23,8 +23,17 @@ export const SECTIONS: SectionDef[] = [
   { key: 'npt_service', label: 'NPT Service', href: '/npt' },
   { key: 'rayyan_admin', label: 'Rayyan Admin', href: '/rayyan' },
   { key: 'rhythms_admin', label: 'Rhythms Admin', href: '/rhythms' },
+  { key: 'darul_admin', label: 'Darul Swafa Admin', href: '/darul' },
   { key: 'ops_agents', label: 'Agents', href: '/agents' },
 ]
+
+/** Section that controls who may manage portal users (admins only by default). */
+export const USERS_SECTION: SectionDef = { key: 'users', label: 'Manage portal users', href: '/management/users' }
+
+/** A blank permissions map with every Ops section set to 'none'. */
+export function defaultPermissions(): PermissionsMap {
+  return Object.fromEntries(SECTIONS.map((s) => [s.key, 'none'])) as PermissionsMap
+}
 
 /**
  * Evaluate whether a permissions map grants a required access level.
@@ -38,7 +47,7 @@ export function can(
   level: AccessLevel,
 ): boolean {
   if (permissions === null) return true // admin
-  const inheritedOpsSections: SectionKey[] = ['management', 'npt_service', 'rayyan_admin', 'rhythms_admin']
+  const inheritedOpsSections: SectionKey[] = ['management', 'npt_service', 'rayyan_admin', 'rhythms_admin', 'darul_admin']
   const granted = permissions[section] ?? (inheritedOpsSections.includes(section) ? permissions.ops : undefined) ?? 'none'
   if (level === 'view') return granted === 'view' || granted === 'edit'
   if (level === 'edit') return granted === 'edit'

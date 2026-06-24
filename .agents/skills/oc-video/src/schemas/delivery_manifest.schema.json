@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "WM Video Delivery Manifest",
+  "type": "object",
+  "required": ["task_id", "delivery_mode", "status", "delivered", "outputs"],
+  "properties": {
+    "task_id": { "type": "string" },
+    "mode": { "type": "string" },
+    "brand": { "type": "string" },
+    "delivery_mode": { "enum": ["local_drive_sync", "hermes_api_upload"] },
+    "status": { "type": "string" },
+    "delivered": { "type": "boolean" },
+    "project_folder": { "type": "string" },
+    "delivery_folder": { "type": "string" },
+    "summary_path": { "type": "string" },
+    "outputs": { "type": "array" }
+  }
+}

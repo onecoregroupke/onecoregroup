@@ -6,14 +6,22 @@ export const dynamic = 'force-dynamic'
 
 const LINKS = [
   ['Students', '/rhythms/students'],
+  ['Parents', '/rhythms/parents'],
+  ['Admissions', '/rhythms/admissions'],
+  ['Classes', '/rhythms/classes'],
+  ['Admin tasks', '/rhythms/admin-tasks'],
+  ['Fee follow-ups', '/rhythms/fee-follow-ups'],
   ['SchoolPay reconciliation', '/rhythms/schoolpay'],
+  ['Reports', '/rhythms/reports'],
 ] as const
 
 export default async function RhythmsAdminPage() {
-  const { students, batches, snapshots } = await getRhythmsAdminData()
+  const { students, batches, snapshots, guardians, admissions, feeFollowups, adminTasks, classes, team } = await getRhythmsAdminData()
   const enrolled = students.filter((s) => s.enrollment_status === 'enrolled' || s.enrollment_status === 'active')
   const totalExpected = snapshots.reduce((sum, s) => sum + Number(s.amount_expected_ksh ?? 0), 0)
   const balance = snapshots.reduce((sum, s) => sum + Number(s.balance_ksh ?? 0), 0)
+  const pendingAdmissions = admissions.filter((a) => !['Enrolled', 'Lost / inactive'].includes(a.pipeline_status))
+  const openFees = feeFollowups.filter((f) => f.follow_up_status !== 'resolved')
 
   return (
     <div className="space-y-6">
@@ -25,12 +33,17 @@ export default async function RhythmsAdminPage() {
         </p>
       </div>
 
-      <RhythmsActionPanel />
+      <RhythmsActionPanel
+        guardians={guardians.map((g) => ({ id: g.id, label: g.full_name }))}
+        students={students.map((s) => ({ id: s.id, label: s.full_name }))}
+        classes={classes.map((c) => ({ id: c.id, label: c.name }))}
+        team={team.map((m) => ({ id: m.id, label: m.name }))}
+      />
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Stat label="Students" value={students.length} />
         <Stat label="Active / enrolled" value={enrolled.length} />
-        <Stat label="SchoolPay batches" value={batches.length} />
+        <Stat label="Fee follow-ups" value={openFees.length} tone="text-amber-600" />
         <Stat label="Outstanding" value={balance} money tone="text-amber-600" />
       </div>
 
@@ -42,12 +55,18 @@ export default async function RhythmsAdminPage() {
           </div>
         </section>
         <section className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
-          <h2 className="mb-4 text-xs font-semibold uppercase tracking-wider text-ocg-gold">SchoolPay status</h2>
+          <h2 className="mb-4 text-xs font-semibold uppercase tracking-wider text-ocg-gold">College admin status</h2>
           <div className="grid gap-3 sm:grid-cols-3">
-            <Mini label="Snapshots" value={snapshots.length} />
+            <Mini label="Parents" value={guardians.length} />
+            <Mini label="Admissions in pipeline" value={pendingAdmissions.length} />
+            <Mini label="Open admin tasks" value={adminTasks.filter((t) => t.status !== 'done').length} />
+            <Mini label="SchoolPay snapshots" value={snapshots.length} />
             <Mini label="Expected" value={totalExpected} money />
             <Mini label="Outstanding" value={balance} money tone="text-amber-600" />
           </div>
+          <p className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-700">
+            Payments stay in SchoolPay. Use this area to track admissions, parent follow-ups, classes, and fee reconciliation.
+          </p>
         </section>
       </div>
     </div>

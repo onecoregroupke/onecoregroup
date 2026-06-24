@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import {
   AlertCircle, CheckCircle, Mail, Plus, RefreshCw,
-  Save, Shield, ShieldOff, Trash2, UserCheck, Users, X,
+  Save, Send, Shield, ShieldOff, Trash2, UserCheck, Users, X,
 } from 'lucide-react'
 import { getClient } from '@/lib/supabase'
 import { SECTIONS, defaultPermissions } from '@/lib/permissions'
@@ -63,6 +63,7 @@ export default function UsersPage() {
   // Edit state — tracks pending changes to selected user
   const [editPerms, setEditPerms] = useState<PermissionsMap>({})
   const [editName, setEditName] = useState('')
+  const [editEmail, setEditEmail] = useState('')
 
   // ── Auth headers ────────────────────────────────────────────────────────────
   async function authHeaders() {
@@ -93,6 +94,7 @@ export default function UsersPage() {
     setSelected(u)
     setEditPerms(u.permissions ?? {})
     setEditName(u.display_name ?? '')
+    setEditEmail(u.email)
     setMessage(''); setError('')
   }
 
@@ -101,6 +103,7 @@ export default function UsersPage() {
     if (!selected || selected.is_admin) return
     setSaving(true); setError(''); setMessage('')
     try {
+      const emailChanged = editEmail.trim() && editEmail.trim() !== selected.email
       const res = await fetch('/api/users', {
         method: 'PATCH',
         headers: await authHeaders(),
@@ -108,14 +111,15 @@ export default function UsersPage() {
           user_id: selected.id,
           display_name: editName,
           permissions: editPerms,
+          ...(emailChanged ? { email: editEmail.trim() } : {}),
         }),
       })
       const json = await res.json() as { error?: string }
       if (!res.ok) throw new Error(json.error)
-      const updated: HubUser = { ...selected, display_name: editName || null, permissions: editPerms }
+      const updated: HubUser = { ...selected, display_name: editName || null, permissions: editPerms, email: emailChanged ? editEmail.trim() : selected.email }
       setUsers(prev => prev.map(u => u.id === updated.id ? updated : u))
       setSelected(updated)
-      setMessage('Permissions saved.')
+      setMessage(emailChanged ? 'Saved. Login email updated.' : 'Permissions saved.')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to save.')
     } finally {
@@ -141,6 +145,28 @@ export default function UsersPage() {
       setMessage(updated.is_active ? 'User reactivated.' : 'User deactivated.')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to update.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // ── Resend invite / reset link ───────────────────────────────────────────────
+  async function resendInvite() {
+    if (!selected || selected.is_admin) return
+    setSaving(true); setError(''); setMessage('')
+    try {
+      const res = await fetch('/api/users', {
+        method: 'POST',
+        headers: await authHeaders(),
+        body: JSON.stringify({ action: 'resend', user_id: selected.id, email: selected.email, display_name: selected.display_name ?? '' }),
+      })
+      const json = await res.json() as { error?: string; resent?: string }
+      if (!res.ok) throw new Error(json.error)
+      setMessage(json.resent === 'recovery'
+        ? 'Password-reset link sent (they had already accepted).'
+        : 'Invite re-sent to their inbox.')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to resend.')
     } finally {
       setSaving(false)
     }
@@ -393,6 +419,14 @@ export default function UsersPage() {
                 {!selected.is_admin && canEdit && (
                   <div className="flex items-center gap-2">
                     <button
+                      onClick={resendInvite}
+                      disabled={saving}
+                      title="Resend invite / password-reset link"
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 px-3 py-1.5 text-xs font-semibold text-blue-600 hover:bg-blue-50 transition-colors disabled:opacity-60"
+                    >
+                      <Send size={13} /> Resend
+                    </button>
+                    <button
                       onClick={toggleActive}
                       disabled={saving}
                       title={selected.is_active ? 'Deactivate user' : 'Reactivate user'}
@@ -418,9 +452,9 @@ export default function UsersPage() {
               </div>
 
               <div className="p-5 space-y-6">
-                {/* Display name */}
+                {/* Display name + login email */}
                 {!selected.is_admin && (
-                  <div>
+                  <div className="grid gap-4 sm:grid-cols-2 max-w-2xl">
                     <label className="block">
                       <span className="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Display Name</span>
                       <input
@@ -429,7 +463,17 @@ export default function UsersPage() {
                         onChange={e => setEditName(e.target.value)}
                         disabled={!canEdit}
                         placeholder={selected.email}
-                        className="w-full max-w-sm rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ocg-navy disabled:bg-gray-50 disabled:text-gray-400"
+                        className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ocg-navy disabled:bg-gray-50 disabled:text-gray-400"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Login Email</span>
+                      <input
+                        type="email"
+                        value={editEmail}
+                        onChange={e => setEditEmail(e.target.value)}
+                        disabled={!canEdit}
+                        className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ocg-navy disabled:bg-gray-50 disabled:text-gray-400"
                       />
                     </label>
                   </div>

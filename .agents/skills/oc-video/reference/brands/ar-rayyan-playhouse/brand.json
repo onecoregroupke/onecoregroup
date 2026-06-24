@@ -1,0 +1,15 @@
+{
+  "brand_id": "ar-rayyan-playhouse",
+  "name": "Ar-Rayyan Playhouse & Daycare",
+  "colors": {
+    "deep": "#070b1a",
+    "background": "#0c1226",
+    "elevated": "#141c33",
+    "accent": "#2c45a0",
+    "highlight": "#f4a261",
+    "text": "#F5F7FC",
+    "muted": "#A6AEC6"
+  },
+  "fonts": { "sans": "Inter", "serif": "DM Serif Display", "mono": "JetBrains Mono" },
+  "voice": "warm, nurturing, parent-focused; activities, milestones, and enrollment CTAs"
+}

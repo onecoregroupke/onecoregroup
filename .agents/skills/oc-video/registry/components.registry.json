@@ -1,0 +1,11 @@
+{
+  "components": [
+    { "component_id": "title_card", "path": "reference/components/title_card", "uses": ["opening", "section title"] },
+    { "component_id": "lower_third", "path": "reference/components/lower_third", "uses": ["talking_head", "name strap"] },
+    { "component_id": "quote_card", "path": "reference/components/quote_card", "uses": ["quote", "emphasis"] },
+    { "component_id": "dashboard_card", "path": "reference/components/dashboard_card", "uses": ["system UI", "operations"] },
+    { "component_id": "metric_counter", "path": "reference/components/metric_counter", "uses": ["metric", "count up"] },
+    { "component_id": "pillar_diagram", "path": "reference/components/pillar_diagram", "uses": ["framework", "diagram"] },
+    { "component_id": "cta_card", "path": "reference/components/cta_card", "uses": ["closing", "call to action"] }
+  ]
+}

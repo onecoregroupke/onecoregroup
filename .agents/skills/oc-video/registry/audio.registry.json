@@ -1,0 +1,105 @@
+{
+  "assets": [
+    {
+      "asset_id": "music_cinematic_001",
+      "type": "music",
+      "category": "cinematic_corporate",
+      "path": "reference/audio/music/example.wav",
+      "title": "Example Track",
+      "artist_or_source": "Manual Entry",
+      "license_type": "manual_review_required",
+      "attribution_required": false,
+      "attribution_text": "",
+      "source_url": "",
+      "downloaded_date": "",
+      "allowed_platforms": [
+        "youtube",
+        "instagram",
+        "linkedin",
+        "tiktok"
+      ],
+      "mood": [
+        "premium",
+        "modern",
+        "calm",
+        "corporate"
+      ],
+      "tempo_bpm": null,
+      "duration_seconds": null,
+      "default_volume_db": -24,
+      "notes": ""
+    },
+    {
+      "asset_id": "sfx_whoosh_001",
+      "type": "sfx",
+      "category": "whoosh",
+      "path": "reference/audio/sfx/whooshes/example.wav",
+      "title": "Example Whoosh",
+      "license_type": "manual_review_required",
+      "attribution_required": false,
+      "allowed_platforms": [
+        "youtube",
+        "instagram",
+        "linkedin",
+        "tiktok"
+      ],
+      "best_used_for": [
+        "title reveal",
+        "card entrance",
+        "scene transition"
+      ],
+      "default_volume_db": -18,
+      "notes": ""
+    },
+    {
+      "asset_id": "music_soundlings_i_love_what_you_do_to_me",
+      "type": "music",
+      "category": "modern_corporate",
+      "path": "reference/audio/music/I Love What You Do To Me - The Soundlings.mp3",
+      "title": "I Love What You Do To Me",
+      "artist_or_source": "The Soundlings",
+      "license_type": "manual_review_required",
+      "attribution_required": false,
+      "attribution_text": "",
+      "source_url": "",
+      "downloaded_date": "",
+      "allowed_platforms": [
+        "youtube",
+        "instagram",
+        "linkedin",
+        "tiktok"
+      ],
+      "mood": [
+        "modern",
+        "premium",
+        "confident",
+        "corporate"
+      ],
+      "tempo_bpm": null,
+      "duration_seconds": null,
+      "default_volume_db": -25,
+      "notes": "Manually supplied by user. Confirm license before publishing."
+    },
+    {
+      "asset_id": "sfx_fast_swoosh_pack",
+      "type": "sfx",
+      "category": "whoosh_pack",
+      "path": "reference/audio/sfx/whooshes/Fast_Swooshes_source_1056432.zip",
+      "title": "Fast Swooshes Pack",
+      "license_type": "manual_review_required",
+      "attribution_required": false,
+      "allowed_platforms": [
+        "youtube",
+        "instagram",
+        "linkedin",
+        "tiktok"
+      ],
+      "best_used_for": [
+        "card transition",
+        "scene transition"
+      ],
+      "default_volume_db": -22,
+      "notes": "Zip pack manually supplied by user. Contains multiple WAV variations; ingestion/splitting module pending."
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "WM Video Render Manifest",
+  "type": "object",
+  "required": ["task_id", "mode", "brand", "format", "scenes", "overlays", "audio", "exports"],
+  "properties": {
+    "task_id": { "type": "string" },
+    "mode": { "enum": ["motion_graphics", "talking_head"] },
+    "brand": { "type": "string" },
+    "format": { "type": "object" },
+    "source_video": { "type": ["string", "null"] },
+    "scenes": { "type": "array" },
+    "overlays": { "type": "array" },
+    "captions": { "type": ["object", "null"] },
+    "audio": { "type": "object" },
+    "exports": { "type": "array" }
+  }
+}

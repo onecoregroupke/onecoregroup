@@ -1,0 +1,15 @@
+{
+  "brand_id": "glitz-n-glim",
+  "name": "Glitz N' Glim",
+  "colors": {
+    "deep": "#140f02",
+    "background": "#1b1606",
+    "elevated": "#241d0a",
+    "accent": "#b07a00",
+    "highlight": "#f2c94c",
+    "text": "#FBF7EE",
+    "muted": "#B8AE96"
+  },
+  "fonts": { "sans": "Inter", "serif": "DM Serif Display", "mono": "JetBrains Mono" },
+  "voice": "fresh, aspirational, family-friendly; every piece nudges toward a WhatsApp order or the website"
+}

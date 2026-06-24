@@ -1,0 +1,4 @@
+interface:
+  display_name: "OC Design"
+  short_description: "Route OCG design tasks through Open Design and Task Ops delivery."
+  default_prompt: "Use oc-design to create an OCG Task Ops design brief, route it through Open Design, collect generated assets, and deliver the draft package with a recorded deliverable location."

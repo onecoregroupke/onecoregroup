@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { getTask } from '@/lib/tasks'
+import { getTask, listTaskComments } from '@/lib/tasks'
 import { getProjectContext } from '@/lib/projects'
 import { resolveBrand } from '@/lib/brands'
 import { db } from '@/lib/serverClient'
@@ -19,11 +19,12 @@ export default async function TaskDetail({
   const task = await getTask(taskId)
   if (!task) notFound()
 
-  const [context, brand, artifactsRes, completionRes] = await Promise.all([
+  const [context, brand, artifactsRes, completionRes, comments] = await Promise.all([
     getProjectContext(task.project_id),
     task.brand_id ? resolveBrand(task.brand_id) : Promise.resolve(null),
     db().from('ops_agent_artifacts').select('*').eq('task_id', taskId).order('created_at', { ascending: false }),
     db().from('ops_completion_records').select('*').eq('task_id', taskId).order('submitted_at', { ascending: false }),
+    listTaskComments(taskId),
   ])
   const artifacts = (artifactsRes.data as OpsAgentArtifactRow[] | null) ?? []
   const completions = (completionRes.data as OpsCompletionRecordRow[] | null) ?? []
@@ -58,6 +59,24 @@ export default async function TaskDetail({
               <p className="mt-3 rounded-lg bg-gray-50 p-3 text-sm text-gray-600">
                 <span className="font-medium">Latest:</span> {task.latest_work_comment}
               </p>
+            )}
+          </Card>
+
+          <Card title="Progress updates">
+            {comments.length === 0 ? (
+              <p className="text-sm text-gray-500">No progress updates yet. Team members can log progress from their portal without changing the status.</p>
+            ) : (
+              <ul className="space-y-3">
+                {comments.map((c) => (
+                  <li key={c.id} className="rounded-lg border border-gray-100 p-3 text-sm">
+                    <p className="whitespace-pre-wrap text-gray-700">{c.body}</p>
+                    <p className="mt-1 text-xs text-gray-400">
+                      {c.author || 'team'} · {new Date(c.created_at).toLocaleString()}
+                      {c.kind === 'status' && c.status_at ? ` · marked ${c.status_at}` : ''}
+                    </p>
+                  </li>
+                ))}
+              </ul>
             )}
           </Card>
 

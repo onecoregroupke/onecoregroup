@@ -1,6 +1,6 @@
 import { createServerClient } from '@ocg/db/client'
 import type { PermissionsMap } from '@ocg/db'
-import { buildCallbackUrl, hubUrl, sendInviteEmail } from '@/lib/auth-emails'
+import { buildCallbackUrl, hubUrl, sendInviteEmail, sendRecoveryEmail } from '@/lib/auth-emails'
 
 // Local type for user_permissions rows (table not in generated DB schema)
 type PermRow = {
@@ -74,6 +74,8 @@ export async function POST(req: Request) {
   if (!adminId) return Response.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json() as {
+    action?: 'invite' | 'resend'
+    user_id?: string
     email: string
     display_name?: string
     permissions: PermissionsMap
@@ -85,6 +87,33 @@ export async function POST(req: Request) {
 
   const supabase = createServerClient()
   const email = body.email.trim()
+
+  // ── Resend an invite (unconfirmed) or a password-reset link (confirmed) ──
+  if (body.action === 'resend') {
+    let confirmed = false
+    if (body.user_id) {
+      const { data: u } = await supabase.auth.admin.getUserById(body.user_id)
+      confirmed = Boolean(u.user?.email_confirmed_at)
+    }
+    const { data: linkData, error: linkError } = confirmed
+      ? await supabase.auth.admin.generateLink({ type: 'recovery', email })
+      : await supabase.auth.admin.generateLink({
+          type: 'invite',
+          email,
+          options: { data: { display_name: body.display_name ?? '', password_set: false }, redirectTo: `${hubUrl()}/auth/callback` },
+        })
+    if (linkError || !linkData?.properties) {
+      return Response.json({ error: linkError?.message ?? 'Could not generate link' }, { status: 500 })
+    }
+    try {
+      const link = buildCallbackUrl(linkData.properties.hashed_token, confirmed ? 'recovery' : 'invite')
+      if (confirmed) await sendRecoveryEmail({ email, link })
+      else await sendInviteEmail({ email, displayName: body.display_name, link })
+    } catch (e) {
+      return Response.json({ error: e instanceof Error ? e.message : 'Failed to send email' }, { status: 500 })
+    }
+    return Response.json({ ok: true, resent: confirmed ? 'recovery' : 'invite' })
+  }
 
   // Create the user + generate an invite link ourselves (instead of
   // inviteUserByEmail, which sends Supabase's default implicit-flow email).
@@ -155,15 +184,25 @@ export async function PATCH(req: Request) {
     display_name?: string
     permissions?: PermissionsMap
     is_active?: boolean
+    email?: string
   }
   if (!body.user_id) return Response.json({ error: 'user_id is required.' }, { status: 400 })
 
   const supabase = createServerClient()
 
+  // Change the auth (login) email if requested.
+  if (body.email !== undefined && body.email.trim()) {
+    const { error: emailErr } = await supabase.auth.admin.updateUserById(body.user_id, { email: body.email.trim() })
+    if (emailErr) return Response.json({ error: emailErr.message }, { status: 500 })
+  }
+
   const updates: Record<string, unknown> = {}
   if (body.display_name !== undefined) updates.display_name = body.display_name?.trim() || null
   if (body.permissions !== undefined) updates.permissions = body.permissions
   if (body.is_active !== undefined) updates.is_active = body.is_active
+
+  // Email-only change: nothing left to update on the permissions row.
+  if (Object.keys(updates).length === 0) return Response.json({ ok: true })
 
   const { data, error } = await permTable(supabase)
     .update(updates)

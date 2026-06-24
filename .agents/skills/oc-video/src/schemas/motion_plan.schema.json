@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "WM Video Motion Plan",
+  "type": "object",
+  "required": ["task_id", "mode", "title", "format", "scenes"],
+  "properties": {
+    "task_id": { "type": "string", "pattern": "^TASK-[0-9]{4,}$" },
+    "mode": { "const": "motion_graphics" },
+    "title": { "type": "string" },
+    "brief": { "type": "string" },
+    "format": { "$ref": "#/$defs/format" },
+    "scenes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["scene_id", "title", "duration_seconds"],
+        "properties": {
+          "scene_id": { "type": "string" },
+          "title": { "type": "string" },
+          "duration_seconds": { "type": "number", "minimum": 0.1 },
+          "transparent": { "type": "boolean" },
+          "component": { "type": "string" },
+          "copy": { "type": "object" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "format": {
+      "type": "object",
+      "required": ["width", "height", "fps"],
+      "properties": {
+        "width": { "type": "integer", "minimum": 1 },
+        "height": { "type": "integer", "minimum": 1 },
+        "fps": { "type": "integer", "minimum": 1 },
+        "aspect_ratio": { "type": "string" }
+      }
+    }
+  }
+}

@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, ListTodo, FolderKanban, Building2, Bot,
   CheckSquare, Settings, LogOut, X, BriefcaseBusiness, Wrench, GraduationCap,
-  UsersRound, BookOpen,
+  UsersRound, BookOpen, BookMarked, UserCog, CalendarCheck, Lock,
 } from 'lucide-react'
 import { usePermissions } from '@/contexts/PermissionsContext'
 import type { SectionKey } from '@/lib/permissions'
@@ -24,6 +24,9 @@ export const MAIN_NAV: { href: string; label: string; icon: React.ElementType; s
   { href: '/',          label: 'Dashboard', icon: LayoutDashboard, section: 'ops' },
   { href: '/management', label: 'Management', icon: BriefcaseBusiness, section: 'management' },
   { href: '/management/team', label: 'Team', icon: UsersRound, section: 'management' },
+  { href: '/management/users', label: 'Portal Access', icon: UserCog, section: 'users' },
+  { href: '/management/duties', label: 'Daily Duties', icon: CalendarCheck, section: 'management' },
+  { href: '/personal',  label: 'Personal',  icon: Lock,            section: 'personal' },
   { href: '/my-tasks',  label: 'My Tasks',  icon: CheckSquare,     section: null },
   { href: '/tasks',     label: 'Tasks',     icon: ListTodo,        section: 'ops' },
   { href: '/projects',  label: 'Projects',  icon: FolderKanban,    section: 'ops' },
@@ -31,6 +34,7 @@ export const MAIN_NAV: { href: string; label: string; icon: React.ElementType; s
   { href: '/npt',        label: 'NPT Service', icon: Wrench,        section: 'npt_service' },
   { href: '/rayyan',     label: 'Rayyan Admin', icon: GraduationCap, section: 'rayyan_admin' },
   { href: '/rhythms',     label: 'Rhythms', icon: BookOpen, section: 'rhythms_admin' },
+  { href: '/darul',     label: 'Darul Swafa', icon: BookMarked, section: 'darul_admin' },
   { href: '/agents',    label: 'Agents',    icon: Bot,             section: 'ops_agents' },
 ]
 
@@ -77,6 +81,7 @@ export function Sidebar({ open, onClose, onSignOut }: SidebarProps) {
                 key={href}
                 href={href}
                 onClick={onClose}
+                data-tour={`nav-${href}`}
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${
                   active
                     ? 'bg-white/10 text-white font-medium'

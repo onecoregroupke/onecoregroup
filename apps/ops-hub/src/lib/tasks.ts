@@ -3,7 +3,7 @@ import { resolveBrand } from './brands'
 import { getProject } from './projects'
 import { completionToken } from './completion'
 import { isActiveStatus } from './taskStatuses'
-import type { OpsTaskRow } from '@ocg/db'
+import type { OpsTaskRow, OpsTaskCommentRow } from '@ocg/db'
 
 export interface TaskFilter {
   brandId?: string
@@ -125,7 +125,62 @@ export async function setTaskStatus(
     .select('*')
     .single()
   if (error) throw new Error(`setTaskStatus failed: ${error.message}`)
+  // Capture the status-change note as a comment so it shows in the thread + report.
+  if (opts.note?.trim()) {
+    await db().from('ops_task_comments').insert({
+      task_id: taskId,
+      body: opts.note.trim(),
+      author: opts.by ?? '',
+      kind: 'status',
+      status_at: status,
+    })
+  }
   return data as OpsTaskRow
+}
+
+/** Add a progress comment to a task WITHOUT changing its status. Used by team
+ *  members from their portal to log ongoing work; surfaced in the daily report. */
+export async function addTaskComment(
+  taskId: string,
+  body: string,
+  opts: { author?: string; kind?: string } = {},
+): Promise<OpsTaskCommentRow> {
+  const text = body.trim()
+  if (!text) throw new Error('Comment body is required')
+  const supabase = db()
+  const task = await getTask(taskId)
+  const { data, error } = await supabase
+    .from('ops_task_comments')
+    .insert({
+      task_id: taskId,
+      body: text,
+      author: opts.author ?? '',
+      kind: opts.kind ?? 'progress',
+      status_at: task?.current_status ?? '',
+    })
+    .select('*')
+    .single()
+  if (error) throw new Error(`addTaskComment failed: ${error.message}`)
+  // Mirror into latest_work_comment for quick display + bump the activity stamp.
+  await supabase
+    .from('ops_tasks')
+    .update({
+      latest_work_comment: text,
+      last_updated_by: opts.author ?? 'portal',
+      last_updated_date: nowIso(),
+      updated_at: nowIso(),
+    })
+    .eq('task_id', taskId)
+  return data as OpsTaskCommentRow
+}
+
+export async function listTaskComments(taskId: string): Promise<OpsTaskCommentRow[]> {
+  const { data } = await db()
+    .from('ops_task_comments')
+    .select('*')
+    .eq('task_id', taskId)
+    .order('created_at', { ascending: false })
+  return (data as OpsTaskCommentRow[] | null) ?? []
 }
 
 export async function assignTask(

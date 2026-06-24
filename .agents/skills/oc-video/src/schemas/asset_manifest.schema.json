@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "WM Video Asset Manifest",
+  "type": "object",
+  "required": ["task_id", "scenes", "overlays", "audio"],
+  "properties": {
+    "task_id": { "type": "string" },
+    "source_video": { "type": ["string", "null"] },
+    "scenes": { "type": "array" },
+    "overlays": { "type": "array" },
+    "audio": { "type": "object" }
+  }
+}

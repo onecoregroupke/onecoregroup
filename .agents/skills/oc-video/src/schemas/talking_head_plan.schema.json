@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "WM Video Talking Head Plan",
+  "type": "object",
+  "required": ["task_id", "mode", "title", "source_video", "format"],
+  "properties": {
+    "task_id": { "type": "string", "pattern": "^TASK-[0-9]{4,}$" },
+    "mode": { "const": "talking_head" },
+    "title": { "type": "string" },
+    "source_video": { "type": ["string", "null"] },
+    "format": { "type": "object" },
+    "captions": { "type": "object" },
+    "overlays": { "type": "array" },
+    "todos": { "type": "array" }
+  }
+}

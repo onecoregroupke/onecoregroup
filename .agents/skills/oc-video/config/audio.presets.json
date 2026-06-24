@@ -1,0 +1,14 @@
+{
+  "targets": {
+    "loudness_lufs": -14,
+    "true_peak_db": -1.0,
+    "sample_rate": 48000,
+    "music_default_db": -24,
+    "sfx_default_db": -18,
+    "voice_target_db": -16
+  },
+  "talking_head": {
+    "music_ducking_required": true,
+    "voice_clarity_priority": true
+  }
+}

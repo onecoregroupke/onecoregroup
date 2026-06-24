@@ -1,0 +1,13 @@
+{
+  "name": "wm-video",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "wm-video": "./src/cli.mjs"
+  },
+  "scripts": {
+    "doctor": "node src/cli.mjs doctor",
+    "audio-console": "node src/cli.mjs audio-console"
+  }
+}

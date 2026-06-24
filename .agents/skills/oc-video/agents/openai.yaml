@@ -1,0 +1,7 @@
+interface:
+  display_name: "OC Video"
+  short_description: "Create OCG Task Ops video drafts"
+  default_prompt: "Use oc-video to initialize, render, compile, and draft-deliver a video task with a recorded deliverable location."
+
+policy:
+  allow_implicit_invocation: true

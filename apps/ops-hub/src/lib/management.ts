@@ -26,6 +26,13 @@ import type {
   RhythmsSchoolpayImportBatchRow,
   RhythmsSchoolpayPaymentSnapshotRow,
   RhythmsStudentRow,
+  DarulStudentRow,
+  DarulAdmissionRow,
+  DarulFeeInvoiceRow,
+  DarulFeePaymentRow,
+  DarulFeeFollowupRow,
+  DarulAdminTaskRow,
+  DarulHifzProgressRow,
 } from '@ocg/db'
 
 export type ManagementData = {
@@ -100,13 +107,38 @@ export async function getRayyanAdminData() {
 }
 
 export async function getRhythmsAdminData() {
-  const [students, batches, snapshots, team] = await Promise.all([
-    safeRows<RhythmsStudentRow>('rhythms_students', { limit: 500, order: 'created_at' }),
-    safeRows<RhythmsSchoolpayImportBatchRow>('rhythms_schoolpay_import_batches', { limit: 100, order: 'imported_at' }),
-    safeRows<RhythmsSchoolpayPaymentSnapshotRow>('rhythms_schoolpay_payment_snapshots', { limit: 500, order: 'captured_at' }),
-    listTeam(),
-  ])
-  return { students, batches, snapshots, team }
+  const [students, batches, snapshots, guardians, admissions, classes, feeFollowups, attendance, adminTasks, team] =
+    await Promise.all([
+      safeRows<RhythmsStudentRow>('rhythms_students', { limit: 500, order: 'created_at' }),
+      safeRows<RhythmsSchoolpayImportBatchRow>('rhythms_schoolpay_import_batches', { limit: 100, order: 'imported_at' }),
+      safeRows<RhythmsSchoolpayPaymentSnapshotRow>('rhythms_schoolpay_payment_snapshots', { limit: 500, order: 'captured_at' }),
+      safeRows<import('@ocg/db').RhythmsGuardianRow>('rhythms_guardians', { limit: 500, order: 'created_at' }),
+      safeRows<import('@ocg/db').RhythmsAdmissionRow>('rhythms_admissions', { limit: 500, order: 'created_at' }),
+      safeRows<import('@ocg/db').RhythmsClassRow>('rhythms_classes', { limit: 100, order: 'created_at' }),
+      safeRows<import('@ocg/db').RhythmsFeeFollowupRow>('rhythms_fee_followups', { limit: 500, order: 'next_follow_up_date', ascending: true }),
+      safeRows<import('@ocg/db').RhythmsAttendanceNoteRow>('rhythms_attendance_notes', { limit: 500, order: 'attendance_date' }),
+      safeRows<import('@ocg/db').RhythmsAdminTaskRow>('rhythms_admin_tasks', { limit: 500, order: 'due_date', ascending: true }),
+      listTeam(),
+    ])
+  return { students, batches, snapshots, guardians, admissions, classes, feeFollowups, attendance, adminTasks, team }
+}
+
+export async function getDarulAdminData() {
+  const [guardians, students, admissions, classes, hifz, attendance, invoices, payments, feeFollowups, adminTasks, team] =
+    await Promise.all([
+      safeRows<import('@ocg/db').DarulGuardianRow>('darul_guardians', { limit: 500, order: 'created_at' }),
+      safeRows<DarulStudentRow>('darul_students', { limit: 500, order: 'created_at' }),
+      safeRows<DarulAdmissionRow>('darul_admissions', { limit: 500, order: 'created_at' }),
+      safeRows<import('@ocg/db').DarulClassRow>('darul_classes', { limit: 100, order: 'created_at' }),
+      safeRows<DarulHifzProgressRow>('darul_hifz_progress', { limit: 1000, order: 'updated_at' }),
+      safeRows<import('@ocg/db').DarulAttendanceNoteRow>('darul_attendance_notes', { limit: 500, order: 'attendance_date' }),
+      safeRows<DarulFeeInvoiceRow>('darul_fee_invoices', { limit: 1000, order: 'created_at' }),
+      safeRows<DarulFeePaymentRow>('darul_fee_payments', { limit: 1000, order: 'paid_on' }),
+      safeRows<DarulFeeFollowupRow>('darul_fee_followups', { limit: 500, order: 'next_follow_up_date', ascending: true }),
+      safeRows<DarulAdminTaskRow>('darul_admin_tasks', { limit: 500, order: 'due_date', ascending: true }),
+      listTeam(),
+    ])
+  return { guardians, students, admissions, classes, hifz, attendance, invoices, payments, feeFollowups, adminTasks, team }
 }
 
 export async function getManagementData(): Promise<ManagementData> {

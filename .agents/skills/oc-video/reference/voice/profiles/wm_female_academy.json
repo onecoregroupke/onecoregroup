@@ -1,0 +1,6 @@
+{
+  "voice_id": "wm_female_academy",
+  "alias_for": "wm_voice_female",
+  "deprecated": true,
+  "notes": "Backward-compatible alias. Use wm_voice_female for new work."
+}

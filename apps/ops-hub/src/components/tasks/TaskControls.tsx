@@ -19,7 +19,7 @@ export function TaskControls({
   const [newStatus, setNewStatus] = useState(status)
   const [note, setNote] = useState('')
   const [specialist, setSpecialist] = useState(SPECIALIST_OPTIONS[0]?.value ?? 'analysis')
-  const [busy, setBusy] = useState<'status' | 'run' | null>(null)
+  const [busy, setBusy] = useState<'status' | 'run' | 'comment' | null>(null)
   const [msg, setMsg] = useState('')
 
   async function saveStatus() {
@@ -31,7 +31,20 @@ export function TaskControls({
     })
     setBusy(null)
     setMsg(ok ? 'Status updated.' : data?.error ?? 'Failed.')
-    if (ok) router.refresh()
+    if (ok) { setNote(''); router.refresh() }
+  }
+
+  async function postComment() {
+    if (!note.trim()) { setMsg('Write a progress note first.'); return }
+    setBusy('comment')
+    setMsg('')
+    const { ok, data } = await api<{ error?: string }>(`/api/tasks/${taskId}/comment`, {
+      method: 'POST',
+      body: JSON.stringify({ body: note }),
+    })
+    setBusy(null)
+    setMsg(ok ? 'Progress logged.' : data?.error ?? 'Failed.')
+    if (ok) { setNote(''); router.refresh() }
   }
 
   async function runSpecialist() {
@@ -59,7 +72,7 @@ export function TaskControls({
         </select>
         <textarea
           className="mt-2 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
-          placeholder="Work note (optional)"
+          placeholder="Progress note / work comment"
           value={note}
           onChange={(e) => setNote(e.target.value)}
         />
@@ -70,6 +83,16 @@ export function TaskControls({
         >
           {busy === 'status' ? 'Saving…' : 'Save status'}
         </button>
+        <button
+          onClick={postComment}
+          disabled={busy !== null}
+          className="mt-2 w-full rounded-lg border border-ocg-navy py-2 text-sm font-medium text-ocg-navy hover:bg-ocg-navy/5 disabled:opacity-60"
+        >
+          {busy === 'comment' ? 'Posting…' : 'Log progress (no status change)'}
+        </button>
+        <p className="mt-1 text-[11px] text-gray-400">
+          Progress notes on unfinished tasks are included in the end-of-day report so management sees movement even when the status hasn&apos;t changed.
+        </p>
       </div>
 
       {agentEligible && (
