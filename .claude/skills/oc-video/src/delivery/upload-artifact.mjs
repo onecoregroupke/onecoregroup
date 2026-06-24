@@ -8,23 +8,29 @@ export async function uploadArtifact(taskId, flags = {}) {
   if (!fs.existsSync(file)) throw new Error(`Export not found: ${file}`);
   const stat = fs.statSync(file);
   const env = readEnv();
-  const base = (env.TASK_OPS_BASE_URL || env.HERMES_API_BASE_URL || "").replace(/\/+$/, "");
-  const key = env.HERMES_API_KEY || env.HERMES_API_TOKEN;
-  const max = 25 * 1024 * 1024;
-  if (stat.size > max) return { ok: false, reason: "file_too_large_for_api", bytes: stat.size, recommendation: "Use local Drive-sync delivery." };
-  if (!base || !key) return { ok: false, reason: "missing_api_credentials", recommendation: "Use local Drive-sync delivery or configure credentials." };
+  const base = (env.OPS_OPS_BASE_URL || env.NEXT_PUBLIC_OPS_URL || env.TASK_OPS_BASE_URL || "").replace(/\/+$/, "");
+  const key = env.OPS_AGENT_API_KEY || env.HERMES_API_KEY || env.HERMES_API_TOKEN;
+  if (!base || !key) return { ok: false, reason: "missing_api_credentials", recommendation: "Use local Drive-sync delivery or configure OPS_OPS_BASE_URL and OPS_AGENT_API_KEY." };
   if (flags["dry-run"]) return { ok: true, dry_run: true, file, bytes: stat.size };
   const body = {
-    task_id: taskId,
-    specialist_type: "video_clipping",
+    task: taskId,
+    specialist: "video_clipping",
     title: flags.title || `Video draft - ${taskId}`,
-    filename: path.basename(file),
-    content_base64: fs.readFileSync(file).toString("base64"),
-    summary: flags.summary || `Video draft delivered for ${taskId}.`
+    content: [
+      `# Video Draft - ${taskId}`,
+      "",
+      `File: ${file}`,
+      `Filename: ${path.basename(file)}`,
+      `Bytes: ${stat.size}`,
+      "",
+      "Large media is delivered through local Drive sync or the skill-local fallback. This artifact records the review location inside Task Ops.",
+    ].join("\n"),
+    summary: flags.summary || `Video draft registered for ${taskId}. Deliverable location: ${file}`,
+    deliver: false,
   };
-  const res = await fetch(`${base}/api/hermes/artifacts/upload-file`, {
+  const res = await fetch(`${base}/api/agent/artifacts`, {
     method: "POST",
-    headers: { "content-type": "application/json", "x-hermes-api-key": key },
+    headers: { "content-type": "application/json", "x-ops-agent-key": key },
     body: JSON.stringify(body)
   });
   const json = await res.json().catch(() => ({}));

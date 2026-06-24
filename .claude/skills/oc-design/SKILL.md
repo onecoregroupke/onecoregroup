@@ -23,6 +23,8 @@ node .claude/skills/oc-design/scripts/oc-design.mjs <command> [options]
 
 Default provider is `open_design`. Use **oc-ops** for task lookup/status/context and Ops Hub delivery for files.
 
+The repo copy of this skill is canonical. On a new device, use it directly from `.claude/skills/oc-design`; configure `OPS_OPS_BASE_URL`, `OPS_AGENT_API_KEY`, and `OCG_LOCAL_DELIVERY_ROOT` in `.env.local` or the environment.
+
 ## Core Workflow
 
 ```bash
@@ -48,6 +50,8 @@ For a manual/browser-assisted provider run, use the generated handoff prompt at 
 ## Delivery (OCG)
 
 - Draft-only. Never publish, never send external client messages, never mark `Completed`. Successful delivery sets/recommends `AI Draft Ready`.
+- The final chat response must include the actual deliverable location. The same location must be attached to the Task Ops task as an artifact link or context note.
+- If Drive sync is unavailable, deliver into `.claude/skills/oc-design/projects/TASK-XXXX/03_Working-Files`, label it as a local fallback, and attach that fallback path to Task Ops when credentials are available.
 - Deliver exports into the brand/project folder, then register with Ops via **oc-ops**:
   ```bash
   node scripts/oc-ops.mjs submit-artifact --task TASK-XXXX --specialist design_deck \

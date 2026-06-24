@@ -29,7 +29,12 @@ export default function SetPasswordPage() {
 
     setLoading(true)
     const supabase = getClient()
-    const { error: updateError } = await supabase.auth.updateUser({ password })
+    // Set the password AND flag the account as activated, so the dashboard no
+    // longer forces this user back through set-password.
+    const { error: updateError } = await supabase.auth.updateUser({
+      password,
+      data: { password_set: true },
+    })
 
     if (updateError) {
       setError(updateError.message)

@@ -7,4 +7,4 @@ Hermes should map Telegram requests to CLI commands:
 - "compile TASK-XXXX" -> `compile --dry-run`, then compile after approval.
 - "deliver TASK-XXXX" -> `deliver --dry-run`, then deliver after approval.
 
-Hermes should always reply with draft status, file/folder path, missing assets, and next approval needed. Never publish or mark final.
+Hermes should always reply with draft status, file/folder path, Task Ops update result, missing assets, and next approval needed. Never publish or mark final.

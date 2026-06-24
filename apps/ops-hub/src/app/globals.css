@@ -4,6 +4,12 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer components {
+  .input {
+    @apply w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-800 shadow-sm outline-none transition focus:border-ocg-gold focus:ring-2 focus:ring-ocg-gold/20 disabled:bg-gray-50 disabled:text-gray-400;
+  }
+}
+
 :root {
   --font-inter: 'Inter', system-ui, sans-serif;
   --ocg-navy: #1a1a2e;
@@ -14,5 +20,45 @@
   body {
     font-family: var(--font-inter);
     background-color: #f1f5f9;
+  }
+
+  * {
+    min-width: 0;
+  }
+
+  @media (max-width: 767px) {
+    main table {
+      display: block;
+      width: 100%;
+    }
+
+    main thead {
+      display: none;
+    }
+
+    main tbody {
+      display: grid;
+      gap: 0.75rem;
+    }
+
+    main tr {
+      display: block;
+      border: 1px solid #f1f5f9;
+      border-radius: 0.75rem;
+      background: #fff;
+      padding: 0.45rem;
+    }
+
+    main td {
+      display: block;
+      width: 100%;
+      padding: 0.42rem 0.65rem !important;
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+
+    main td:empty {
+      display: none;
+    }
   }
 }

@@ -167,6 +167,12 @@ node scripts/oc-ops.mjs <command>   # list-work, lookup-task, create-client,
 - Draft-only: never send external messages, never post to brand socials, never mark
   `Completed` without explicit human confirmation. Approved content flows to the
   Marketing Hub calendar; the oc-ops agent proposes, it does not publish.
+- Repo-local skills are canonical for portability across devices. Configure
+  `OCG_LOCAL_DELIVERY_ROOT` on each machine to the locally synced One Core Group
+  Drive folder; if Drive is unavailable, use the skill-local fallback and attach
+  that path to Task Ops.
+- Every delivered task response must mention the deliverable location, and Task Ops
+  must contain the same location through an artifact or attached context note.
 
 ### Production skills (deliver designs & videos)
 

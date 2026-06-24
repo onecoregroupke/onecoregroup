@@ -1,5 +1,6 @@
 import { createServerClient } from '@ocg/db/client'
 import type { PermissionsMap } from '@ocg/db'
+import { buildCallbackUrl, hubUrl, sendInviteEmail } from '@/lib/auth-emails'
 
 // Local type for user_permissions rows (table not in generated DB schema)
 type PermRow = {
@@ -83,15 +84,38 @@ export async function POST(req: Request) {
   }
 
   const supabase = createServerClient()
+  const email = body.email.trim()
 
-  // Invite the user — Supabase sends them an email with a set-password link
-  const { data: inviteData, error: inviteError } = await supabase.auth.admin.inviteUserByEmail(
-    body.email.trim(),
-    { data: { display_name: body.display_name ?? '' } }
-  )
-  if (inviteError) return Response.json({ error: inviteError.message }, { status: 500 })
+  // Create the user + generate an invite link ourselves (instead of
+  // inviteUserByEmail, which sends Supabase's default implicit-flow email).
+  // `password_set: false` lets the dashboard force them through set-password.
+  const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
+    type: 'invite',
+    email,
+    options: {
+      data: { display_name: body.display_name ?? '', password_set: false },
+      redirectTo: `${hubUrl()}/auth/callback`,
+    },
+  })
+  if (linkError || !linkData?.user) {
+    return Response.json({ error: linkError?.message ?? 'Could not create invitation' }, { status: 500 })
+  }
 
-  const userId = inviteData.user.id
+  const userId = linkData.user.id
+
+  // Send our own branded email pointing at the explicit token_hash callback.
+  try {
+    await sendInviteEmail({
+      email,
+      displayName: body.display_name,
+      link: buildCallbackUrl(linkData.properties.hashed_token, 'invite'),
+    })
+  } catch (emailErr) {
+    // Roll back the half-created user so the admin can retry cleanly.
+    await supabase.auth.admin.deleteUser(userId)
+    const msg = emailErr instanceof Error ? emailErr.message : 'Failed to send invitation email'
+    return Response.json({ error: msg }, { status: 500 })
+  }
 
   // Store their permissions
   const { data, error } = await permTable(supabase)

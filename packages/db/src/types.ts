@@ -2,7 +2,7 @@
 export type SectionKey =
   | 'dashboard' | 'input' | 'compliance' | 'properties'
   | 'glitz' | 'npt' | 'reports' | 'brands' | 'users' | 'marketing'
-  | 'ops' | 'ops_agents'
+  | 'ops' | 'ops_agents' | 'management' | 'npt_service' | 'rayyan_admin' | 'rhythms_admin'
 
 export type AccessLevel = 'none' | 'view' | 'edit'
 
@@ -840,6 +840,373 @@ export interface OpsReportLogRow {
 type OpsReportLogInsert = Pick<OpsReportLogRow, 'report_type' | 'subject' | 'html'> &
   Partial<OpsReportLogRow>
 
+// ─── One Core Management OS (migration 025) ─────────────────────────────────
+export interface OcgApprovalRow {
+  id: string
+  brand_id: string | null
+  related_task_id: string | null
+  related_project_id: string | null
+  approval_type: string
+  title: string
+  description: string
+  requested_by: string
+  approver_id: string | null
+  status: string
+  priority: string
+  due_date: string | null
+  decision_notes: string
+  created_at: string
+  updated_at: string
+}
+type OcgApprovalInsert = Pick<OcgApprovalRow, 'title'> & Partial<OcgApprovalRow>
+
+export interface OcgBlockerRow {
+  id: string
+  brand_id: string | null
+  task_id: string | null
+  project_id: string | null
+  title: string
+  description: string
+  blocker_type: string
+  severity: string
+  owner_id: string | null
+  escalation_owner_id: string | null
+  status: string
+  next_action: string
+  blocked_since: string
+  resolved_at: string | null
+  created_at: string
+  updated_at: string
+}
+type OcgBlockerInsert = Pick<OcgBlockerRow, 'title'> & Partial<OcgBlockerRow>
+
+export interface OcgMeetingRow {
+  id: string
+  brand_id: string | null
+  title: string
+  meeting_date: string
+  attendees: string[]
+  notes: string
+  summary: string
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+type OcgMeetingInsert = Pick<OcgMeetingRow, 'title'> & Partial<OcgMeetingRow>
+
+export interface OcgDecisionRow {
+  id: string
+  brand_id: string | null
+  project_id: string | null
+  meeting_id: string | null
+  title: string
+  decision: string
+  owner_id: string | null
+  due_date: string | null
+  status: string
+  created_at: string
+  updated_at: string
+}
+type OcgDecisionInsert = Pick<OcgDecisionRow, 'title'> & Partial<OcgDecisionRow>
+
+export interface OcgRecurringTaskRow {
+  id: string
+  brand_id: string | null
+  title: string
+  description: string
+  recurrence_rule: string
+  default_assignee_id: string | null
+  department: string
+  priority: string
+  next_run_at: string | null
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+type OcgRecurringTaskInsert = Pick<OcgRecurringTaskRow, 'title'> & Partial<OcgRecurringTaskRow>
+
+export interface NptCustomerRow {
+  id: string
+  full_name: string
+  phone: string | null
+  email: string | null
+  location: string
+  area_estate: string
+  customer_type: string
+  lead_source: string
+  preferred_communication_channel: string
+  notes: string
+  last_contacted_at: string | null
+  next_follow_up_date: string | null
+  created_at: string
+  updated_at: string
+}
+type NptCustomerInsert = Pick<NptCustomerRow, 'full_name'> & Partial<NptCustomerRow>
+
+export interface NptPianoRow {
+  id: string
+  customer_id: string | null
+  make: string
+  model: string | null
+  serial_number: string | null
+  piano_type: string
+  location: string
+  condition: string
+  last_tuning_date: string | null
+  last_repair_date: string | null
+  recommended_next_service_date: string | null
+  media_urls: string[]
+  technician_notes: string
+  sales_status: string
+  created_at: string
+  updated_at: string
+}
+type NptPianoInsert = Partial<NptPianoRow>
+
+export interface NptServiceJobRow {
+  id: string
+  customer_id: string | null
+  piano_id: string | null
+  ops_task_id: string | null
+  service_type: string
+  requested_date: string | null
+  scheduled_at: string | null
+  technician_id: string | null
+  location: string
+  job_notes: string
+  internal_notes: string
+  customer_facing_notes: string
+  status: string
+  priority: string
+  estimated_cost_ksh: number | null
+  final_cost_ksh: number | null
+  required_tools: string[]
+  completion_summary: string
+  created_at: string
+  updated_at: string
+}
+type NptServiceJobInsert = Partial<NptServiceJobRow>
+
+export interface NptServiceHistoryRow {
+  id: string
+  customer_id: string | null
+  piano_id: string | null
+  service_job_id: string | null
+  technician_id: string | null
+  service_date: string
+  work_done: string
+  recommendations: string
+  next_service_date: string | null
+  created_at: string
+}
+type NptServiceHistoryInsert = Partial<NptServiceHistoryRow>
+
+export interface NptQuoteInvoiceRow {
+  id: string
+  customer_id: string | null
+  service_job_id: string | null
+  record_type: string
+  quote_amount_ksh: number | null
+  invoice_amount_ksh: number | null
+  status: string
+  payment_status: string
+  sent_date: string | null
+  paid_date: string | null
+  notes: string
+  created_at: string
+  updated_at: string
+}
+type NptQuoteInvoiceInsert = Partial<NptQuoteInvoiceRow>
+
+export interface NptReminderRow {
+  id: string
+  customer_id: string | null
+  piano_id: string | null
+  service_job_id: string | null
+  reminder_type: string
+  title: string
+  due_at: string | null
+  channel: string
+  status: string
+  notes: string
+  created_at: string
+  updated_at: string
+}
+type NptReminderInsert = Pick<NptReminderRow, 'title'> & Partial<NptReminderRow>
+
+export interface RayyanGuardianRow {
+  id: string
+  full_name: string
+  phone: string | null
+  email: string | null
+  relationship_to_child: string
+  preferred_communication_channel: string
+  notes: string
+  created_at: string
+  updated_at: string
+}
+type RayyanGuardianInsert = Pick<RayyanGuardianRow, 'full_name'> & Partial<RayyanGuardianRow>
+
+export interface RayyanStudentRow {
+  id: string
+  full_name: string
+  admission_number: string | null
+  schoolpay_code: string | null
+  class_level: string
+  guardian_id: string | null
+  enrollment_status: string
+  start_date: string | null
+  notes: string
+  created_at: string
+  updated_at: string
+}
+type RayyanStudentInsert = Pick<RayyanStudentRow, 'full_name'> & Partial<RayyanStudentRow>
+
+export interface RayyanAdmissionRow {
+  id: string
+  student_id: string | null
+  guardian_id: string | null
+  pipeline_status: string
+  source: string
+  tour_date: string | null
+  documents_status: string
+  schoolpay_status: string
+  next_follow_up_date: string | null
+  notes: string
+  created_at: string
+  updated_at: string
+}
+type RayyanAdmissionInsert = Partial<RayyanAdmissionRow>
+
+export interface RayyanFeeFollowupRow {
+  id: string
+  student_id: string | null
+  schoolpay_code: string
+  expected_fee_item: string
+  follow_up_status: string
+  parent_contacted_date: string | null
+  last_known_fee_status: string
+  next_follow_up_date: string | null
+  notes: string
+  created_at: string
+  updated_at: string
+}
+type RayyanFeeFollowupInsert = Partial<RayyanFeeFollowupRow>
+
+export interface RayyanSchoolpayImportBatchRow {
+  id: string
+  source_label: string
+  imported_by: string
+  imported_at: string
+  row_count: number
+  notes: string
+  metadata: Record<string, unknown>
+}
+type RayyanSchoolpayImportBatchInsert = Partial<RayyanSchoolpayImportBatchRow>
+
+export interface RayyanSchoolpayPaymentSnapshotRow {
+  id: string
+  batch_id: string | null
+  student_id: string | null
+  schoolpay_code: string
+  admission_number: string
+  student_name: string
+  fee_item: string
+  amount_expected_ksh: number | null
+  amount_paid_ksh: number | null
+  balance_ksh: number | null
+  payment_status: string
+  raw_payload: Record<string, unknown>
+  captured_at: string
+}
+type RayyanSchoolpayPaymentSnapshotInsert = Partial<RayyanSchoolpayPaymentSnapshotRow>
+
+export interface RayyanClassRow {
+  id: string
+  name: string
+  level: string
+  teacher_id: string | null
+  notes: string
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+type RayyanClassInsert = Pick<RayyanClassRow, 'name'> & Partial<RayyanClassRow>
+
+export interface RayyanAttendanceNoteRow {
+  id: string
+  student_id: string | null
+  class_id: string | null
+  attendance_date: string
+  status: string
+  notes: string
+  created_by: string
+  created_at: string
+}
+type RayyanAttendanceNoteInsert = Partial<RayyanAttendanceNoteRow>
+
+export interface RayyanAdminTaskRow {
+  id: string
+  student_id: string | null
+  guardian_id: string | null
+  ops_task_id: string | null
+  task_type: string
+  title: string
+  status: string
+  priority: string
+  due_date: string | null
+  notes: string
+  created_at: string
+  updated_at: string
+}
+type RayyanAdminTaskInsert = Pick<RayyanAdminTaskRow, 'title'> & Partial<RayyanAdminTaskRow>
+
+export interface RhythmsStudentRow {
+  id: string
+  full_name: string
+  admission_number: string | null
+  schoolpay_code: string | null
+  programme: string
+  cohort: string
+  guardian_name: string | null
+  phone: string | null
+  email: string | null
+  enrollment_status: string
+  start_date: string | null
+  notes: string
+  created_at: string
+  updated_at: string
+}
+type RhythmsStudentInsert = Pick<RhythmsStudentRow, 'full_name'> & Partial<RhythmsStudentRow>
+
+export interface RhythmsSchoolpayImportBatchRow {
+  id: string
+  source_label: string
+  imported_by: string
+  imported_at: string
+  row_count: number
+  notes: string
+  metadata: Record<string, unknown>
+}
+type RhythmsSchoolpayImportBatchInsert = Partial<RhythmsSchoolpayImportBatchRow>
+
+export interface RhythmsSchoolpayPaymentSnapshotRow {
+  id: string
+  batch_id: string | null
+  student_id: string | null
+  schoolpay_code: string
+  admission_number: string
+  student_name: string
+  fee_item: string
+  amount_expected_ksh: number | null
+  amount_paid_ksh: number | null
+  balance_ksh: number | null
+  payment_status: string
+  raw_payload: Record<string, unknown>
+  captured_at: string
+}
+type RhythmsSchoolpayPaymentSnapshotInsert = Partial<RhythmsSchoolpayPaymentSnapshotRow>
+
 type DbTable<Row, Insert, Update> = {
   Row: Row & Record<string, unknown>
   Insert: Insert & Record<string, unknown>
@@ -893,6 +1260,29 @@ export interface Database {
       ops_agent_artifact_destinations: DbTable<OpsAgentArtifactDestinationRow, OpsAgentArtifactDestinationInsert, Partial<OpsAgentArtifactDestinationRow>>
       ops_review_queue: DbTable<OpsReviewQueueRow, OpsReviewQueueInsert, Partial<OpsReviewQueueRow>>
       ops_report_logs: DbTable<OpsReportLogRow, OpsReportLogInsert, Partial<OpsReportLogRow>>
+      ocg_approvals: DbTable<OcgApprovalRow, OcgApprovalInsert, Partial<OcgApprovalRow>>
+      ocg_blockers: DbTable<OcgBlockerRow, OcgBlockerInsert, Partial<OcgBlockerRow>>
+      ocg_meetings: DbTable<OcgMeetingRow, OcgMeetingInsert, Partial<OcgMeetingRow>>
+      ocg_decisions: DbTable<OcgDecisionRow, OcgDecisionInsert, Partial<OcgDecisionRow>>
+      ocg_recurring_tasks: DbTable<OcgRecurringTaskRow, OcgRecurringTaskInsert, Partial<OcgRecurringTaskRow>>
+      npt_customers: DbTable<NptCustomerRow, NptCustomerInsert, Partial<NptCustomerRow>>
+      npt_pianos: DbTable<NptPianoRow, NptPianoInsert, Partial<NptPianoRow>>
+      npt_service_jobs: DbTable<NptServiceJobRow, NptServiceJobInsert, Partial<NptServiceJobRow>>
+      npt_service_history: DbTable<NptServiceHistoryRow, NptServiceHistoryInsert, Partial<NptServiceHistoryRow>>
+      npt_quote_invoice_records: DbTable<NptQuoteInvoiceRow, NptQuoteInvoiceInsert, Partial<NptQuoteInvoiceRow>>
+      npt_reminders: DbTable<NptReminderRow, NptReminderInsert, Partial<NptReminderRow>>
+      rayyan_guardians: DbTable<RayyanGuardianRow, RayyanGuardianInsert, Partial<RayyanGuardianRow>>
+      rayyan_students: DbTable<RayyanStudentRow, RayyanStudentInsert, Partial<RayyanStudentRow>>
+      rayyan_admissions: DbTable<RayyanAdmissionRow, RayyanAdmissionInsert, Partial<RayyanAdmissionRow>>
+      rayyan_fee_followups: DbTable<RayyanFeeFollowupRow, RayyanFeeFollowupInsert, Partial<RayyanFeeFollowupRow>>
+      rayyan_schoolpay_import_batches: DbTable<RayyanSchoolpayImportBatchRow, RayyanSchoolpayImportBatchInsert, Partial<RayyanSchoolpayImportBatchRow>>
+      rayyan_schoolpay_payment_snapshots: DbTable<RayyanSchoolpayPaymentSnapshotRow, RayyanSchoolpayPaymentSnapshotInsert, Partial<RayyanSchoolpayPaymentSnapshotRow>>
+      rayyan_classes: DbTable<RayyanClassRow, RayyanClassInsert, Partial<RayyanClassRow>>
+      rayyan_attendance_notes: DbTable<RayyanAttendanceNoteRow, RayyanAttendanceNoteInsert, Partial<RayyanAttendanceNoteRow>>
+      rayyan_admin_tasks: DbTable<RayyanAdminTaskRow, RayyanAdminTaskInsert, Partial<RayyanAdminTaskRow>>
+      rhythms_students: DbTable<RhythmsStudentRow, RhythmsStudentInsert, Partial<RhythmsStudentRow>>
+      rhythms_schoolpay_import_batches: DbTable<RhythmsSchoolpayImportBatchRow, RhythmsSchoolpayImportBatchInsert, Partial<RhythmsSchoolpayImportBatchRow>>
+      rhythms_schoolpay_payment_snapshots: DbTable<RhythmsSchoolpayPaymentSnapshotRow, RhythmsSchoolpayPaymentSnapshotInsert, Partial<RhythmsSchoolpayPaymentSnapshotRow>>
     }
     Views: Record<string, never>
     Functions: Record<string, never>

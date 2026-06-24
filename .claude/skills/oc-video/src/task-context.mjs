@@ -3,16 +3,16 @@ import { appendLog, readEnv, taskPaths, writeJson } from "./project-fs.mjs";
 
 function baseAndKey() {
   const env = readEnv();
-  const base = (env.TASK_OPS_BASE_URL || env.WM_TASK_OPS_API_BASE_URL || env.HERMES_API_BASE_URL || "").replace(/\/+$/, "");
-  const key = env.HERMES_API_KEY || env.WM_TASK_OPS_API_TOKEN || env.HERMES_API_TOKEN;
+  const base = (env.OPS_OPS_BASE_URL || env.NEXT_PUBLIC_OPS_URL || env.TASK_OPS_BASE_URL || env.WM_TASK_OPS_API_BASE_URL || env.HERMES_API_BASE_URL || "").replace(/\/+$/, "");
+  const key = env.OPS_AGENT_API_KEY || env.HERMES_API_KEY || env.WM_TASK_OPS_API_TOKEN || env.HERMES_API_TOKEN;
   return { base, key };
 }
 
 export async function fetchTaskContext(taskId, specialist = "video_clipping") {
   const { base, key } = baseAndKey();
   if (!base || !key) return { ok: false, error: "Task Ops credentials not configured." };
-  const url = `${base}/api/hermes/tasks/${encodeURIComponent(taskId)}/context?specialist=${encodeURIComponent(specialist)}`;
-  const res = await fetch(url, { headers: { "x-hermes-api-key": key, accept: "application/json" } });
+  const url = `${base}/api/agent/tasks/${encodeURIComponent(taskId)}/context`;
+  const res = await fetch(url, { headers: { "x-ops-agent-key": key, accept: "application/json" } });
   const json = await res.json().catch(() => ({}));
   if (!res.ok) return { ok: false, error: `HTTP ${res.status}`, body: json };
   return { ok: true, payload: json.payload || json };
@@ -34,7 +34,7 @@ export async function populateTaskContext(taskId) {
   });
   await writeJson(path.join(paths.context, "project_context.json"), {
     fetched: true,
-    project_id: payload.project_id || null,
+    project_id: payload.project?.project_id || payload.project_id || null,
     project: payload.project || null,
     context_sources: payload.context_sources || [],
   });
@@ -45,10 +45,10 @@ export async function populateTaskContext(taskId) {
 export async function attachTaskContext(taskId, { title, notes, url }) {
   const { base, key } = baseAndKey();
   if (!base || !key) return { ok: false, error: "Task Ops credentials not configured." };
-  const res = await fetch(`${base}/api/hermes/tasks/${encodeURIComponent(taskId)}/attach-context`, {
+  const res = await fetch(`${base}/api/agent/tasks/${encodeURIComponent(taskId)}/attach-context`, {
     method: "POST",
-    headers: { "content-type": "application/json", "x-hermes-api-key": key },
-    body: JSON.stringify({ title, source_type: "note", scope: "task", notes, url }),
+    headers: { "content-type": "application/json", "x-ops-agent-key": key },
+    body: JSON.stringify({ title, type: "note", notes, url }),
   });
   const json = await res.json().catch(() => ({}));
   if (!res.ok) return { ok: false, error: `HTTP ${res.status}`, body: json };
@@ -58,9 +58,9 @@ export async function attachTaskContext(taskId, { title, notes, url }) {
 export async function setTaskStatus(taskId, status, note) {
   const { base, key } = baseAndKey();
   if (!base || !key) return { ok: false, error: "Task Ops credentials not configured." };
-  const res = await fetch(`${base}/api/hermes/tasks/${encodeURIComponent(taskId)}/status`, {
+  const res = await fetch(`${base}/api/agent/tasks/${encodeURIComponent(taskId)}/status`, {
     method: "POST",
-    headers: { "content-type": "application/json", "x-hermes-api-key": key },
+    headers: { "content-type": "application/json", "x-ops-agent-key": key },
     body: JSON.stringify({ status, note }),
   });
   const json = await res.json().catch(() => ({}));

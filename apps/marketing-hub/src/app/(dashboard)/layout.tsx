@@ -22,6 +22,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         return
       }
 
+      // Invited users who never completed activation are flagged
+      // password_set:false — force them to finish before reaching the app.
+      if (session.user.user_metadata?.password_set === false) {
+        router.replace('/auth/set-password')
+        return
+      }
+
       // Fetch this user's permissions row.
       // If no row exists they are the founding admin → permissions stays null.
       const supabase = getClient()
