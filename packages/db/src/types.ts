@@ -3,6 +3,7 @@ export type SectionKey =
   | 'dashboard' | 'input' | 'compliance' | 'properties'
   | 'glitz' | 'npt' | 'reports' | 'brands' | 'users' | 'marketing'
   | 'ops' | 'ops_agents' | 'management' | 'npt_service' | 'rayyan_admin' | 'rhythms_admin'
+  | 'darul_admin' | 'personal'
 
 export type AccessLevel = 'none' | 'view' | 'edit'
 
@@ -938,6 +939,11 @@ export interface NptCustomerRow {
   notes: string
   last_contacted_at: string | null
   next_follow_up_date: string | null
+  company_name: string
+  preferred_technician_id: string | null
+  referred_by: string
+  tax_exempt: boolean
+  tags: string[]
   created_at: string
   updated_at: string
 }
@@ -958,6 +964,8 @@ export interface NptPianoRow {
   media_urls: string[]
   technician_notes: string
   sales_status: string
+  tuning_interval_months: number
+  tags: string[]
   created_at: string
   updated_at: string
 }
@@ -1033,6 +1041,67 @@ export interface NptReminderRow {
   updated_at: string
 }
 type NptReminderInsert = Pick<NptReminderRow, 'title'> & Partial<NptReminderRow>
+
+// ─── NPT Gazelle layer (migration 032) ────────────────────────────────────────
+export interface NptContactRow {
+  id: string
+  customer_id: string | null
+  name: string
+  phone: string | null
+  email: string | null
+  role: string
+  is_primary: boolean
+  is_billing: boolean
+  notes: string
+  created_at: string
+  updated_at: string
+}
+type NptContactInsert = Pick<NptContactRow, 'name'> & Partial<NptContactRow>
+
+export interface NptAppointmentRow {
+  id: string
+  customer_id: string | null
+  piano_id: string | null
+  technician_id: string | null
+  service_job_id: string | null
+  title: string
+  location: string
+  start_at: string | null
+  end_at: string | null
+  status: string
+  notes: string
+  created_by: string
+  completed_at: string | null
+  created_at: string
+  updated_at: string
+}
+type NptAppointmentInsert = Partial<NptAppointmentRow>
+
+export interface NptPianoMeasurementRow {
+  id: string
+  piano_id: string | null
+  technician_id: string | null
+  measured_at: string
+  temperature_c: number | null
+  humidity_pct: number | null
+  notes: string
+  created_at: string
+}
+type NptPianoMeasurementInsert = Partial<NptPianoMeasurementRow>
+
+export interface NptTimelineEventRow {
+  id: string
+  customer_id: string | null
+  piano_id: string | null
+  appointment_id: string | null
+  event_type: string
+  title: string
+  body: string
+  actor: string
+  occurred_at: string
+  created_at: string
+}
+type NptTimelineEventInsert = Partial<NptTimelineEventRow>
 
 export interface RayyanGuardianRow {
   id: string
@@ -1169,6 +1238,8 @@ export interface RhythmsStudentRow {
   programme: string
   cohort: string
   guardian_name: string | null
+  guardian_id: string | null
+  class_id: string | null
   phone: string | null
   email: string | null
   enrollment_status: string
@@ -1206,6 +1277,289 @@ export interface RhythmsSchoolpayPaymentSnapshotRow {
   captured_at: string
 }
 type RhythmsSchoolpayPaymentSnapshotInsert = Partial<RhythmsSchoolpayPaymentSnapshotRow>
+
+// ─── Private personal/home tasks (migration 031) ──────────────────────────────
+export interface OcgPersonalTaskRow {
+  id: string
+  owner_email: string
+  title: string
+  notes: string
+  category: string
+  priority: string
+  status: string
+  due_date: string | null
+  created_at: string
+  updated_at: string
+}
+type OcgPersonalTaskInsert = Pick<OcgPersonalTaskRow, 'owner_email' | 'title'> & Partial<OcgPersonalTaskRow>
+
+// ─── Daily duties per individual (migration 030) ──────────────────────────────
+export interface OcgDailyDutyRow {
+  id: string
+  assignee_id: string | null
+  brand_id: string | null
+  title: string
+  description: string
+  department: string
+  sort_order: number
+  active: boolean
+  created_at: string
+  updated_at: string
+}
+type OcgDailyDutyInsert = Pick<OcgDailyDutyRow, 'title'> & Partial<OcgDailyDutyRow>
+
+export interface OcgDailyDutyLogRow {
+  id: string
+  duty_id: string
+  assignee_id: string | null
+  duty_date: string
+  status: string
+  note: string
+  completed_at: string
+}
+type OcgDailyDutyLogInsert = Pick<OcgDailyDutyLogRow, 'duty_id'> & Partial<OcgDailyDutyLogRow>
+
+// ─── Ops task comments / progress updates (migration 029) ─────────────────────
+export interface OpsTaskCommentRow {
+  id: string
+  task_id: string
+  author: string
+  body: string
+  kind: string
+  status_at: string
+  created_at: string
+}
+type OpsTaskCommentInsert = Pick<OpsTaskCommentRow, 'task_id' | 'body'> & Partial<OpsTaskCommentRow>
+
+// ─── Rhythms College — full admin parity (migration 028) ──────────────────────
+export interface RhythmsGuardianRow {
+  id: string
+  full_name: string
+  phone: string | null
+  email: string | null
+  relationship_to_child: string
+  preferred_communication_channel: string
+  notes: string
+  created_at: string
+  updated_at: string
+}
+type RhythmsGuardianInsert = Pick<RhythmsGuardianRow, 'full_name'> & Partial<RhythmsGuardianRow>
+
+export interface RhythmsClassRow {
+  id: string
+  name: string
+  level: string
+  teacher_id: string | null
+  notes: string
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+type RhythmsClassInsert = Pick<RhythmsClassRow, 'name'> & Partial<RhythmsClassRow>
+
+export interface RhythmsAdmissionRow {
+  id: string
+  student_id: string | null
+  guardian_id: string | null
+  pipeline_status: string
+  source: string
+  tour_date: string | null
+  documents_status: string
+  schoolpay_status: string
+  next_follow_up_date: string | null
+  notes: string
+  created_at: string
+  updated_at: string
+}
+type RhythmsAdmissionInsert = Partial<RhythmsAdmissionRow>
+
+export interface RhythmsFeeFollowupRow {
+  id: string
+  student_id: string | null
+  schoolpay_code: string
+  expected_fee_item: string
+  follow_up_status: string
+  parent_contacted_date: string | null
+  last_known_fee_status: string
+  next_follow_up_date: string | null
+  notes: string
+  created_at: string
+  updated_at: string
+}
+type RhythmsFeeFollowupInsert = Partial<RhythmsFeeFollowupRow>
+
+export interface RhythmsAttendanceNoteRow {
+  id: string
+  student_id: string | null
+  class_id: string | null
+  attendance_date: string
+  status: string
+  notes: string
+  created_by: string
+  created_at: string
+}
+type RhythmsAttendanceNoteInsert = Partial<RhythmsAttendanceNoteRow>
+
+export interface RhythmsAdminTaskRow {
+  id: string
+  student_id: string | null
+  guardian_id: string | null
+  ops_task_id: string | null
+  task_type: string
+  title: string
+  status: string
+  priority: string
+  due_date: string | null
+  notes: string
+  created_at: string
+  updated_at: string
+}
+type RhythmsAdminTaskInsert = Pick<RhythmsAdminTaskRow, 'title'> & Partial<RhythmsAdminTaskRow>
+
+// ─── Darul Swafa Madrassa (migration 027) ─────────────────────────────────────
+export interface DarulGuardianRow {
+  id: string
+  full_name: string
+  phone: string | null
+  email: string | null
+  relationship_to_child: string
+  preferred_communication_channel: string
+  notes: string
+  created_at: string
+  updated_at: string
+}
+type DarulGuardianInsert = Pick<DarulGuardianRow, 'full_name'> & Partial<DarulGuardianRow>
+
+export interface DarulClassRow {
+  id: string
+  name: string
+  level: string
+  teacher_id: string | null
+  notes: string
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+type DarulClassInsert = Pick<DarulClassRow, 'name'> & Partial<DarulClassRow>
+
+export interface DarulStudentRow {
+  id: string
+  full_name: string
+  admission_number: string | null
+  guardian_id: string | null
+  class_id: string | null
+  halaqa_level: string
+  hifz_juz_completed: number
+  current_surah: string
+  enrollment_status: string
+  start_date: string | null
+  notes: string
+  created_at: string
+  updated_at: string
+}
+type DarulStudentInsert = Pick<DarulStudentRow, 'full_name'> & Partial<DarulStudentRow>
+
+export interface DarulAdmissionRow {
+  id: string
+  student_id: string | null
+  guardian_id: string | null
+  pipeline_status: string
+  source: string
+  tour_date: string | null
+  documents_status: string
+  next_follow_up_date: string | null
+  notes: string
+  created_at: string
+  updated_at: string
+}
+type DarulAdmissionInsert = Partial<DarulAdmissionRow>
+
+export interface DarulHifzProgressRow {
+  id: string
+  student_id: string | null
+  juz_number: number | null
+  surah: string
+  ayah_range: string
+  status: string
+  assessed_on: string | null
+  assessor_id: string | null
+  notes: string
+  created_at: string
+  updated_at: string
+}
+type DarulHifzProgressInsert = Partial<DarulHifzProgressRow>
+
+export interface DarulAttendanceNoteRow {
+  id: string
+  student_id: string | null
+  class_id: string | null
+  attendance_date: string
+  status: string
+  notes: string
+  created_by: string
+  created_at: string
+}
+type DarulAttendanceNoteInsert = Partial<DarulAttendanceNoteRow>
+
+export interface DarulFeeInvoiceRow {
+  id: string
+  student_id: string | null
+  fee_item: string
+  term: string
+  amount_expected_ksh: number
+  amount_paid_ksh: number
+  balance_ksh: number | null
+  status: string
+  due_date: string | null
+  notes: string
+  created_at: string
+  updated_at: string
+}
+type DarulFeeInvoiceInsert = Partial<DarulFeeInvoiceRow>
+
+export interface DarulFeePaymentRow {
+  id: string
+  invoice_id: string | null
+  student_id: string | null
+  amount_ksh: number
+  method: string
+  reference: string
+  paid_on: string
+  recorded_by: string
+  notes: string
+  created_at: string
+}
+type DarulFeePaymentInsert = Partial<DarulFeePaymentRow>
+
+export interface DarulFeeFollowupRow {
+  id: string
+  student_id: string | null
+  expected_fee_item: string
+  follow_up_status: string
+  parent_contacted_date: string | null
+  last_known_fee_status: string
+  next_follow_up_date: string | null
+  notes: string
+  created_at: string
+  updated_at: string
+}
+type DarulFeeFollowupInsert = Partial<DarulFeeFollowupRow>
+
+export interface DarulAdminTaskRow {
+  id: string
+  student_id: string | null
+  guardian_id: string | null
+  ops_task_id: string | null
+  task_type: string
+  title: string
+  status: string
+  priority: string
+  due_date: string | null
+  notes: string
+  created_at: string
+  updated_at: string
+}
+type DarulAdminTaskInsert = Pick<DarulAdminTaskRow, 'title'> & Partial<DarulAdminTaskRow>
 
 type DbTable<Row, Insert, Update> = {
   Row: Row & Record<string, unknown>
@@ -1260,6 +1614,10 @@ export interface Database {
       ops_agent_artifact_destinations: DbTable<OpsAgentArtifactDestinationRow, OpsAgentArtifactDestinationInsert, Partial<OpsAgentArtifactDestinationRow>>
       ops_review_queue: DbTable<OpsReviewQueueRow, OpsReviewQueueInsert, Partial<OpsReviewQueueRow>>
       ops_report_logs: DbTable<OpsReportLogRow, OpsReportLogInsert, Partial<OpsReportLogRow>>
+      ops_task_comments: DbTable<OpsTaskCommentRow, OpsTaskCommentInsert, Partial<OpsTaskCommentRow>>
+      ocg_daily_duties: DbTable<OcgDailyDutyRow, OcgDailyDutyInsert, Partial<OcgDailyDutyRow>>
+      ocg_daily_duty_logs: DbTable<OcgDailyDutyLogRow, OcgDailyDutyLogInsert, Partial<OcgDailyDutyLogRow>>
+      ocg_personal_tasks: DbTable<OcgPersonalTaskRow, OcgPersonalTaskInsert, Partial<OcgPersonalTaskRow>>
       ocg_approvals: DbTable<OcgApprovalRow, OcgApprovalInsert, Partial<OcgApprovalRow>>
       ocg_blockers: DbTable<OcgBlockerRow, OcgBlockerInsert, Partial<OcgBlockerRow>>
       ocg_meetings: DbTable<OcgMeetingRow, OcgMeetingInsert, Partial<OcgMeetingRow>>
@@ -1271,6 +1629,10 @@ export interface Database {
       npt_service_history: DbTable<NptServiceHistoryRow, NptServiceHistoryInsert, Partial<NptServiceHistoryRow>>
       npt_quote_invoice_records: DbTable<NptQuoteInvoiceRow, NptQuoteInvoiceInsert, Partial<NptQuoteInvoiceRow>>
       npt_reminders: DbTable<NptReminderRow, NptReminderInsert, Partial<NptReminderRow>>
+      npt_contacts: DbTable<NptContactRow, NptContactInsert, Partial<NptContactRow>>
+      npt_appointments: DbTable<NptAppointmentRow, NptAppointmentInsert, Partial<NptAppointmentRow>>
+      npt_piano_measurements: DbTable<NptPianoMeasurementRow, NptPianoMeasurementInsert, Partial<NptPianoMeasurementRow>>
+      npt_timeline_events: DbTable<NptTimelineEventRow, NptTimelineEventInsert, Partial<NptTimelineEventRow>>
       rayyan_guardians: DbTable<RayyanGuardianRow, RayyanGuardianInsert, Partial<RayyanGuardianRow>>
       rayyan_students: DbTable<RayyanStudentRow, RayyanStudentInsert, Partial<RayyanStudentRow>>
       rayyan_admissions: DbTable<RayyanAdmissionRow, RayyanAdmissionInsert, Partial<RayyanAdmissionRow>>
@@ -1283,6 +1645,22 @@ export interface Database {
       rhythms_students: DbTable<RhythmsStudentRow, RhythmsStudentInsert, Partial<RhythmsStudentRow>>
       rhythms_schoolpay_import_batches: DbTable<RhythmsSchoolpayImportBatchRow, RhythmsSchoolpayImportBatchInsert, Partial<RhythmsSchoolpayImportBatchRow>>
       rhythms_schoolpay_payment_snapshots: DbTable<RhythmsSchoolpayPaymentSnapshotRow, RhythmsSchoolpayPaymentSnapshotInsert, Partial<RhythmsSchoolpayPaymentSnapshotRow>>
+      rhythms_guardians: DbTable<RhythmsGuardianRow, RhythmsGuardianInsert, Partial<RhythmsGuardianRow>>
+      rhythms_classes: DbTable<RhythmsClassRow, RhythmsClassInsert, Partial<RhythmsClassRow>>
+      rhythms_admissions: DbTable<RhythmsAdmissionRow, RhythmsAdmissionInsert, Partial<RhythmsAdmissionRow>>
+      rhythms_fee_followups: DbTable<RhythmsFeeFollowupRow, RhythmsFeeFollowupInsert, Partial<RhythmsFeeFollowupRow>>
+      rhythms_attendance_notes: DbTable<RhythmsAttendanceNoteRow, RhythmsAttendanceNoteInsert, Partial<RhythmsAttendanceNoteRow>>
+      rhythms_admin_tasks: DbTable<RhythmsAdminTaskRow, RhythmsAdminTaskInsert, Partial<RhythmsAdminTaskRow>>
+      darul_guardians: DbTable<DarulGuardianRow, DarulGuardianInsert, Partial<DarulGuardianRow>>
+      darul_classes: DbTable<DarulClassRow, DarulClassInsert, Partial<DarulClassRow>>
+      darul_students: DbTable<DarulStudentRow, DarulStudentInsert, Partial<DarulStudentRow>>
+      darul_admissions: DbTable<DarulAdmissionRow, DarulAdmissionInsert, Partial<DarulAdmissionRow>>
+      darul_hifz_progress: DbTable<DarulHifzProgressRow, DarulHifzProgressInsert, Partial<DarulHifzProgressRow>>
+      darul_attendance_notes: DbTable<DarulAttendanceNoteRow, DarulAttendanceNoteInsert, Partial<DarulAttendanceNoteRow>>
+      darul_fee_invoices: DbTable<DarulFeeInvoiceRow, DarulFeeInvoiceInsert, Partial<DarulFeeInvoiceRow>>
+      darul_fee_payments: DbTable<DarulFeePaymentRow, DarulFeePaymentInsert, Partial<DarulFeePaymentRow>>
+      darul_fee_followups: DbTable<DarulFeeFollowupRow, DarulFeeFollowupInsert, Partial<DarulFeeFollowupRow>>
+      darul_admin_tasks: DbTable<DarulAdminTaskRow, DarulAdminTaskInsert, Partial<DarulAdminTaskRow>>
     }
     Views: Record<string, never>
     Functions: Record<string, never>

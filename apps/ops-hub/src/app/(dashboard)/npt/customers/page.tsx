@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { getNptServiceData } from '@/lib/management'
 import { NptActionPanel } from '@/components/npt/NptActionPanel'
 
@@ -21,7 +22,7 @@ export default async function NptCustomersPage() {
             <thead><tr className="border-b border-gray-100 text-left text-[11px] uppercase tracking-wider text-gray-400"><th className="px-4 py-3">Customer</th><th className="px-4 py-3">Contact</th><th className="px-4 py-3">Area</th><th className="px-4 py-3">Next follow-up</th></tr></thead>
             <tbody className="divide-y divide-gray-50">
               {customers.map((c) => (
-                <tr key={c.id} className="hover:bg-gray-50"><td className="px-4 py-3 font-medium text-gray-800">{c.full_name}</td><td className="px-4 py-3 text-gray-500">{c.phone || c.email || '—'}</td><td className="px-4 py-3 text-gray-500">{c.area_estate || c.location || '—'}</td><td className="px-4 py-3 text-gray-500">{c.next_follow_up_date || '—'}</td></tr>
+                <tr key={c.id} className="hover:bg-gray-50"><td className="px-4 py-3 font-medium text-gray-800"><Link href={`/npt/customers/${c.id}`} className="hover:text-ocg-gold">{c.full_name}</Link></td><td className="px-4 py-3 text-gray-500">{c.phone || c.email || '-'}</td><td className="px-4 py-3 text-gray-500">{c.area_estate || c.location || '-'}</td><td className="px-4 py-3 text-gray-500">{c.next_follow_up_date || '-'}</td></tr>
               ))}
             </tbody>
           </table>

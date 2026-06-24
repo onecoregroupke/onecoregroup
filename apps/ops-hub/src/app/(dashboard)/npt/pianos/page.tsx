@@ -1,4 +1,6 @@
+import Link from 'next/link'
 import { getNptServiceData } from '@/lib/management'
+import { nextTuningDue } from '@/lib/npt'
 
 export const dynamic = 'force-dynamic'
 
@@ -12,7 +14,7 @@ export default async function NptPianosPage() {
         {pianos.length === 0 ? <p className="p-6 text-sm text-gray-500">No pianos have been entered yet.</p> : (
           <table className="w-full text-sm">
             <thead><tr className="border-b border-gray-100 text-left text-[11px] uppercase tracking-wider text-gray-400"><th className="px-4 py-3">Piano</th><th className="px-4 py-3">Customer</th><th className="px-4 py-3">Condition</th><th className="px-4 py-3">Next service</th></tr></thead>
-            <tbody className="divide-y divide-gray-50">{pianos.map((p) => <tr key={p.id} className="hover:bg-gray-50"><td className="px-4 py-3 font-medium text-gray-800">{[p.make, p.model].filter(Boolean).join(' ') || p.piano_type}</td><td className="px-4 py-3 text-gray-500">{p.customer_id ? customerById.get(p.customer_id) ?? 'Customer' : '—'}</td><td className="px-4 py-3 text-gray-500">{p.condition || '—'}</td><td className="px-4 py-3 text-gray-500">{p.recommended_next_service_date || '—'}</td></tr>)}</tbody>
+            <tbody className="divide-y divide-gray-50">{pianos.map((p) => <tr key={p.id} className="hover:bg-gray-50"><td className="px-4 py-3 font-medium text-gray-800"><Link href={`/npt/pianos/${p.id}`} className="hover:text-ocg-gold">{[p.make, p.model].filter(Boolean).join(' ') || p.piano_type}</Link></td><td className="px-4 py-3 text-gray-500">{p.customer_id ? customerById.get(p.customer_id) ?? 'Customer' : '-'}</td><td className="px-4 py-3 text-gray-500">{p.condition || '-'}</td><td className="px-4 py-3 text-gray-500">{nextTuningDue(p) || '-'}</td></tr>)}</tbody>
           </table>
         )}
       </div>
