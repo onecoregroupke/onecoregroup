@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { ExternalLink } from 'lucide-react'
 import { NptActionPanel } from '@/components/npt/NptActionPanel'
 import { getNptServiceData } from '@/lib/management'
 
@@ -23,16 +24,25 @@ export default async function NptServiceOsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-ocg-gold">
-          Nairobi Piano Technicians
-        </p>
-        <h1 className="mt-1 text-2xl font-semibold text-gray-900">NPT Service OS</h1>
-        <p className="mt-1 max-w-3xl text-sm text-gray-500">
-          Internal Gazelle-inspired service management for customers, pianos, jobs,
-          technician scheduling, service history, reminders, and quote/invoice tracking.
-          Gazelle import/export can be added once export/API requirements are available.
-        </p>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-ocg-gold">
+            Nairobi Piano Technicians
+          </p>
+          <h1 className="mt-1 text-2xl font-semibold text-gray-900">NPT Service OS</h1>
+          <p className="mt-1 max-w-3xl text-sm text-gray-500">
+            Internal Gazelle-inspired service management for customers, pianos, jobs,
+            technician scheduling, service history, reminders, and quote/invoice tracking.
+            Use the full workspace when you need the client/piano timeline flow.
+          </p>
+        </div>
+        <Link
+          href="/npt/workspace"
+          target="_blank"
+          className="inline-flex items-center justify-center gap-2 rounded-lg bg-ocg-navy px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800"
+        >
+          Open full NPT management <ExternalLink size={15} />
+        </Link>
       </div>
 
       <NptActionPanel

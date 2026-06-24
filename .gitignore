@@ -29,6 +29,7 @@ graphify-out/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+ops-hub-dev.*.log
 
 # Editor
 .vscode
