@@ -14,6 +14,9 @@ build
 # graphify knowledge-graph output (generated locally)
 graphify-out/
 
+# Local school audit import payloads
+tmp/import-school-audits/outputs/
+
 # Repo-local skill workspaces and generated drafts
 .claude/skills/*/projects/
 .claude/worktrees/
