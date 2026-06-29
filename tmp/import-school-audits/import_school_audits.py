@@ -478,18 +478,24 @@ class SupabaseRest:
         qs = urllib.parse.urlencode(query or {}, safe="(),.*")
         endpoint = f"{self.url.rstrip('/')}/rest/v1/{table}" + (f"?{qs}" if qs else "")
         data = None if body is None else json.dumps(body, default=str).encode("utf-8")
-        req = urllib.request.Request(endpoint, data=data, method=method)
-        req.add_header("apikey", self.key)
-        req.add_header("Authorization", f"Bearer {self.key}")
-        req.add_header("Content-Type", "application/json")
-        req.add_header("Prefer", "return=representation")
-        try:
-            with urllib.request.urlopen(req, timeout=60) as resp:
-                text = resp.read().decode("utf-8")
-                return json.loads(text) if text else []
-        except urllib.error.HTTPError as exc:
-            detail = exc.read().decode("utf-8", errors="replace")
-            raise RuntimeError(f"Supabase {method} {table} failed ({exc.code}): {detail}") from exc
+        for attempt in range(4):
+            req = urllib.request.Request(endpoint, data=data, method=method)
+            req.add_header("apikey", self.key)
+            req.add_header("Authorization", f"Bearer {self.key}")
+            req.add_header("Content-Type", "application/json")
+            req.add_header("Prefer", "return=representation")
+            try:
+                with urllib.request.urlopen(req, timeout=60) as resp:
+                    text = resp.read().decode("utf-8")
+                    return json.loads(text) if text else []
+            except urllib.error.HTTPError as exc:
+                detail = exc.read().decode("utf-8", errors="replace")
+                raise RuntimeError(f"Supabase {method} {table} failed ({exc.code}): {detail}") from exc
+            except (urllib.error.URLError, ConnectionResetError) as exc:
+                if attempt == 3:
+                    raise
+                time.sleep(1.5 * (attempt + 1))
+        return []
 
     def select_all(self, table: str, columns: str) -> list[dict[str, Any]]:
         rows: list[dict[str, Any]] = []
@@ -501,13 +507,15 @@ class SupabaseRest:
                 return rows
             offset += 1000
 
-    def insert_many(self, table: str, rows: list[dict[str, Any]], batch_size: int = 500) -> list[dict[str, Any]]:
+    def insert_many(self, table: str, rows: list[dict[str, Any]], batch_size: int = 250) -> list[dict[str, Any]]:
         out: list[dict[str, Any]] = []
         for start in range(0, len(rows), batch_size):
             chunk = rows[start : start + batch_size]
             if not chunk:
                 continue
-            out.extend(self.request("POST", table, chunk))
+            keys = sorted({key for row in chunk for key in row.keys()})
+            normalized = [{key: row.get(key) for key in keys} for row in chunk]
+            out.extend(self.request("POST", table, normalized))
             time.sleep(0.05)
         return out
 
@@ -526,7 +534,8 @@ def apply_payload(api: SupabaseRest, prefix: str, payload: dict[str, list[dict[s
 
     counts: dict[str, int] = defaultdict(int)
 
-    existing_students = api.select_all(student_table, "id,full_name,admission_number,programme")
+    student_columns = "id,full_name,admission_number,programme" if prefix == "rhythms" else "id,full_name,admission_number"
+    existing_students = api.select_all(student_table, student_columns)
     student_by_key = {
         dedupe_key(r.get("admission_number"), r.get("full_name"), r.get("programme", "")): r["id"] for r in existing_students
     }
@@ -557,7 +566,13 @@ def apply_payload(api: SupabaseRest, prefix: str, payload: dict[str, list[dict[s
         student_by_key[dedupe_key(r.get("admission_number"), r.get("full_name"), r.get("programme", ""))] = r["id"]
         student_by_adm_name[dedupe_key(r.get("admission_number"), r.get("full_name"))] = r["id"]
 
-    existing_invoices = api.select_all(invoice_table, "id,student_id,fee_item,term,amount_expected_ksh,amount_paid_ksh,due_date,notes")
+    try:
+        existing_invoices = api.select_all(invoice_table, "id,student_id,fee_item,term,amount_expected_ksh,amount_paid_ksh,due_date,notes")
+    except RuntimeError as exc:
+        if "PGRST205" not in str(exc):
+            raise
+        counts.update(apply_snapshots_fallback(api, prefix, payload, student_by_key, student_by_adm_name))
+        return dict(counts)
     existing_invoice_keys = {invoice_existing_key(r): r["id"] for r in existing_invoices}
     invoice_ids_by_import_key: dict[str, str] = {}
     invoices_to_insert = []
@@ -605,6 +620,98 @@ def apply_payload(api: SupabaseRest, prefix: str, payload: dict[str, list[dict[s
         followups_to_insert.append(insert)
     counts[f"{followup_table}_inserted"] = len(api.insert_many(followup_table, followups_to_insert))
     return dict(counts)
+
+
+def apply_snapshots_fallback(
+    api: SupabaseRest,
+    prefix: str,
+    payload: dict[str, list[dict[str, Any]]],
+    student_by_key: dict[str, str],
+    student_by_adm_name: dict[str, str],
+) -> dict[str, int]:
+    counts: dict[str, int] = defaultdict(int)
+    batch_table = f"{prefix}_schoolpay_import_batches"
+    snapshot_table = f"{prefix}_schoolpay_payment_snapshots"
+    followup_table = f"{prefix}_fee_followups"
+
+    existing_snapshots = api.select_all(
+        snapshot_table,
+        "id,student_id,admission_number,student_name,fee_item,amount_expected_ksh,amount_paid_ksh,balance_ksh,payment_status,captured_at,raw_payload",
+    )
+    existing_snapshot_keys = {snapshot_key(r) for r in existing_snapshots}
+
+    batch = api.insert_many(
+        batch_table,
+        [
+            {
+                "source_label": "Historical school audit import",
+                "imported_by": "historical-import",
+                "row_count": len(payload["invoices"]),
+                "notes": "Fallback import because manual fee invoice/payment tables are not deployed yet.",
+                "metadata": {"source": "school_audit_import", "prefix": prefix},
+            }
+        ],
+    )
+    batch_id = batch[0]["id"] if batch else None
+    counts[f"{batch_table}_inserted"] = len(batch)
+
+    snapshots = []
+    for row in payload["invoices"]:
+        lookup = row["student_lookup"]
+        student_id = resolve_student_id(prefix, lookup, student_by_key, student_by_adm_name)
+        expected = float(row.get("amount_expected_ksh") or 0)
+        paid = float(row.get("amount_paid_ksh") or 0)
+        snapshot = {
+            "batch_id": batch_id,
+            "student_id": student_id,
+            "schoolpay_code": row.get("schoolpay_code", ""),
+            "admission_number": lookup.get("admission_number", ""),
+            "student_name": lookup.get("full_name", ""),
+            "fee_item": row.get("fee_item", ""),
+            "amount_expected_ksh": expected,
+            "amount_paid_ksh": paid,
+            "balance_ksh": expected - paid,
+            "payment_status": row.get("status", ""),
+            "raw_payload": {
+                "import_key": row.get("import_key"),
+                "term": row.get("term"),
+                "due_date": row.get("due_date"),
+                "notes": row.get("notes"),
+                "source": "historical_school_audit",
+            },
+            "captured_at": f"{row.get('due_date')}T00:00:00+03:00" if row.get("due_date") else datetime.now().astimezone().isoformat(),
+        }
+        if snapshot_key(snapshot) not in existing_snapshot_keys:
+            snapshots.append(snapshot)
+    counts[f"{snapshot_table}_inserted"] = len(api.insert_many(snapshot_table, snapshots))
+
+    existing_followups = api.select_all(followup_table, "id,student_id,expected_fee_item,last_known_fee_status,notes")
+    existing_followup_keys = {followup_existing_key(r) for r in existing_followups}
+    followups_to_insert = []
+    for row in payload["followups"]:
+        lookup = row.pop("student_lookup")
+        insert = dict(row)
+        insert["student_id"] = resolve_student_id(prefix, lookup, student_by_key, student_by_adm_name)
+        key = followup_payload_key(insert)
+        if key in existing_followup_keys:
+            continue
+        followups_to_insert.append(insert)
+    counts[f"{followup_table}_inserted"] = len(api.insert_many(followup_table, followups_to_insert))
+    return dict(counts)
+
+
+def snapshot_key(row: dict[str, Any]) -> str:
+    return dedupe_key(
+        row.get("student_id"),
+        row.get("admission_number"),
+        row.get("student_name"),
+        row.get("fee_item"),
+        row.get("amount_expected_ksh"),
+        row.get("amount_paid_ksh"),
+        row.get("balance_ksh"),
+        row.get("payment_status"),
+        (row.get("raw_payload") or {}).get("import_key") if isinstance(row.get("raw_payload"), dict) else "",
+    )
 
 
 def resolve_student_id(prefix: str, lookup: dict[str, Any], by_key: dict[str, str], by_adm_name: dict[str, str]) -> str | None:
