@@ -2,7 +2,7 @@
 export type SectionKey =
   | 'dashboard' | 'input' | 'compliance' | 'properties'
   | 'glitz' | 'npt' | 'reports' | 'brands' | 'users' | 'marketing'
-  | 'ops' | 'ops_agents' | 'management' | 'npt_service' | 'rayyan_admin' | 'rhythms_admin'
+  | 'ops' | 'ops_agents' | 'management' | 'finance' | 'npt_service' | 'rayyan_admin' | 'rhythms_admin'
   | 'darul_admin' | 'personal'
 
 export type AccessLevel = 'none' | 'view' | 'edit'
@@ -926,6 +926,123 @@ export interface OcgRecurringTaskRow {
 }
 type OcgRecurringTaskInsert = Pick<OcgRecurringTaskRow, 'title'> & Partial<OcgRecurringTaskRow>
 
+// ─── Finance operations cockpit (migration 034) ─────────────────────────────
+export interface FinanceAccountRow {
+  id: string
+  brand_id: string | null
+  account_name: string
+  account_type: string
+  provider: string
+  account_identifier: string
+  legal_owner: string
+  owner_person: string
+  business_use_notes: string
+  opening_balance_ksh: number
+  current_balance_ksh: number
+  reconciliation_status: string
+  is_active: boolean
+  notes: string
+  created_at: string
+  updated_at: string
+}
+type FinanceAccountInsert = Pick<FinanceAccountRow, 'account_name'> & Partial<FinanceAccountRow>
+
+export interface FinanceTransactionRow {
+  id: string
+  brand_id: string | null
+  account_id: string | null
+  counterparty_brand_id: string | null
+  transaction_date: string
+  direction: string
+  category: string
+  description: string
+  amount_ksh: number
+  payment_channel: string
+  reference: string
+  counterparty_name: string
+  owner_person: string
+  reconciliation_status: string
+  source_document_url: string
+  notes: string
+  created_at: string
+  updated_at: string
+}
+type FinanceTransactionInsert = Partial<FinanceTransactionRow>
+
+export interface FinanceInterbrandTransferRow {
+  id: string
+  from_brand_id: string | null
+  to_brand_id: string | null
+  from_account_id: string | null
+  to_account_id: string | null
+  transfer_date: string
+  amount_ksh: number
+  purpose: string
+  reference: string
+  status: string
+  recorded_by: string
+  notes: string
+  created_at: string
+  updated_at: string
+}
+type FinanceInterbrandTransferInsert = Partial<FinanceInterbrandTransferRow>
+
+export interface FinanceReconciliationBatchRow {
+  id: string
+  account_id: string | null
+  brand_id: string | null
+  period_start: string | null
+  period_end: string | null
+  statement_source: string
+  statement_reference: string
+  opening_balance_ksh: number | null
+  closing_balance_ksh: number | null
+  imported_count: number
+  matched_count: number
+  exception_count: number
+  status: string
+  reviewed_by: string
+  notes: string
+  created_at: string
+  updated_at: string
+}
+type FinanceReconciliationBatchInsert = Partial<FinanceReconciliationBatchRow>
+
+export interface FinanceReconciliationMatchRow {
+  id: string
+  batch_id: string | null
+  transaction_id: string | null
+  statement_date: string | null
+  statement_description: string
+  statement_amount_ksh: number
+  statement_reference: string
+  match_status: string
+  confidence: number | null
+  notes: string
+  created_at: string
+  updated_at: string
+}
+type FinanceReconciliationMatchInsert = Partial<FinanceReconciliationMatchRow>
+
+export interface FinanceExceptionRow {
+  id: string
+  brand_id: string | null
+  account_id: string | null
+  transaction_id: string | null
+  transfer_id: string | null
+  exception_type: string
+  severity: string
+  title: string
+  description: string
+  owner_id: string | null
+  status: string
+  due_date: string | null
+  resolution_notes: string
+  created_at: string
+  updated_at: string
+}
+type FinanceExceptionInsert = Pick<FinanceExceptionRow, 'title'> & Partial<FinanceExceptionRow>
+
 export interface NptCustomerRow {
   id: string
   full_name: string
@@ -1190,6 +1307,39 @@ export interface RayyanSchoolpayPaymentSnapshotRow {
 }
 type RayyanSchoolpayPaymentSnapshotInsert = Partial<RayyanSchoolpayPaymentSnapshotRow>
 
+export interface RayyanFeeInvoiceRow {
+  id: string
+  student_id: string | null
+  schoolpay_snapshot_id: string | null
+  schoolpay_code: string
+  fee_item: string
+  term: string
+  amount_expected_ksh: number
+  amount_paid_ksh: number
+  balance_ksh: number | null
+  status: string
+  due_date: string | null
+  notes: string
+  created_at: string
+  updated_at: string
+}
+type RayyanFeeInvoiceInsert = Partial<RayyanFeeInvoiceRow>
+
+export interface RayyanFeePaymentRow {
+  id: string
+  invoice_id: string | null
+  student_id: string | null
+  schoolpay_snapshot_id: string | null
+  amount_ksh: number
+  method: string
+  reference: string
+  paid_on: string
+  recorded_by: string
+  notes: string
+  created_at: string
+}
+type RayyanFeePaymentInsert = Partial<RayyanFeePaymentRow>
+
 export interface RayyanClassRow {
   id: string
   name: string
@@ -1277,6 +1427,39 @@ export interface RhythmsSchoolpayPaymentSnapshotRow {
   captured_at: string
 }
 type RhythmsSchoolpayPaymentSnapshotInsert = Partial<RhythmsSchoolpayPaymentSnapshotRow>
+
+export interface RhythmsFeeInvoiceRow {
+  id: string
+  student_id: string | null
+  schoolpay_snapshot_id: string | null
+  schoolpay_code: string
+  fee_item: string
+  term: string
+  amount_expected_ksh: number
+  amount_paid_ksh: number
+  balance_ksh: number | null
+  status: string
+  due_date: string | null
+  notes: string
+  created_at: string
+  updated_at: string
+}
+type RhythmsFeeInvoiceInsert = Partial<RhythmsFeeInvoiceRow>
+
+export interface RhythmsFeePaymentRow {
+  id: string
+  invoice_id: string | null
+  student_id: string | null
+  schoolpay_snapshot_id: string | null
+  amount_ksh: number
+  method: string
+  reference: string
+  paid_on: string
+  recorded_by: string
+  notes: string
+  created_at: string
+}
+type RhythmsFeePaymentInsert = Partial<RhythmsFeePaymentRow>
 
 // ─── Private personal/home tasks (migration 031) ──────────────────────────────
 export interface OcgPersonalTaskRow {
@@ -1623,6 +1806,12 @@ export interface Database {
       ocg_meetings: DbTable<OcgMeetingRow, OcgMeetingInsert, Partial<OcgMeetingRow>>
       ocg_decisions: DbTable<OcgDecisionRow, OcgDecisionInsert, Partial<OcgDecisionRow>>
       ocg_recurring_tasks: DbTable<OcgRecurringTaskRow, OcgRecurringTaskInsert, Partial<OcgRecurringTaskRow>>
+      finance_accounts: DbTable<FinanceAccountRow, FinanceAccountInsert, Partial<FinanceAccountRow>>
+      finance_transactions: DbTable<FinanceTransactionRow, FinanceTransactionInsert, Partial<FinanceTransactionRow>>
+      finance_interbrand_transfers: DbTable<FinanceInterbrandTransferRow, FinanceInterbrandTransferInsert, Partial<FinanceInterbrandTransferRow>>
+      finance_reconciliation_batches: DbTable<FinanceReconciliationBatchRow, FinanceReconciliationBatchInsert, Partial<FinanceReconciliationBatchRow>>
+      finance_reconciliation_matches: DbTable<FinanceReconciliationMatchRow, FinanceReconciliationMatchInsert, Partial<FinanceReconciliationMatchRow>>
+      finance_exceptions: DbTable<FinanceExceptionRow, FinanceExceptionInsert, Partial<FinanceExceptionRow>>
       npt_customers: DbTable<NptCustomerRow, NptCustomerInsert, Partial<NptCustomerRow>>
       npt_pianos: DbTable<NptPianoRow, NptPianoInsert, Partial<NptPianoRow>>
       npt_service_jobs: DbTable<NptServiceJobRow, NptServiceJobInsert, Partial<NptServiceJobRow>>
@@ -1639,12 +1828,16 @@ export interface Database {
       rayyan_fee_followups: DbTable<RayyanFeeFollowupRow, RayyanFeeFollowupInsert, Partial<RayyanFeeFollowupRow>>
       rayyan_schoolpay_import_batches: DbTable<RayyanSchoolpayImportBatchRow, RayyanSchoolpayImportBatchInsert, Partial<RayyanSchoolpayImportBatchRow>>
       rayyan_schoolpay_payment_snapshots: DbTable<RayyanSchoolpayPaymentSnapshotRow, RayyanSchoolpayPaymentSnapshotInsert, Partial<RayyanSchoolpayPaymentSnapshotRow>>
+      rayyan_fee_invoices: DbTable<RayyanFeeInvoiceRow, RayyanFeeInvoiceInsert, Partial<RayyanFeeInvoiceRow>>
+      rayyan_fee_payments: DbTable<RayyanFeePaymentRow, RayyanFeePaymentInsert, Partial<RayyanFeePaymentRow>>
       rayyan_classes: DbTable<RayyanClassRow, RayyanClassInsert, Partial<RayyanClassRow>>
       rayyan_attendance_notes: DbTable<RayyanAttendanceNoteRow, RayyanAttendanceNoteInsert, Partial<RayyanAttendanceNoteRow>>
       rayyan_admin_tasks: DbTable<RayyanAdminTaskRow, RayyanAdminTaskInsert, Partial<RayyanAdminTaskRow>>
       rhythms_students: DbTable<RhythmsStudentRow, RhythmsStudentInsert, Partial<RhythmsStudentRow>>
       rhythms_schoolpay_import_batches: DbTable<RhythmsSchoolpayImportBatchRow, RhythmsSchoolpayImportBatchInsert, Partial<RhythmsSchoolpayImportBatchRow>>
       rhythms_schoolpay_payment_snapshots: DbTable<RhythmsSchoolpayPaymentSnapshotRow, RhythmsSchoolpayPaymentSnapshotInsert, Partial<RhythmsSchoolpayPaymentSnapshotRow>>
+      rhythms_fee_invoices: DbTable<RhythmsFeeInvoiceRow, RhythmsFeeInvoiceInsert, Partial<RhythmsFeeInvoiceRow>>
+      rhythms_fee_payments: DbTable<RhythmsFeePaymentRow, RhythmsFeePaymentInsert, Partial<RhythmsFeePaymentRow>>
       rhythms_guardians: DbTable<RhythmsGuardianRow, RhythmsGuardianInsert, Partial<RhythmsGuardianRow>>
       rhythms_classes: DbTable<RhythmsClassRow, RhythmsClassInsert, Partial<RhythmsClassRow>>
       rhythms_admissions: DbTable<RhythmsAdmissionRow, RhythmsAdmissionInsert, Partial<RhythmsAdmissionRow>>

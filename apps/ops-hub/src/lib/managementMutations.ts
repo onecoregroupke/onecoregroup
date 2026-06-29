@@ -10,6 +10,12 @@ const TYPE_TABLE = {
   meeting: 'ocg_meetings',
   decision: 'ocg_decisions',
   recurring: 'ocg_recurring_tasks',
+  finance_account: 'finance_accounts',
+  finance_transaction: 'finance_transactions',
+  finance_transfer: 'finance_interbrand_transfers',
+  finance_reconciliation_batch: 'finance_reconciliation_batches',
+  finance_reconciliation_match: 'finance_reconciliation_matches',
+  finance_exception: 'finance_exceptions',
   npt_customer: 'npt_customers',
   npt_piano: 'npt_pianos',
   npt_job: 'npt_service_jobs',
@@ -23,6 +29,8 @@ const TYPE_TABLE = {
   rayyan_student: 'rayyan_students',
   rayyan_admission: 'rayyan_admissions',
   rayyan_fee_followup: 'rayyan_fee_followups',
+  rayyan_fee_invoice: 'rayyan_fee_invoices',
+  rayyan_fee_payment: 'rayyan_fee_payments',
   rayyan_class: 'rayyan_classes',
   rayyan_admin_task: 'rayyan_admin_tasks',
   rhythms_student: 'rhythms_students',
@@ -30,6 +38,8 @@ const TYPE_TABLE = {
   rhythms_class: 'rhythms_classes',
   rhythms_admission: 'rhythms_admissions',
   rhythms_fee_followup: 'rhythms_fee_followups',
+  rhythms_fee_invoice: 'rhythms_fee_invoices',
+  rhythms_fee_payment: 'rhythms_fee_payments',
   rhythms_admin_task: 'rhythms_admin_tasks',
   darul_guardian: 'darul_guardians',
   darul_class: 'darul_classes',
@@ -51,6 +61,12 @@ const ALLOWED_FIELDS: Record<MutationType, string[]> = {
   meeting: ['brand_id', 'title', 'meeting_date', 'attendees', 'notes', 'summary', 'created_by'],
   decision: ['brand_id', 'project_id', 'meeting_id', 'title', 'decision', 'owner_id', 'due_date', 'status'],
   recurring: ['brand_id', 'title', 'description', 'recurrence_rule', 'default_assignee_id', 'department', 'priority', 'next_run_at', 'is_active'],
+  finance_account: ['brand_id', 'account_name', 'account_type', 'provider', 'account_identifier', 'legal_owner', 'owner_person', 'business_use_notes', 'opening_balance_ksh', 'current_balance_ksh', 'reconciliation_status', 'is_active', 'notes'],
+  finance_transaction: ['brand_id', 'account_id', 'counterparty_brand_id', 'transaction_date', 'direction', 'category', 'description', 'amount_ksh', 'payment_channel', 'reference', 'counterparty_name', 'owner_person', 'reconciliation_status', 'source_document_url', 'notes'],
+  finance_transfer: ['from_brand_id', 'to_brand_id', 'from_account_id', 'to_account_id', 'transfer_date', 'amount_ksh', 'purpose', 'reference', 'status', 'recorded_by', 'notes'],
+  finance_reconciliation_batch: ['account_id', 'brand_id', 'period_start', 'period_end', 'statement_source', 'statement_reference', 'opening_balance_ksh', 'closing_balance_ksh', 'imported_count', 'matched_count', 'exception_count', 'status', 'reviewed_by', 'notes'],
+  finance_reconciliation_match: ['batch_id', 'transaction_id', 'statement_date', 'statement_description', 'statement_amount_ksh', 'statement_reference', 'match_status', 'confidence', 'notes'],
+  finance_exception: ['brand_id', 'account_id', 'transaction_id', 'transfer_id', 'exception_type', 'severity', 'title', 'description', 'owner_id', 'status', 'due_date', 'resolution_notes'],
   npt_customer: ['full_name', 'phone', 'email', 'location', 'area_estate', 'customer_type', 'lead_source', 'preferred_communication_channel', 'notes', 'last_contacted_at', 'next_follow_up_date', 'company_name', 'preferred_technician_id', 'referred_by', 'tax_exempt', 'tags'],
   npt_piano: ['customer_id', 'make', 'model', 'serial_number', 'piano_type', 'location', 'condition', 'last_tuning_date', 'last_repair_date', 'recommended_next_service_date', 'technician_notes', 'sales_status', 'tuning_interval_months', 'tags'],
   npt_contact: ['customer_id', 'name', 'phone', 'email', 'role', 'is_primary', 'is_billing', 'notes'],
@@ -64,6 +80,8 @@ const ALLOWED_FIELDS: Record<MutationType, string[]> = {
   rayyan_student: ['full_name', 'admission_number', 'schoolpay_code', 'class_level', 'guardian_id', 'enrollment_status', 'start_date', 'notes'],
   rayyan_admission: ['student_id', 'guardian_id', 'pipeline_status', 'source', 'tour_date', 'documents_status', 'schoolpay_status', 'next_follow_up_date', 'notes'],
   rayyan_fee_followup: ['student_id', 'schoolpay_code', 'expected_fee_item', 'follow_up_status', 'parent_contacted_date', 'last_known_fee_status', 'next_follow_up_date', 'notes'],
+  rayyan_fee_invoice: ['student_id', 'schoolpay_snapshot_id', 'schoolpay_code', 'fee_item', 'term', 'amount_expected_ksh', 'amount_paid_ksh', 'status', 'due_date', 'notes'],
+  rayyan_fee_payment: ['invoice_id', 'student_id', 'schoolpay_snapshot_id', 'amount_ksh', 'method', 'reference', 'paid_on', 'recorded_by', 'notes'],
   rayyan_class: ['name', 'level', 'teacher_id', 'notes', 'is_active'],
   rayyan_admin_task: ['student_id', 'guardian_id', 'ops_task_id', 'task_type', 'title', 'status', 'priority', 'due_date', 'notes'],
   rhythms_student: ['full_name', 'admission_number', 'schoolpay_code', 'programme', 'cohort', 'guardian_name', 'guardian_id', 'class_id', 'phone', 'email', 'enrollment_status', 'start_date', 'notes'],
@@ -71,6 +89,8 @@ const ALLOWED_FIELDS: Record<MutationType, string[]> = {
   rhythms_class: ['name', 'level', 'teacher_id', 'notes', 'is_active'],
   rhythms_admission: ['student_id', 'guardian_id', 'pipeline_status', 'source', 'tour_date', 'documents_status', 'schoolpay_status', 'next_follow_up_date', 'notes'],
   rhythms_fee_followup: ['student_id', 'schoolpay_code', 'expected_fee_item', 'follow_up_status', 'parent_contacted_date', 'last_known_fee_status', 'next_follow_up_date', 'notes'],
+  rhythms_fee_invoice: ['student_id', 'schoolpay_snapshot_id', 'schoolpay_code', 'fee_item', 'term', 'amount_expected_ksh', 'amount_paid_ksh', 'status', 'due_date', 'notes'],
+  rhythms_fee_payment: ['invoice_id', 'student_id', 'schoolpay_snapshot_id', 'amount_ksh', 'method', 'reference', 'paid_on', 'recorded_by', 'notes'],
   rhythms_admin_task: ['student_id', 'guardian_id', 'ops_task_id', 'task_type', 'title', 'status', 'priority', 'due_date', 'notes'],
   darul_guardian: ['full_name', 'phone', 'email', 'relationship_to_child', 'preferred_communication_channel', 'notes'],
   darul_class: ['name', 'level', 'teacher_id', 'notes', 'is_active'],
@@ -90,6 +110,8 @@ const REQUIRED_FIELD: Partial<Record<MutationType, string>> = {
   meeting: 'title',
   decision: 'title',
   recurring: 'title',
+  finance_account: 'account_name',
+  finance_exception: 'title',
   npt_customer: 'full_name',
   npt_reminder: 'title',
   npt_contact: 'name',
@@ -123,20 +145,32 @@ const UUID_FIELDS = new Set([
   'teacher_id',
   'meeting_id',
   'invoice_id',
+  'schoolpay_snapshot_id',
   'assessor_id',
   'preferred_technician_id',
   'appointment_id',
+  'account_id',
+  'counterparty_brand_id',
+  'from_brand_id',
+  'to_brand_id',
+  'from_account_id',
+  'to_account_id',
+  'batch_id',
+  'transaction_id',
+  'transfer_id',
 ])
 
 const NUMBER_FIELDS = new Set([
   'estimated_cost_ksh', 'final_cost_ksh', 'quote_amount_ksh', 'invoice_amount_ksh',
   'amount_expected_ksh', 'amount_paid_ksh', 'amount_ksh', 'hifz_juz_completed', 'juz_number',
   'temperature_c', 'humidity_pct', 'tuning_interval_months',
+  'opening_balance_ksh', 'current_balance_ksh', 'imported_count', 'matched_count', 'exception_count',
+  'closing_balance_ksh', 'statement_amount_ksh', 'confidence',
 ])
 
 const ARRAY_FIELDS = new Set(['attendees', 'required_tools', 'tags'])
 
-const BOOLEAN_FIELDS = new Set(['is_primary', 'is_billing', 'tax_exempt'])
+const BOOLEAN_FIELDS = new Set(['is_primary', 'is_billing', 'tax_exempt', 'is_active'])
 
 const TABLES_WITH_UPDATED_AT = new Set<TableName>([
   'ocg_approvals',
@@ -144,6 +178,12 @@ const TABLES_WITH_UPDATED_AT = new Set<TableName>([
   'ocg_meetings',
   'ocg_decisions',
   'ocg_recurring_tasks',
+  'finance_accounts',
+  'finance_transactions',
+  'finance_interbrand_transfers',
+  'finance_reconciliation_batches',
+  'finance_reconciliation_matches',
+  'finance_exceptions',
   'npt_customers',
   'npt_pianos',
   'npt_service_jobs',
@@ -155,6 +195,7 @@ const TABLES_WITH_UPDATED_AT = new Set<TableName>([
   'rayyan_students',
   'rayyan_admissions',
   'rayyan_fee_followups',
+  'rayyan_fee_invoices',
   'rayyan_classes',
   'rayyan_admin_tasks',
   'rhythms_students',
@@ -162,6 +203,7 @@ const TABLES_WITH_UPDATED_AT = new Set<TableName>([
   'rhythms_classes',
   'rhythms_admissions',
   'rhythms_fee_followups',
+  'rhythms_fee_invoices',
   'rhythms_admin_tasks',
   'darul_guardians',
   'darul_classes',
@@ -301,13 +343,50 @@ export async function completeNptJob(
  * invoice status (paid / partial / unpaid). SchoolPay is not used here.
  */
 export async function recordDarulFeePayment(values: Record<string, unknown>) {
+  return recordFeePayment({
+    values,
+    paymentType: 'darul_fee_payment',
+    invoiceTable: 'darul_fee_invoices',
+    paymentTable: 'darul_fee_payments',
+  })
+}
+
+export async function recordRayyanFeePayment(values: Record<string, unknown>) {
+  return recordFeePayment({
+    values,
+    paymentType: 'rayyan_fee_payment',
+    invoiceTable: 'rayyan_fee_invoices',
+    paymentTable: 'rayyan_fee_payments',
+  })
+}
+
+export async function recordRhythmsFeePayment(values: Record<string, unknown>) {
+  return recordFeePayment({
+    values,
+    paymentType: 'rhythms_fee_payment',
+    invoiceTable: 'rhythms_fee_invoices',
+    paymentTable: 'rhythms_fee_payments',
+  })
+}
+
+async function recordFeePayment({
+  values,
+  paymentType,
+  invoiceTable,
+  paymentTable,
+}: {
+  values: Record<string, unknown>
+  paymentType: MutationType
+  invoiceTable: TableName
+  paymentTable: TableName
+}) {
   const supabase = db()
-  const row = sanitizeValues('darul_fee_payment', values)
+  const row = sanitizeValues(paymentType, values)
   if (!row.invoice_id) throw new Error('invoice_id is required')
   if (row.amount_ksh == null || Number(row.amount_ksh) <= 0) throw new Error('amount_ksh must be greater than 0')
 
   const { data: invoice, error: invErr } = await supabase
-    .from('darul_fee_invoices')
+    .from(invoiceTable)
     .select('*')
     .eq('id', row.invoice_id as string)
     .single()
@@ -317,14 +396,14 @@ export async function recordDarulFeePayment(values: Record<string, unknown>) {
   if (!row.student_id && invoice.student_id) row.student_id = invoice.student_id
 
   const { data: payment, error: payErr } = await supabase
-    .from('darul_fee_payments')
+    .from(paymentTable)
     .insert(row)
     .select('*')
     .single()
   if (payErr) throw new Error(payErr.message)
 
   const { data: payments } = await supabase
-    .from('darul_fee_payments')
+    .from(paymentTable)
     .select('amount_ksh')
     .eq('invoice_id', row.invoice_id as string)
   const paid = (payments ?? []).reduce((sum, p) => sum + Number(p.amount_ksh ?? 0), 0)
@@ -332,7 +411,7 @@ export async function recordDarulFeePayment(values: Record<string, unknown>) {
   const status = paid <= 0 ? 'unpaid' : paid >= expected && expected > 0 ? 'paid' : 'partial'
 
   await supabase
-    .from('darul_fee_invoices')
+    .from(invoiceTable)
     .update({ amount_paid_ksh: paid, status, updated_at: nowIso() })
     .eq('id', row.invoice_id as string)
 

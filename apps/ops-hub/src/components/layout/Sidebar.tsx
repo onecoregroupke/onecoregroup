@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, ListTodo, FolderKanban, Building2, Bot,
   CheckSquare, Settings, LogOut, X, BriefcaseBusiness, Wrench, GraduationCap,
-  UsersRound, BookOpen, BookMarked, UserCog, CalendarCheck, Lock,
+  UsersRound, BookOpen, BookMarked, UserCog, CalendarCheck, Lock, Landmark,
 } from 'lucide-react'
 import { usePermissions } from '@/contexts/PermissionsContext'
 import type { SectionKey } from '@/lib/permissions'
@@ -23,6 +23,7 @@ export const OPS_BRANDS = [
 export const MAIN_NAV: { href: string; label: string; icon: React.ElementType; section: SectionKey | null }[] = [
   { href: '/',          label: 'Dashboard', icon: LayoutDashboard, section: 'ops' },
   { href: '/management', label: 'Management', icon: BriefcaseBusiness, section: 'management' },
+  { href: '/finance', label: 'Finance', icon: Landmark, section: 'finance' },
   { href: '/management/team', label: 'Team', icon: UsersRound, section: 'management' },
   { href: '/management/users', label: 'Portal Access', icon: UserCog, section: 'users' },
   { href: '/management/duties', label: 'Daily Duties', icon: CalendarCheck, section: 'management' },

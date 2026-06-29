@@ -4,13 +4,17 @@ import { RayyanActionPanel } from '@/components/rayyan/RayyanActionPanel'
 export const dynamic = 'force-dynamic'
 
 export default async function RayyanStudentsPage() {
-  const { students, guardians, team } = await getRayyanAdminData()
+  const { students, guardians, invoices, team } = await getRayyanAdminData()
   const guardianById = new Map(guardians.map((g) => [g.id, g.full_name]))
   return (
     <List title="Rayyan students" description="Student records, class level, enrollment state, and SchoolPay/admission references.">
       <RayyanActionPanel
         guardians={guardians.map((guardian) => ({ id: guardian.id, label: guardian.full_name }))}
         students={students.map((student) => ({ id: student.id, label: student.full_name }))}
+        invoices={invoices.map((invoice) => ({
+          id: invoice.id,
+          label: `${invoice.fee_item} ${invoice.term || ''} - KSh ${Number(invoice.balance_ksh ?? 0).toLocaleString()} due`,
+        }))}
         team={team.map((member) => ({ id: member.id, label: member.name }))}
       />
       <section className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm">

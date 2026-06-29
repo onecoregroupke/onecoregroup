@@ -12,7 +12,7 @@ export interface SectionDef {
  * Sections the Ops Hub gates on. Two keys cover the whole app:
  *   ops        — the task delivery system (dashboard, tasks, projects, clients)
  *   ops_agents — the agent run/config surface
- *   management / npt_service / rayyan_admin / rhythms_admin — narrower operational modules.
+ *   management / finance / npt_service / rayyan_admin / rhythms_admin — narrower operational modules.
  *     If unset for an existing user, they inherit the broader `ops` grant.
  * "My Tasks" is always visible to any signed-in user (it only ever shows
  * that person's own assigned work).
@@ -20,6 +20,7 @@ export interface SectionDef {
 export const SECTIONS: SectionDef[] = [
   { key: 'ops',        label: 'Ops',    href: '/' },
   { key: 'management', label: 'Management', href: '/management' },
+  { key: 'finance', label: 'Finance', href: '/finance' },
   { key: 'npt_service', label: 'NPT Service', href: '/npt' },
   { key: 'rayyan_admin', label: 'Rayyan Admin', href: '/rayyan' },
   { key: 'rhythms_admin', label: 'Rhythms Admin', href: '/rhythms' },
@@ -47,7 +48,7 @@ export function can(
   level: AccessLevel,
 ): boolean {
   if (permissions === null) return true // admin
-  const inheritedOpsSections: SectionKey[] = ['management', 'npt_service', 'rayyan_admin', 'rhythms_admin', 'darul_admin']
+  const inheritedOpsSections: SectionKey[] = ['management', 'finance', 'npt_service', 'rayyan_admin', 'rhythms_admin', 'darul_admin']
   const granted = permissions[section] ?? (inheritedOpsSections.includes(section) ? permissions.ops : undefined) ?? 'none'
   if (level === 'view') return granted === 'view' || granted === 'edit'
   if (level === 'edit') return granted === 'edit'

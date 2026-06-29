@@ -6,13 +6,15 @@ import { Plus } from 'lucide-react'
 import { api } from '@/lib/apiClient'
 
 type Option = { id: string; label: string }
-type Mode = 'guardian' | 'student' | 'admission' | 'class' | 'admin_task' | 'fee_followup'
+type Mode = 'guardian' | 'student' | 'admission' | 'class' | 'fee_invoice' | 'fee_payment' | 'admin_task' | 'fee_followup'
 
 const MODE_LABEL: Record<Mode, string> = {
   guardian: 'Parent / guardian',
   student: 'Student',
   admission: 'Admission',
   class: 'Class',
+  fee_invoice: 'Fee invoice',
+  fee_payment: 'Fee payment',
   admin_task: 'Admin task',
   fee_followup: 'Fee follow-up',
 }
@@ -20,10 +22,12 @@ const MODE_LABEL: Record<Mode, string> = {
 export function RayyanActionPanel({
   guardians,
   students,
+  invoices = [],
   team,
 }: {
   guardians: Option[]
   students: Option[]
+  invoices?: Option[]
   team: Option[]
 }) {
   const router = useRouter()
@@ -41,6 +45,10 @@ export function RayyanActionPanel({
     priority: 'Medium',
     follow_up_status: 'pending',
     task_type: 'admin',
+    fee_item: 'Tuition',
+    fee_status: 'unpaid',
+    method: 'mpesa',
+    paid_on: new Date().toISOString().slice(0, 10),
   })
 
   function set(name: string, value: string) {
@@ -75,6 +83,10 @@ export function RayyanActionPanel({
       priority: current.priority ?? 'Medium',
       follow_up_status: current.follow_up_status ?? 'pending',
       task_type: current.task_type ?? 'admin',
+      fee_item: current.fee_item ?? 'Tuition',
+      fee_status: current.fee_status ?? 'unpaid',
+      method: current.method ?? 'mpesa',
+      paid_on: new Date().toISOString().slice(0, 10),
     }))
     router.refresh()
   }
@@ -141,6 +153,31 @@ export function RayyanActionPanel({
         </div>
       )}
 
+      {mode === 'fee_invoice' && (
+        <div className="grid gap-3 lg:grid-cols-4">
+          <Field label="Student"><Select options={students} value={values.student_id ?? ''} onChange={(value) => set('student_id', value)} empty="No student" /></Field>
+          <Field label="SchoolPay code"><input className="input" value={values.schoolpay_code ?? ''} onChange={(event) => set('schoolpay_code', event.target.value)} /></Field>
+          <Field label="Fee item"><input className="input" value={values.fee_item ?? ''} onChange={(event) => set('fee_item', event.target.value)} /></Field>
+          <Field label="Term"><input className="input" value={values.term ?? ''} onChange={(event) => set('term', event.target.value)} /></Field>
+          <Field label="Expected KSh"><input type="number" min="0" className="input" value={values.amount_expected_ksh ?? ''} onChange={(event) => set('amount_expected_ksh', event.target.value)} /></Field>
+          <Field label="Already paid KSh"><input type="number" min="0" className="input" value={values.amount_paid_ksh ?? ''} onChange={(event) => set('amount_paid_ksh', event.target.value)} /></Field>
+          <Field label="Status"><input className="input" value={values.fee_status ?? ''} onChange={(event) => set('fee_status', event.target.value)} /></Field>
+          <Field label="Due date"><input type="date" className="input" value={values.due_date ?? ''} onChange={(event) => set('due_date', event.target.value)} /></Field>
+        </div>
+      )}
+
+      {mode === 'fee_payment' && (
+        <div className="grid gap-3 lg:grid-cols-4">
+          <Field label="Invoice"><Select options={invoices} value={values.invoice_id ?? ''} onChange={(value) => set('invoice_id', value)} empty="Choose invoice" /></Field>
+          <Field label="Student"><Select options={students} value={values.student_id ?? ''} onChange={(value) => set('student_id', value)} empty="Inherited from invoice" /></Field>
+          <Field label="Amount KSh"><input type="number" min="1" className="input" value={values.amount_ksh ?? ''} onChange={(event) => set('amount_ksh', event.target.value)} /></Field>
+          <Field label="Method"><input className="input" value={values.method ?? ''} onChange={(event) => set('method', event.target.value)} /></Field>
+          <Field label="Reference"><input className="input" value={values.reference ?? ''} onChange={(event) => set('reference', event.target.value)} /></Field>
+          <Field label="Paid on"><input type="date" className="input" value={values.paid_on ?? ''} onChange={(event) => set('paid_on', event.target.value)} /></Field>
+          <Field label="Recorded by"><input className="input" value={values.recorded_by ?? ''} onChange={(event) => set('recorded_by', event.target.value)} /></Field>
+        </div>
+      )}
+
       {mode === 'fee_followup' && (
         <div className="grid gap-3 lg:grid-cols-4">
           <Field label="Student"><Select options={students} value={values.student_id ?? ''} onChange={(value) => set('student_id', value)} empty="No student" /></Field>
@@ -184,6 +221,15 @@ function payloadForMode(mode: Mode, values: Record<string, string>) {
   if (mode === 'admin_task') {
     if (!values.title?.trim()) return { error: 'Task title is required.' }
     return { body: { type: 'rayyan_admin_task', values } }
+  }
+  if (mode === 'fee_invoice') {
+    if (!values.amount_expected_ksh?.trim()) return { error: 'Expected amount is required.' }
+    return { body: { type: 'rayyan_fee_invoice', values: { ...values, status: values.fee_status || 'unpaid' } } }
+  }
+  if (mode === 'fee_payment') {
+    if (!values.invoice_id) return { error: 'Invoice is required.' }
+    if (!values.amount_ksh?.trim()) return { error: 'Payment amount is required.' }
+    return { body: { type: 'rayyan_fee_payment', values } }
   }
   return { body: { type: 'rayyan_fee_followup', values } }
 }

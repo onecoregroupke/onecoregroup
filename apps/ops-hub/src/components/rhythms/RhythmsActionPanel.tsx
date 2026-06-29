@@ -6,13 +6,15 @@ import { Plus } from 'lucide-react'
 import { api } from '@/lib/apiClient'
 
 type Option = { id: string; label: string }
-type Mode = 'student' | 'guardian' | 'admission' | 'class' | 'fee_followup' | 'admin_task'
+type Mode = 'student' | 'guardian' | 'admission' | 'class' | 'fee_invoice' | 'fee_payment' | 'fee_followup' | 'admin_task'
 
 const MODE_LABEL: Record<Mode, string> = {
   student: 'Student',
   guardian: 'Parent / guardian',
   admission: 'Admission',
   class: 'Class',
+  fee_invoice: 'Fee invoice',
+  fee_payment: 'Fee payment',
   fee_followup: 'Fee follow-up',
   admin_task: 'Admin task',
 }
@@ -22,6 +24,8 @@ const MODE_TYPE: Record<Mode, string> = {
   guardian: 'rhythms_guardian',
   admission: 'rhythms_admission',
   class: 'rhythms_class',
+  fee_invoice: 'rhythms_fee_invoice',
+  fee_payment: 'rhythms_fee_payment',
   fee_followup: 'rhythms_fee_followup',
   admin_task: 'rhythms_admin_task',
 }
@@ -30,11 +34,13 @@ export function RhythmsActionPanel({
   guardians = [],
   students = [],
   classes = [],
+  invoices = [],
   team = [],
 }: {
   guardians?: Option[]
   students?: Option[]
   classes?: Option[]
+  invoices?: Option[]
   team?: Option[]
 }) {
   const router = useRouter()
@@ -51,6 +57,10 @@ export function RhythmsActionPanel({
     priority: 'Medium',
     follow_up_status: 'pending',
     task_type: 'admin',
+    fee_item: 'Tuition',
+    fee_status: 'unpaid',
+    method: 'mpesa',
+    paid_on: new Date().toISOString().slice(0, 10),
   })
 
   function set(name: string, value: string) {
@@ -61,6 +71,11 @@ export function RhythmsActionPanel({
     if (m === 'student' || m === 'guardian') return values.full_name?.trim() ? null : 'Name is required.'
     if (m === 'class') return values.name?.trim() ? null : 'Class name is required.'
     if (m === 'admin_task') return values.title?.trim() ? null : 'Task title is required.'
+    if (m === 'fee_invoice') return values.amount_expected_ksh?.trim() ? null : 'Expected amount is required.'
+    if (m === 'fee_payment') {
+      if (!values.invoice_id) return 'Invoice is required.'
+      return values.amount_ksh?.trim() ? null : 'Payment amount is required.'
+    }
     return null
   }
 
@@ -72,9 +87,10 @@ export function RhythmsActionPanel({
       return
     }
     setSaving(true)
+    const payloadValues = mode === 'fee_invoice' ? { ...values, status: values.fee_status || 'unpaid' } : values
     const { ok, data } = await api<{ error?: string }>('/api/rhythms', {
       method: 'POST',
-      body: JSON.stringify({ type: MODE_TYPE[mode], values }),
+      body: JSON.stringify({ type: MODE_TYPE[mode], values: payloadValues }),
     })
     setSaving(false)
     if (!ok) {
@@ -93,6 +109,10 @@ export function RhythmsActionPanel({
       task_type: current.task_type ?? 'admin',
       programme: current.programme ?? '',
       cohort: current.cohort ?? '',
+      fee_item: current.fee_item ?? 'Tuition',
+      fee_status: current.fee_status ?? 'unpaid',
+      method: current.method ?? 'mpesa',
+      paid_on: new Date().toISOString().slice(0, 10),
     }))
     router.refresh()
   }
@@ -160,6 +180,31 @@ export function RhythmsActionPanel({
           <Field label="Fee item"><input className="input" value={values.expected_fee_item ?? ''} onChange={(e) => set('expected_fee_item', e.target.value)} /></Field>
           <Field label="Next follow-up"><input type="date" className="input" value={values.next_follow_up_date ?? ''} onChange={(e) => set('next_follow_up_date', e.target.value)} /></Field>
           <Field label="Last known status"><input className="input" value={values.last_known_fee_status ?? ''} onChange={(e) => set('last_known_fee_status', e.target.value)} /></Field>
+        </div>
+      )}
+
+      {mode === 'fee_invoice' && (
+        <div className="grid gap-3 lg:grid-cols-4">
+          <Field label="Student"><Select options={students} value={values.student_id ?? ''} onChange={(v) => set('student_id', v)} empty="No student" /></Field>
+          <Field label="SchoolPay code"><input className="input" value={values.schoolpay_code ?? ''} onChange={(e) => set('schoolpay_code', e.target.value)} /></Field>
+          <Field label="Fee item"><input className="input" value={values.fee_item ?? ''} onChange={(e) => set('fee_item', e.target.value)} /></Field>
+          <Field label="Term"><input className="input" value={values.term ?? ''} onChange={(e) => set('term', e.target.value)} /></Field>
+          <Field label="Expected KSh"><input type="number" min="0" className="input" value={values.amount_expected_ksh ?? ''} onChange={(e) => set('amount_expected_ksh', e.target.value)} /></Field>
+          <Field label="Already paid KSh"><input type="number" min="0" className="input" value={values.amount_paid_ksh ?? ''} onChange={(e) => set('amount_paid_ksh', e.target.value)} /></Field>
+          <Field label="Status"><input className="input" value={values.fee_status ?? ''} onChange={(e) => set('fee_status', e.target.value)} /></Field>
+          <Field label="Due date"><input type="date" className="input" value={values.due_date ?? ''} onChange={(e) => set('due_date', e.target.value)} /></Field>
+        </div>
+      )}
+
+      {mode === 'fee_payment' && (
+        <div className="grid gap-3 lg:grid-cols-4">
+          <Field label="Invoice"><Select options={invoices} value={values.invoice_id ?? ''} onChange={(v) => set('invoice_id', v)} empty="Choose invoice" /></Field>
+          <Field label="Student"><Select options={students} value={values.student_id ?? ''} onChange={(v) => set('student_id', v)} empty="Inherited from invoice" /></Field>
+          <Field label="Amount KSh"><input type="number" min="1" className="input" value={values.amount_ksh ?? ''} onChange={(e) => set('amount_ksh', e.target.value)} /></Field>
+          <Field label="Method"><input className="input" value={values.method ?? ''} onChange={(e) => set('method', e.target.value)} /></Field>
+          <Field label="Reference"><input className="input" value={values.reference ?? ''} onChange={(e) => set('reference', e.target.value)} /></Field>
+          <Field label="Paid on"><input type="date" className="input" value={values.paid_on ?? ''} onChange={(e) => set('paid_on', e.target.value)} /></Field>
+          <Field label="Recorded by"><input className="input" value={values.recorded_by ?? ''} onChange={(e) => set('recorded_by', e.target.value)} /></Field>
         </div>
       )}
 

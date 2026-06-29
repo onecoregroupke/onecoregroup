@@ -16,7 +16,7 @@ const LINKS = [
 ] as const
 
 export default async function RhythmsAdminPage() {
-  const { students, batches, snapshots, guardians, admissions, feeFollowups, adminTasks, classes, team } = await getRhythmsAdminData()
+  const { students, batches, snapshots, invoices, guardians, admissions, feeFollowups, adminTasks, classes, team } = await getRhythmsAdminData()
   const enrolled = students.filter((s) => s.enrollment_status === 'enrolled' || s.enrollment_status === 'active')
   const totalExpected = snapshots.reduce((sum, s) => sum + Number(s.amount_expected_ksh ?? 0), 0)
   const balance = snapshots.reduce((sum, s) => sum + Number(s.balance_ksh ?? 0), 0)
@@ -29,7 +29,7 @@ export default async function RhythmsAdminPage() {
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-ocg-gold">Rhythms College</p>
         <h1 className="mt-1 text-2xl font-semibold text-gray-900">Rhythms Admin Layer</h1>
         <p className="mt-1 max-w-3xl text-sm text-gray-500">
-          Student records and SchoolPay reconciliation for Rhythms College. SchoolPay remains the payment source of truth.
+          Student records, manual fees, and SchoolPay reconciliation for Rhythms College.
         </p>
       </div>
 
@@ -37,6 +37,10 @@ export default async function RhythmsAdminPage() {
         guardians={guardians.map((g) => ({ id: g.id, label: g.full_name }))}
         students={students.map((s) => ({ id: s.id, label: s.full_name }))}
         classes={classes.map((c) => ({ id: c.id, label: c.name }))}
+        invoices={invoices.map((invoice) => ({
+          id: invoice.id,
+          label: `${invoice.fee_item} ${invoice.term || ''} - KSh ${Number(invoice.balance_ksh ?? 0).toLocaleString()} due`,
+        }))}
         team={team.map((m) => ({ id: m.id, label: m.name }))}
       />
 
@@ -65,7 +69,7 @@ export default async function RhythmsAdminPage() {
             <Mini label="Outstanding" value={balance} money tone="text-amber-600" />
           </div>
           <p className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-700">
-            Payments stay in SchoolPay. Use this area to track admissions, parent follow-ups, classes, and fee reconciliation.
+            Use this area to track admissions, parent follow-ups, classes, manual fees, and SchoolPay reconciliation.
           </p>
         </section>
       </div>

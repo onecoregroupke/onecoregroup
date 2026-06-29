@@ -16,7 +16,7 @@ const LINKS = [
 ] as const
 
 export default async function RayyanAdminPage() {
-  const { students, guardians, admissions, feeFollowups, adminTasks, snapshots, team } = await getRayyanAdminData()
+  const { students, guardians, admissions, feeFollowups, invoices, adminTasks, snapshots, team } = await getRayyanAdminData()
   const enrolled = students.filter((s) => s.enrollment_status === 'enrolled')
   const pendingAdmissions = admissions.filter((a) => !['Enrolled', 'Lost / inactive'].includes(a.pipeline_status))
   const openFees = feeFollowups.filter((f) => f.follow_up_status !== 'resolved')
@@ -28,13 +28,17 @@ export default async function RayyanAdminPage() {
         <h1 className="mt-1 text-2xl font-semibold text-gray-900">Rayyan Admin Layer</h1>
         <p className="mt-1 max-w-3xl text-sm text-gray-500">
           Admissions, parent follow-up, admin tasks, classes, and SchoolPay reconciliation support.
-          Payments are handled in SchoolPay; this system tracks internal admin status only.
+          Manual fees can be tracked here and reconciled against SchoolPay snapshots.
         </p>
       </div>
 
       <RayyanActionPanel
         guardians={guardians.map((guardian) => ({ id: guardian.id, label: guardian.full_name }))}
         students={students.map((student) => ({ id: student.id, label: student.full_name }))}
+        invoices={invoices.map((invoice) => ({
+          id: invoice.id,
+          label: `${invoice.fee_item} ${invoice.term || ''} - KSh ${Number(invoice.balance_ksh ?? 0).toLocaleString()} due`,
+        }))}
         team={team.map((member) => ({ id: member.id, label: member.name }))}
       />
 
