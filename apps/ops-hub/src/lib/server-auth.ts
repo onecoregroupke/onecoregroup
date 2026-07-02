@@ -1,5 +1,6 @@
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
+import { cache } from 'react'
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import type { Database, PermissionsMap, BrandAccessMap, SectionKey, AccessLevel } from '@ocg/db'
 import { db } from './serverClient'
@@ -118,13 +119,13 @@ export async function getSsrClient() {
 /** The verified actor for the current request, or null if not signed in.
  *  Revoked users (is_active = false) are treated as signed out — the revoke
  *  takes effect server-side immediately, not just at next client load. */
-export async function getActor(): Promise<Actor | null> {
+export const getActor = cache(async function getActor(): Promise<Actor | null> {
   const supabase = await getSsrClient()
   const { data, error } = await supabase.auth.getUser()
   if (error || !data.user) return null
   const actor = await loadActor({ id: data.user.id, email: data.user.email ?? null })
   return actor.isActive ? actor : null
-}
+})
 
 /** Require a signed-in actor; redirect to /login otherwise. */
 export async function requireActor(): Promise<Actor> {

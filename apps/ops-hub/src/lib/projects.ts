@@ -1,9 +1,10 @@
+import { cache } from 'react'
 import { db, mintId, nowIso } from './serverClient'
 import { resolveBrand } from './brands'
 import { getClient } from './clients'
 import type { OpsProjectRow } from '@ocg/db'
 
-export async function listProjects(filter?: {
+export const listProjects = cache(async function listProjects(filter?: {
   brandId?: string
   clientId?: string
   status?: string
@@ -14,7 +15,7 @@ export async function listProjects(filter?: {
   if (filter?.status) q = q.eq('status', filter.status)
   const { data } = await q
   return (data as OpsProjectRow[] | null) ?? []
-}
+})
 
 export async function getProject(projectId: string): Promise<OpsProjectRow | null> {
   const { data } = await db()

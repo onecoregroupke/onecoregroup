@@ -1,7 +1,8 @@
+import { cache } from 'react'
 import { db } from './serverClient'
 import type { Brand } from '@ocg/db'
 
-export async function listBrands(): Promise<Brand[]> {
+export const listBrands = cache(async function listBrands(): Promise<Brand[]> {
   const { data } = await db()
     .from('brands')
     .select('*')
@@ -9,7 +10,7 @@ export async function listBrands(): Promise<Brand[]> {
     .order('sort_order', { ascending: true })
     .order('name', { ascending: true })
   return (data as Brand[] | null) ?? []
-}
+})
 
 /** Resolve a brand by slug or UUID. Returns null if not found. */
 export async function resolveBrand(slugOrId: string): Promise<Brand | null> {
