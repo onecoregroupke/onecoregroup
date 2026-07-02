@@ -1,10 +1,11 @@
 import { NextResponse, type NextRequest } from 'next/server'
-import { requireUser } from '@/lib/api-auth'
+import { requireApiSection } from '@/lib/api-auth'
 import { listProjects, createProject } from '@/lib/projects'
 import { brandIdFromParam } from '@/lib/tasks'
 
 export async function GET(req: NextRequest) {
-  if (!(await requireUser(req))) return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 })
+  const gate = await requireApiSection(req, 'ops', 'view')
+  if (gate instanceof NextResponse) return gate
   const url = new URL(req.url)
   const brandId = await brandIdFromParam(url.searchParams.get('brand'))
   const projects = await listProjects({
@@ -16,8 +17,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const user = await requireUser(req)
-  if (!user) return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 })
+  const gate = await requireApiSection(req, 'ops', 'edit')
+  if (gate instanceof NextResponse) return gate
   try {
     const body = await req.json()
     if (!body?.project_name) {

@@ -1,5 +1,6 @@
 import { NptWorkspace } from '@/components/npt/NptWorkspace'
 import { getNptServiceData, safeRows } from '@/lib/management'
+import { requireSection } from '@/lib/server-auth'
 import type {
   NptAppointmentRow,
   NptContactRow,
@@ -10,6 +11,7 @@ import type {
 export const dynamic = 'force-dynamic'
 
 export default async function NptWorkspacePage() {
+  await requireSection('npt_service')
   const [base, contacts, appointments, measurements, events] = await Promise.all([
     getNptServiceData(),
     safeRows<NptContactRow>('npt_contacts', { limit: 500, order: 'created_at' }),

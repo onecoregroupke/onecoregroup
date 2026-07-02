@@ -31,6 +31,10 @@ export interface CreateProjectInput {
   brand?: string
   /** CLIENT-XXX (external work) */
   client_id?: string
+  /** PROJ-XXX — creates this project as a sub-project; inherits the parent's
+   *  brand/client when none is given. Parents must be top-level (one nesting
+   *  level: brand → project → sub-project → tasks). */
+  parent_project_id?: string
   service_line?: string
   notes?: string
   start_date?: string
@@ -60,9 +64,33 @@ export async function createProject(input: CreateProjectInput): Promise<OpsProje
   let brandId: string | null = null
   let brandSlug: string | null = null
   let clientName = ''
+  let clientId: string | null = input.client_id ?? null
+
+  // Sub-project: inherit the parent's brand/client so the hierarchy always
+  // stays inside one brand. Only one nesting level is allowed.
+  let parentId: string | null = null
+  if (input.parent_project_id) {
+    const parent = await getProject(input.parent_project_id)
+    if (!parent) throw new Error(`Unknown parent project: ${input.parent_project_id}`)
+    if (parent.parent_project_id) {
+      throw new Error('Sub-projects cannot have their own sub-projects (max one level).')
+    }
+    parentId = parent.project_id
+    brandId = parent.brand_id
+    clientId = clientId ?? parent.client_id
+    clientName = parent.client_name
+    if (parent.brand_id) {
+      const { data: parentBrand } = await supabase.from('brands').select('slug').eq('id', parent.brand_id).maybeSingle()
+      brandSlug = (parentBrand as { slug: string } | null)?.slug ?? null
+    }
+  }
+
   if (input.brand) {
     const brand = await resolveBrand(input.brand)
     if (!brand) throw new Error(`Unknown brand: ${input.brand}`)
+    if (parentId && brandId && brand.id !== brandId) {
+      throw new Error('A sub-project must stay in its parent project\'s brand.')
+    }
     brandId = brand.id
     brandSlug = brand.slug
     clientName = brand.name
@@ -72,7 +100,7 @@ export async function createProject(input: CreateProjectInput): Promise<OpsProje
     if (!client) throw new Error(`Unknown client: ${input.client_id}`)
     clientName = client.client_name
   }
-  if (!brandId && !input.client_id) {
+  if (!brandId && !clientId) {
     throw new Error('A project must belong to a brand or a client')
   }
 
@@ -81,8 +109,9 @@ export async function createProject(input: CreateProjectInput): Promise<OpsProje
     project_id: projectId,
     project_name: name,
     brand_id: brandId,
-    client_id: input.client_id ?? null,
+    client_id: clientId,
     client_name: clientName,
+    parent_project_id: parentId,
     service_line: input.service_line ?? '',
     status: 'Active',
     start_date: input.start_date ?? '',

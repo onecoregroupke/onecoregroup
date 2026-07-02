@@ -35,14 +35,23 @@ export async function getTask(taskId: string): Promise<OpsTaskRow | null> {
   return (data as OpsTaskRow | null) ?? null
 }
 
-/** Tasks assigned to one person, matched by exact name or first-name prefix. */
+/** Tasks assigned to exactly one person (case-insensitive exact name match).
+ *  Exact match (not first-name prefix) so two people who share a first name
+ *  never see each other's tasks, and avoids PostgREST filter injection. */
 export async function listTasksForAssignee(name: string): Promise<OpsTaskRow[]> {
+  if (!name.trim()) return []
   const { data } = await db()
     .from('ops_tasks')
     .select('*')
-    .or(`assigned_to.ilike.${name},assigned_to.ilike.${name.split(' ')[0]}%`)
+    .ilike('assigned_to', name.trim())
     .order('target_date', { ascending: true })
   return (data as OpsTaskRow[] | null) ?? []
+}
+
+/** Whether a task is assigned to the given person (case-insensitive exact). */
+export function isTaskAssignee(task: Pick<OpsTaskRow, 'assigned_to'>, name: string): boolean {
+  if (!name?.trim() || !task.assigned_to?.trim()) return false
+  return task.assigned_to.trim().toLowerCase() === name.trim().toLowerCase()
 }
 
 export interface CreateTaskInput {

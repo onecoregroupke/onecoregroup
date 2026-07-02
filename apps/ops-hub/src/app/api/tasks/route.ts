@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server'
-import { requireUser } from '@/lib/api-auth'
+import { getApiActor } from '@/lib/api-auth'
 import { listTasks, createTask, brandIdFromParam } from '@/lib/tasks'
 import { listTeam, lookupAssigneeEmail } from '@/lib/team'
 import { resolveBrand } from '@/lib/brands'
@@ -7,14 +7,20 @@ import { sendTaskAssignment } from '@/lib/email'
 import { completionUrl } from '@/lib/completion'
 
 export async function GET(req: NextRequest) {
-  if (!(await requireUser(req))) return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 })
+  const actor = await getApiActor(req)
+  if (!actor) return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 })
   const url = new URL(req.url)
   const brandId = await brandIdFromParam(url.searchParams.get('brand'))
+  // Non-super-admins are scoped to their own assigned tasks; the `assignee`
+  // query param is only honoured for users who may see all tasks.
+  const assignedTo = actor.isSuperAdmin
+    ? (url.searchParams.get('assignee') ?? undefined)
+    : actor.name
   const tasks = await listTasks({
     brandId,
     projectId: url.searchParams.get('project') ?? undefined,
     status: url.searchParams.get('status') ?? undefined,
-    assignedTo: url.searchParams.get('assignee') ?? undefined,
+    assignedTo,
     activeOnly: url.searchParams.get('active') === '1',
     limit: url.searchParams.get('limit') ? Number(url.searchParams.get('limit')) : undefined,
   })
@@ -22,8 +28,12 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const user = await requireUser(req)
-  if (!user) return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 })
+  const actor = await getApiActor(req)
+  if (!actor) return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 })
+  // Creating/assigning tasks is an editor action.
+  if (!actor.can('ops', 'edit') && !actor.isSuperAdmin) {
+    return NextResponse.json({ ok: false, error: 'forbidden' }, { status: 403 })
+  }
   try {
     const body = await req.json()
     if (!body?.task_name || !body?.project_id) {
@@ -32,7 +42,7 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       )
     }
-    const task = await createTask({ ...body, created_by: user.email ?? 'admin' })
+    const task = await createTask({ ...body, created_by: actor.email ?? 'admin' })
 
     // Best-effort assignment email (never blocks task creation).
     let emailNote: string | undefined

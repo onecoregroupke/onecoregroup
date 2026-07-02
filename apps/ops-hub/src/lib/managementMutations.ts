@@ -1,5 +1,5 @@
 import { db, nowIso } from './serverClient'
-import type { Database } from '@ocg/db'
+import type { Database, SectionKey } from '@ocg/db'
 
 type TableName = keyof Database['public']['Tables']
 type Json = Record<string, unknown>
@@ -54,6 +54,19 @@ const TYPE_TABLE = {
 } as const satisfies Record<string, TableName>
 
 export type MutationType = keyof typeof TYPE_TABLE
+
+/** The permission section that governs a managed-row mutation, derived from the
+ *  type prefix. Used by the /api/{management,finance,npt,rayyan,rhythms,darul}
+ *  routes to authorize each write against the correct module — so e.g. a
+ *  finance_* write requires `finance` edit regardless of which route received it. */
+export function sectionForMutationType(type: MutationType): SectionKey {
+  if (type.startsWith('finance_')) return 'finance'
+  if (type.startsWith('npt_')) return 'npt_service'
+  if (type.startsWith('rayyan_')) return 'rayyan_admin'
+  if (type.startsWith('rhythms_')) return 'rhythms_admin'
+  if (type.startsWith('darul_')) return 'darul_admin'
+  return 'management' // approval | blocker | meeting | decision | recurring
+}
 
 const ALLOWED_FIELDS: Record<MutationType, string[]> = {
   approval: ['brand_id', 'related_task_id', 'related_project_id', 'approval_type', 'title', 'description', 'requested_by', 'approver_id', 'status', 'priority', 'due_date', 'decision_notes'],

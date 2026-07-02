@@ -6,9 +6,9 @@ import {
   Shield, ShieldOff, Trash2, UserCheck, Users, X,
 } from 'lucide-react'
 import { getClient } from '@/lib/supabase'
-import { SECTIONS, USERS_SECTION, defaultPermissions } from '@/lib/permissions'
+import { SECTIONS, USERS_SECTION, ALL_TASKS_SECTION, BRAND_SCOPED_SECTIONS, defaultPermissions } from '@/lib/permissions'
 import { usePermissions } from '@/contexts/PermissionsContext'
-import type { PermissionsMap, AccessLevel, SectionKey } from '@/lib/permissions'
+import type { PermissionsMap, BrandAccessMap, AccessLevel, SectionKey } from '@/lib/permissions'
 
 type BrandOption = { id: string; label: string }
 
@@ -17,6 +17,7 @@ interface PortalUser {
   email: string
   display_name: string | null
   permissions: PermissionsMap | null // null = founding admin
+  brand_access: BrandAccessMap
   is_active: boolean
   is_admin: boolean
   email_confirmed_at: string | null
@@ -57,10 +58,12 @@ export function UsersAdmin({ brands }: { brands: BrandOption[] }) {
   const [inviteRole, setInviteRole] = useState('')
   const [inviteBrands, setInviteBrands] = useState<string[]>([])
   const [invitePerms, setInvitePerms] = useState<PermissionsMap>(defaultPermissions())
+  const [inviteBrandAccess, setInviteBrandAccess] = useState<BrandAccessMap>({})
   const [inviting, setInviting] = useState(false)
 
   // Editor state
   const [editPerms, setEditPerms] = useState<PermissionsMap>({})
+  const [editBrandAccess, setEditBrandAccess] = useState<BrandAccessMap>({})
   const [editName, setEditName] = useState('')
   const [editEmail, setEditEmail] = useState('')
 
@@ -90,6 +93,7 @@ export function UsersAdmin({ brands }: { brands: BrandOption[] }) {
   function selectUser(u: PortalUser) {
     setSelected(u)
     setEditPerms(u.permissions ?? {})
+    setEditBrandAccess(u.brand_access ?? {})
     setEditName(u.display_name ?? '')
     setEditEmail(u.email)
     setMessage(''); setError('')
@@ -107,12 +111,13 @@ export function UsersAdmin({ brands }: { brands: BrandOption[] }) {
           user_id: selected.id,
           display_name: editName,
           permissions: editPerms,
+          brand_access: editBrandAccess,
           ...(emailChanged ? { email: editEmail.trim() } : {}),
         }),
       })
       const json = await res.json() as { error?: string }
       if (!res.ok) throw new Error(json.error)
-      const updated: PortalUser = { ...selected, display_name: editName || null, permissions: editPerms, email: emailChanged ? editEmail.trim() : selected.email }
+      const updated: PortalUser = { ...selected, display_name: editName || null, permissions: editPerms, brand_access: editBrandAccess, email: emailChanged ? editEmail.trim() : selected.email }
       setUsers(prev => prev.map(u => u.id === updated.id ? updated : u))
       setSelected(updated)
       setMessage(emailChanged ? 'Saved. Email updated.' : 'Saved.')
@@ -192,14 +197,14 @@ export function UsersAdmin({ brands }: { brands: BrandOption[] }) {
         headers: await authHeaders(),
         body: JSON.stringify({
           email: inviteEmail, display_name: inviteName, role: inviteRole,
-          brand_ids: inviteBrands, permissions: invitePerms,
+          brand_ids: inviteBrands, permissions: invitePerms, brand_access: inviteBrandAccess,
         }),
       })
       const json = await res.json() as { user?: PortalUser; error?: string }
       if (!res.ok) throw new Error(json.error)
       setUsers(prev => [...prev, json.user!])
       setShowInvite(false)
-      setInviteEmail(''); setInviteName(''); setInviteRole(''); setInviteBrands([]); setInvitePerms(defaultPermissions())
+      setInviteEmail(''); setInviteName(''); setInviteRole(''); setInviteBrands([]); setInvitePerms(defaultPermissions()); setInviteBrandAccess({})
       setMessage(`Invite sent to ${json.user!.email}. They'll get an email to set their password and access their portal.`)
       selectUser(json.user!)
     } catch (e) {
@@ -294,6 +299,8 @@ export function UsersAdmin({ brands }: { brands: BrandOption[] }) {
                 <PermissionMatrix permissions={invitePerms} onChange={setInvitePerms} includeUsers={isAdmin} />
               </div>
 
+              <BrandScopeEditor permissions={invitePerms} brandAccess={inviteBrandAccess} onChange={setInviteBrandAccess} brands={brands} />
+
               <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
                 <button onClick={() => setShowInvite(false)} className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900">Cancel</button>
                 <button onClick={sendInvite} disabled={inviting || !inviteEmail.trim()} className="inline-flex items-center gap-2 rounded-lg bg-ocg-navy px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60">
@@ -387,6 +394,8 @@ export function UsersAdmin({ brands }: { brands: BrandOption[] }) {
                       <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-4">What they can access</p>
                       <PermissionMatrix permissions={editPerms} onChange={setEditPerms} includeUsers={isAdmin} readonly={!canEdit} />
                     </div>
+
+                    <BrandScopeEditor permissions={editPerms} brandAccess={editBrandAccess} onChange={setEditBrandAccess} brands={brands} readonly={!canEdit} />
                   </>
                 )}
 
@@ -429,13 +438,73 @@ function Label({ text, children }: { text: string; children: React.ReactNode }) 
   return <label className="block"><span className="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">{text}</span>{children}</label>
 }
 
+/**
+ * Per-brand restriction for the money & stock modules. Only shown for sections
+ * the user has been granted. No brand selected = unrestricted (all brands) —
+ * that is the "manager / full view" grant; selecting brands compartmentalizes
+ * the user to exactly those brands (e.g. a Glitz-only accountant).
+ */
+function BrandScopeEditor({ permissions, brandAccess, onChange, brands, readonly = false }: {
+  permissions: PermissionsMap
+  brandAccess: BrandAccessMap
+  onChange: (b: BrandAccessMap) => void
+  brands: BrandOption[]
+  readonly?: boolean
+}) {
+  const grantedSections = BRAND_SCOPED_SECTIONS.filter(
+    (s) => (permissions[s.key] ?? 'none') !== 'none',
+  )
+  if (grantedSections.length === 0 || brands.length === 0) return null
+
+  function toggle(section: SectionKey, brandId: string) {
+    const current = brandAccess[section] ?? []
+    const next = current.includes(brandId)
+      ? current.filter((b) => b !== brandId)
+      : [...current, brandId]
+    onChange({ ...brandAccess, [section]: next })
+  }
+
+  return (
+    <div>
+      <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Brand compartments (finance / stock)</p>
+      <p className="text-xs text-gray-400 mb-3">
+        Leave a row empty for the full cross-brand view (managers). Select brands to lock this
+        person to ONLY those brands&apos; records — they will never see the other brands&apos; money or stock.
+      </p>
+      <div className="rounded-xl border border-gray-100 overflow-hidden divide-y divide-gray-100">
+        {grantedSections.map((section) => {
+          const selected = brandAccess[section.key] ?? []
+          return (
+            <div key={section.key} className="px-4 py-3 bg-white">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-sm font-medium text-gray-800">{section.label}</p>
+                <span className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full ${selected.length === 0 ? 'bg-amber-50 text-amber-700' : 'bg-blue-50 text-blue-700'}`}>
+                  {selected.length === 0 ? 'All brands (full view)' : `${selected.length} brand${selected.length > 1 ? 's' : ''} only`}
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {brands.map((b) => (
+                  <button key={b.id} type="button" disabled={readonly} onClick={() => toggle(section.key, b.id)}
+                    className={`rounded-full px-3 py-1 text-xs font-medium border transition-colors ${selected.includes(b.id) ? 'bg-ocg-navy text-white border-ocg-navy' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'} ${readonly ? 'cursor-default opacity-70' : ''}`}>
+                    {b.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 function PermissionMatrix({ permissions, onChange, includeUsers = false, readonly = false }: {
   permissions: PermissionsMap
   onChange: (p: PermissionsMap) => void
   includeUsers?: boolean
   readonly?: boolean
 }) {
-  const sections = includeUsers ? [...SECTIONS, USERS_SECTION] : SECTIONS
+  const sections = includeUsers ? [...SECTIONS, ALL_TASKS_SECTION, USERS_SECTION] : SECTIONS
   return (
     <div className="rounded-xl border border-gray-100 overflow-hidden">
       <div className="grid grid-cols-[1fr_repeat(3,_auto)] bg-gray-50 border-b border-gray-100">

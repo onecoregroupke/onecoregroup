@@ -1,10 +1,12 @@
 import Link from 'next/link'
 import { activeTasks, getManagementData, isOverdue, workloadLabel } from '@/lib/management'
 import { TeamMemberCreateForm } from '@/components/team/TeamMemberCreateForm'
+import { requireSection } from '@/lib/server-auth'
 
 export const dynamic = 'force-dynamic'
 
 export default async function TeamWorkloadPage() {
+  await requireSection('management')
   const { team, tasks, brands, completions } = await getManagementData()
   const active = activeTasks(tasks)
   const brandById = new Map(brands.map((b) => [b.id, b]))

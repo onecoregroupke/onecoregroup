@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server'
-import { requireUser } from '@/lib/api-auth'
+import { getApiActor } from '@/lib/api-auth'
 import { getTask, setTaskStatus, updateTaskFields } from '@/lib/tasks'
 import { listTeam, lookupAssigneeEmail } from '@/lib/team'
 import { resolveBrand } from '@/lib/brands'
@@ -8,8 +8,13 @@ import { completionUrl } from '@/lib/completion'
 import { TASK_STATUSES } from '@/lib/taskStatuses'
 
 export async function POST(req: NextRequest) {
-  const user = await requireUser(req)
-  if (!user) return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 })
+  const actor = await getApiActor(req)
+  if (!actor) return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 })
+  // Bulk status/assignment changes (incl. reassigning others' tasks) are an
+  // editor/super-admin action.
+  if (!actor.can('ops', 'edit') && !actor.isSuperAdmin) {
+    return NextResponse.json({ ok: false, error: 'forbidden' }, { status: 403 })
+  }
 
   try {
     const body = await req.json()
@@ -35,7 +40,7 @@ export async function POST(req: NextRequest) {
       if (assignedTo) {
         task = await updateTaskFields(taskId, {
           assigned_to: assignedTo,
-          last_updated_by: user.email ?? 'admin',
+          last_updated_by: actor.email ?? 'admin',
           last_updated_date: new Date().toISOString(),
         })
         const to = lookupAssigneeEmail(team, assignedTo)
@@ -60,7 +65,7 @@ export async function POST(req: NextRequest) {
 
       if (status) {
         task = await setTaskStatus(taskId, status, {
-          by: user.email ?? 'admin',
+          by: actor.email ?? 'admin',
           note: assignedTo ? `Bulk updated. Assigned to ${assignedTo}.` : 'Bulk status update.',
         })
       }

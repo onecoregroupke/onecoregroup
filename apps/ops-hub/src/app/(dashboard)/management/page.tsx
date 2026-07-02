@@ -11,10 +11,12 @@ import {
 } from '@/components/management/DashboardCards'
 import { ManagementActionPanel } from '@/components/management/ManagementActionPanel'
 import { getManagementData } from '@/lib/management'
+import { requireSection } from '@/lib/server-auth'
 
 export const dynamic = 'force-dynamic'
 
 export default async function ManagementCockpitPage() {
+  await requireSection('management')
   const data = await getManagementData()
   const draftReady = data.tasks.filter((t) => t.current_status === 'AI Draft Ready')
   const recurringDue = data.recurring.filter((r) => r.is_active && r.next_run_at)

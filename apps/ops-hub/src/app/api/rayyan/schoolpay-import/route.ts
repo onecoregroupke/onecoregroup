@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server'
-import { requireUser } from '@/lib/api-auth'
+import { getApiActor } from '@/lib/api-auth'
 import { db } from '@/lib/serverClient'
 import type { RayyanStudentRow } from '@ocg/db'
 
@@ -15,8 +15,9 @@ const BALANCE_KEYS = ['balance_ksh', 'balance', 'outstanding', 'amount due']
 const STATUS_KEYS = ['payment_status', 'payment status', 'status']
 
 export async function POST(req: NextRequest) {
-  const user = await requireUser(req)
-  if (!user) return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 })
+  const actor = await getApiActor(req)
+  if (!actor) return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 })
+  if (!actor.can('rayyan_admin', 'edit')) return NextResponse.json({ ok: false, error: 'forbidden' }, { status: 403 })
 
   try {
     const body = await req.json()
@@ -36,7 +37,7 @@ export async function POST(req: NextRequest) {
       .from('rayyan_schoolpay_import_batches')
       .insert({
         source_label: body?.source_label || 'SchoolPay export',
-        imported_by: user.email || user.id,
+        imported_by: actor.email || actor.userId,
         row_count: rows.length,
         notes: body?.notes ?? '',
         metadata: { uploadedAt: new Date().toISOString() },

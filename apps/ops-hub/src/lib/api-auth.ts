@@ -1,11 +1,14 @@
-import type { NextRequest } from 'next/server'
+import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import type { Database } from '@ocg/db'
+import type { Database, SectionKey, AccessLevel } from '@ocg/db'
+import { loadActor, type Actor } from './server-auth'
 
 export interface AuthedUser {
   id: string
   email: string | null
 }
+
+export type { Actor }
 
 /**
  * Validate a Supabase Bearer token on an API request (same pattern as the
@@ -24,6 +27,41 @@ export async function requireUser(req: NextRequest): Promise<AuthedUser | null> 
   const { data, error } = await supabase.auth.getUser(token)
   if (error || !data.user) return null
   return { id: data.user.id, email: data.user.email ?? null }
+}
+
+/**
+ * Resolve the full authorization context (permissions, team name, super-admin
+ * status) for an API caller authenticated by Bearer token. Returns null if the
+ * token is missing/invalid. Mirrors the server-component `getActor()` so pages
+ * and APIs share one authorization model.
+ */
+export async function getApiActor(req: NextRequest): Promise<Actor | null> {
+  const user = await requireUser(req)
+  if (!user) return null
+  const actor = await loadActor(user)
+  // Revoked portal users lose API access immediately, even with a live token.
+  return actor.isActive ? actor : null
+}
+
+/**
+ * Gate an API route on a section permission. Returns the Actor on success, or a
+ * ready-to-return NextResponse (401/403) on failure:
+ *
+ *   const gate = await requireApiSection(req, 'rayyan_admin', 'edit')
+ *   if (gate instanceof NextResponse) return gate
+ *   const actor = gate
+ *
+ * Founding admins (permissions === null) pass every check via `can()`.
+ */
+export async function requireApiSection(
+  req: NextRequest,
+  section: SectionKey,
+  level: AccessLevel = 'view',
+): Promise<Actor | NextResponse> {
+  const actor = await getApiActor(req)
+  if (!actor) return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 })
+  if (!actor.can(section, level)) return NextResponse.json({ ok: false, error: 'forbidden' }, { status: 403 })
+  return actor
 }
 
 /**

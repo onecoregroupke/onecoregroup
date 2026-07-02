@@ -6,6 +6,7 @@ import {
   LayoutDashboard, ListTodo, FolderKanban, Building2, Bot,
   CheckSquare, Settings, LogOut, X, BriefcaseBusiness, Wrench, GraduationCap,
   UsersRound, BookOpen, BookMarked, UserCog, CalendarCheck, Lock, Landmark,
+  CalendarClock, MessagesSquare, Megaphone, Boxes, ShoppingCart,
 } from 'lucide-react'
 import { usePermissions } from '@/contexts/PermissionsContext'
 import type { SectionKey } from '@/lib/permissions'
@@ -23,12 +24,17 @@ export const OPS_BRANDS = [
 export const MAIN_NAV: { href: string; label: string; icon: React.ElementType; section: SectionKey | null }[] = [
   { href: '/',          label: 'Dashboard', icon: LayoutDashboard, section: 'ops' },
   { href: '/management', label: 'Management', icon: BriefcaseBusiness, section: 'management' },
+  { href: '/meetings', label: 'Meetings', icon: CalendarClock, section: 'meetings' },
   { href: '/finance', label: 'Finance', icon: Landmark, section: 'finance' },
+  { href: '/inventory', label: 'Inventory', icon: Boxes, section: 'inventory' },
+  { href: '/procurement', label: 'Procurement', icon: ShoppingCart, section: 'procurement' },
   { href: '/management/team', label: 'Team', icon: UsersRound, section: 'management' },
   { href: '/management/users', label: 'Portal Access', icon: UserCog, section: 'users' },
   { href: '/management/duties', label: 'Daily Duties', icon: CalendarCheck, section: 'management' },
   { href: '/personal',  label: 'Personal',  icon: Lock,            section: 'personal' },
   { href: '/my-tasks',  label: 'My Tasks',  icon: CheckSquare,     section: null },
+  { href: '/chat',      label: 'Chat',      icon: MessagesSquare,  section: null },
+  { href: '/forum',     label: 'Forum',     icon: Megaphone,       section: null },
   { href: '/tasks',     label: 'Tasks',     icon: ListTodo,        section: 'ops' },
   { href: '/projects',  label: 'Projects',  icon: FolderKanban,    section: 'ops' },
   { href: '/clients',   label: 'Clients',   icon: Building2,       section: 'ops' },

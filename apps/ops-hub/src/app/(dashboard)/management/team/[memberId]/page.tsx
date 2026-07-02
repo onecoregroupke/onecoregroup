@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { activeTasks, dueWithinDays, getManagementData, isOverdue, workloadLabel } from '@/lib/management'
 import { priorityTone, statusTone } from '@/lib/taskStatuses'
+import { requireSection } from '@/lib/server-auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -10,6 +11,7 @@ export default async function TeamMemberPage({
 }: {
   params: Promise<{ memberId: string }>
 }) {
+  await requireSection('management')
   const { memberId } = await params
   const data = await getManagementData()
   const member = data.team.find((m) => m.id === memberId)
@@ -30,8 +32,13 @@ export default async function TeamMemberPage({
         <Link href="/management/team" className="text-xs text-gray-400 hover:text-ocg-gold">← Team workload</Link>
         <h1 className="mt-1 text-2xl font-semibold text-gray-900">{member.name}</h1>
         <p className="mt-1 text-sm text-gray-500">
-          {member.role}{member.email ? ` · ${member.email}` : ''} · workload {workload}
+          {[member.job_title || member.role, member.department, member.email, member.phone]
+            .filter(Boolean)
+            .join(' · ')} · workload {workload}
         </p>
+        {member.start_date && (
+          <p className="mt-0.5 text-xs text-gray-400">With OCG since {member.start_date}</p>
+        )}
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">

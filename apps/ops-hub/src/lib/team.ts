@@ -77,6 +77,11 @@ export async function createTeamMember(input: {
   role?: string
   brand_ids?: string[]
   active?: boolean
+  phone?: string
+  job_title?: string
+  department?: string
+  start_date?: string | null
+  notes?: string
 }): Promise<OpsTeamMemberRow> {
   if (!input.name.trim()) throw new Error('name is required')
   const { data, error } = await db()
@@ -87,6 +92,11 @@ export async function createTeamMember(input: {
       role: input.role?.trim() || 'Team member',
       brand_ids: input.brand_ids ?? [],
       active: input.active ?? true,
+      phone: input.phone?.trim() ?? '',
+      job_title: input.job_title?.trim() ?? '',
+      department: input.department?.trim() ?? '',
+      start_date: input.start_date || null,
+      notes: input.notes ?? '',
     })
     .select('*')
     .single()

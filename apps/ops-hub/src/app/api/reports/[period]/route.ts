@@ -13,8 +13,10 @@ export async function GET(
   if (!(PERIODS as readonly string[]).includes(period)) {
     return NextResponse.json({ ok: false, error: 'period must be daily|weekly|monthly' }, { status: 400 })
   }
+  // Fail closed: without a configured CRON_SECRET this report endpoint stays
+  // locked rather than becoming world-callable (it sends stakeholder emails).
   const secret = process.env['CRON_SECRET']
-  if (secret && req.headers.get('authorization') !== `Bearer ${secret}`) {
+  if (!secret || req.headers.get('authorization') !== `Bearer ${secret}`) {
     return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 })
   }
   try {

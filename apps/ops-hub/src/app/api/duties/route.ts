@@ -1,9 +1,10 @@
 import { NextResponse, type NextRequest } from 'next/server'
-import { requireUser } from '@/lib/api-auth'
+import { requireApiSection } from '@/lib/api-auth'
 import { createDuty, updateDuty } from '@/lib/duties'
 
 export async function POST(req: NextRequest) {
-  if (!(await requireUser(req))) return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 })
+  const gate = await requireApiSection(req, 'management', 'edit')
+  if (gate instanceof NextResponse) return gate
   try {
     const body = await req.json()
     const row = await createDuty({
@@ -21,7 +22,8 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
-  if (!(await requireUser(req))) return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 })
+  const gate = await requireApiSection(req, 'management', 'edit')
+  if (gate instanceof NextResponse) return gate
   try {
     const body = await req.json()
     if (!body?.id) return NextResponse.json({ ok: false, error: 'id is required' }, { status: 400 })

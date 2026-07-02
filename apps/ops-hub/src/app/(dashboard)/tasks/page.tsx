@@ -4,6 +4,7 @@ import { listProjects } from '@/lib/projects'
 import { listBrands } from '@/lib/brands'
 import { listTeam } from '@/lib/team'
 import { TASK_STATUSES } from '@/lib/taskStatuses'
+import { requireSection } from '@/lib/server-auth'
 import { NewTaskButton } from '@/components/tasks/NewTaskButton'
 import { TaskBulkList } from '@/components/tasks/TaskBulkList'
 
@@ -14,14 +15,18 @@ export default async function TasksPage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>
 }) {
+  const actor = await requireSection('ops')
   const sp = await searchParams
   const brandId = await brandIdFromParam(sp.brand ?? null)
+  // Non-super-admins are scoped to their own tasks; the assignee filter is only
+  // honoured for those who may see all tasks.
+  const assignedTo = actor.isSuperAdmin ? sp.assignee : actor.name
   const [tasks, projects, brands, team] = await Promise.all([
     listTasks({
       brandId,
       projectId: sp.project,
       status: sp.status,
-      assignedTo: sp.assignee,
+      assignedTo,
       activeOnly: sp.active === '1',
       limit: 500,
     }),
@@ -30,6 +35,7 @@ export default async function TasksPage({
     listTeam(),
   ])
   const activeBrand = sp.brand ? brands.find((b) => b.slug === sp.brand) : null
+  const canEdit = actor.can('ops', 'edit')
 
   return (
     <div className="space-y-5">
@@ -40,10 +46,12 @@ export default async function TasksPage({
           </h1>
           <p className="text-sm text-gray-500">{tasks.length} shown</p>
         </div>
-        <NewTaskButton
-          projects={projects.map((p) => ({ id: p.project_id, name: p.project_name }))}
-          team={team.map((t) => t.name)}
-        />
+        {canEdit && (
+          <NewTaskButton
+            projects={projects.map((p) => ({ id: p.project_id, name: p.project_name }))}
+            team={team.map((t) => t.name)}
+          />
+        )}
       </div>
 
       {/* Brand filter chips */}
@@ -66,7 +74,7 @@ export default async function TasksPage({
         ))}
       </div>
 
-      <TaskBulkList tasks={tasks} brands={brands} team={team.map((t) => ({ id: t.id, name: t.name }))} />
+      <TaskBulkList tasks={tasks} brands={brands} team={team.map((t) => ({ id: t.id, name: t.name }))} canEdit={canEdit} />
     </div>
   )
 }

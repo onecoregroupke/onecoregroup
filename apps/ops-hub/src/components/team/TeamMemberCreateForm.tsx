@@ -12,7 +12,10 @@ export function TeamMemberCreateForm({ brands }: { brands: BrandOption[] }) {
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const [form, setForm] = useState({ name: '', email: '', role: '', brand_id: '' })
+  const [form, setForm] = useState({
+    name: '', email: '', role: '', brand_id: '',
+    phone: '', job_title: '', department: '', start_date: '',
+  })
 
   function set(name: keyof typeof form, value: string) {
     setForm((current) => ({ ...current, [name]: value }))
@@ -32,6 +35,10 @@ export function TeamMemberCreateForm({ brands }: { brands: BrandOption[] }) {
         email: form.email,
         role: form.role || 'Team member',
         brand_ids: form.brand_id ? [form.brand_id] : [],
+        phone: form.phone,
+        job_title: form.job_title,
+        department: form.department,
+        start_date: form.start_date || null,
       }),
     })
     setSaving(false)
@@ -39,7 +46,7 @@ export function TeamMemberCreateForm({ brands }: { brands: BrandOption[] }) {
       setError(data?.error ?? 'Failed to create team member.')
       return
     }
-    setForm({ name: '', email: '', role: '', brand_id: '' })
+    setForm({ name: '', email: '', role: '', brand_id: '', phone: '', job_title: '', department: '', start_date: '' })
     setOpen(false)
     router.refresh()
   }
@@ -79,6 +86,22 @@ export function TeamMemberCreateForm({ brands }: { brands: BrandOption[] }) {
               <option value="">All / shared</option>
               {brands.map((brand) => <option key={brand.id} value={brand.id}>{brand.label}</option>)}
             </select>
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-gray-500">Phone</span>
+            <input className="input" value={form.phone} onChange={(event) => set('phone', event.target.value)} placeholder="07xx xxx xxx" />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-gray-500">Job title</span>
+            <input className="input" value={form.job_title} onChange={(event) => set('job_title', event.target.value)} placeholder="Accountant, Storekeeper…" />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-gray-500">Department</span>
+            <input className="input" value={form.department} onChange={(event) => set('department', event.target.value)} placeholder="Finance, Operations, Academics…" />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-gray-500">Start date</span>
+            <input type="date" className="input" value={form.start_date} onChange={(event) => set('start_date', event.target.value)} />
           </label>
           <div className="flex items-end">
             <button

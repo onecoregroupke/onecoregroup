@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
-import { requireUser } from '@/lib/api-auth'
-import { setTaskStatus } from '@/lib/tasks'
+import { getApiActor } from '@/lib/api-auth'
+import { getTask, setTaskStatus, isTaskAssignee } from '@/lib/tasks'
 import { TASK_STATUSES } from '@/lib/taskStatuses'
 import { notifyMarketingOnApproval } from '@/lib/marketingSync'
 
@@ -8,8 +8,8 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ taskId: string }> },
 ) {
-  const user = await requireUser(req)
-  if (!user) return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 })
+  const actor = await getApiActor(req)
+  if (!actor) return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 })
   const { taskId } = await params
   try {
     const body = await req.json()
@@ -20,9 +20,15 @@ export async function POST(
         { status: 400 },
       )
     }
+    // Editors/super-admins may update any task; everyone else only their own.
+    const task0 = await getTask(taskId)
+    if (!task0) return NextResponse.json({ ok: false, error: 'not found' }, { status: 404 })
+    if (!actor.isSuperAdmin && !actor.can('ops', 'edit') && !isTaskAssignee(task0, actor.name)) {
+      return NextResponse.json({ ok: false, error: 'forbidden' }, { status: 403 })
+    }
     const task = await setTaskStatus(taskId, status, {
       note: body?.note,
-      by: user.email ?? 'admin',
+      by: actor.email ?? 'admin',
     })
     if (status === 'Approved') await notifyMarketingOnApproval(taskId)
     return NextResponse.json({ ok: true, task })

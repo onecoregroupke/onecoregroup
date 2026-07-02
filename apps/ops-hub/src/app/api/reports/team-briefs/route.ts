@@ -5,8 +5,10 @@ import { listTasksForAssignee } from '@/lib/tasks'
 import { isActiveStatus } from '@/lib/taskStatuses'
 
 export async function GET(req: NextRequest) {
+  // Fail closed: without a configured CRON_SECRET this endpoint stays locked
+  // rather than becoming world-callable.
   const secret = process.env['CRON_SECRET']
-  if (secret && req.headers.get('authorization') !== `Bearer ${secret}`) {
+  if (!secret || req.headers.get('authorization') !== `Bearer ${secret}`) {
     return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 })
   }
 

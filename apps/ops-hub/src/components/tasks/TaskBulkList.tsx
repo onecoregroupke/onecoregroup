@@ -14,10 +14,14 @@ export function TaskBulkList({
   tasks,
   brands,
   team,
+  canEdit = true,
 }: {
   tasks: OpsTaskRow[]
   brands: Brand[]
   team: TeamOption[]
+  /** When false, the bulk assign/status toolbar + row selection are hidden
+   *  (the server also rejects the bulk API for non-editors). */
+  canEdit?: boolean
 }) {
   const router = useRouter()
   const [query, setQuery] = useState('')
@@ -95,6 +99,7 @@ export function TaskBulkList({
 
   return (
     <section className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm">
+      {canEdit && (
       <div className="border-b border-gray-100 p-4">
         <div className="grid gap-3 lg:grid-cols-[1fr_auto_auto_auto] lg:items-end">
           <label className="block">
@@ -133,13 +138,14 @@ export function TaskBulkList({
         </div>
         {note && <p className="mt-3 text-sm text-gray-500">{note}</p>}
       </div>
+      )}
 
       {filtered.length === 0 ? (
         <p className="p-6 text-sm text-gray-500">No tasks match these filters.</p>
       ) : (
         <>
           <div className="hidden border-b border-gray-100 px-4 py-3 text-xs text-gray-500 md:flex md:items-center md:gap-3">
-            <input type="checkbox" checked={allShownSelected} onChange={toggleAll} aria-label="Select all shown tasks" />
+            {canEdit && <input type="checkbox" checked={allShownSelected} onChange={toggleAll} aria-label="Select all shown tasks" />}
             <span>{filtered.length} task{filtered.length === 1 ? '' : 's'} shown</span>
           </div>
           <div className="divide-y divide-gray-50">
@@ -147,11 +153,13 @@ export function TaskBulkList({
               const brand = task.brand_id ? brandById.get(task.brand_id) : undefined
               const checked = selected.includes(task.task_id)
               return (
-                <article key={task.task_id} className={`grid gap-3 p-4 transition-colors md:grid-cols-[auto_1.5fr_0.8fr_0.7fr_0.7fr_0.8fr] md:items-center ${checked ? 'bg-amber-50/50' : 'hover:bg-gray-50'}`}>
+                <article key={task.task_id} className={`grid gap-3 p-4 transition-colors md:items-center ${canEdit ? 'md:grid-cols-[auto_1.5fr_0.8fr_0.7fr_0.7fr_0.8fr]' : 'md:grid-cols-[1.5fr_0.8fr_0.7fr_0.7fr_0.8fr]'} ${checked ? 'bg-amber-50/50' : 'hover:bg-gray-50'}`}>
+                  {canEdit && (
                   <label className="flex items-center gap-3">
                     <input type="checkbox" checked={checked} onChange={() => toggle(task.task_id)} aria-label={`Select ${task.task_name}`} />
                     <span className="text-xs font-medium text-gray-400 md:hidden">Select</span>
                   </label>
+                  )}
                   <div className="min-w-0">
                     <Link href={`/tasks/${task.task_id}`} className="font-medium text-gray-900 hover:text-ocg-gold">
                       {task.task_name}

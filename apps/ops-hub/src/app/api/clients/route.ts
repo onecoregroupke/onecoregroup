@@ -1,16 +1,17 @@
 import { NextResponse, type NextRequest } from 'next/server'
-import { requireUser } from '@/lib/api-auth'
+import { requireApiSection } from '@/lib/api-auth'
 import { listClients, createClient } from '@/lib/clients'
 
 export async function GET(req: NextRequest) {
-  if (!(await requireUser(req))) return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 })
+  const gate = await requireApiSection(req, 'ops', 'view')
+  if (gate instanceof NextResponse) return gate
   const clients = await listClients()
   return NextResponse.json({ ok: true, clients })
 }
 
 export async function POST(req: NextRequest) {
-  const user = await requireUser(req)
-  if (!user) return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 })
+  const gate = await requireApiSection(req, 'ops', 'edit')
+  if (gate instanceof NextResponse) return gate
   try {
     const body = await req.json()
     if (!body?.client_name) {

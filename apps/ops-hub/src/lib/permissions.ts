@@ -1,6 +1,6 @@
-import type { SectionKey, AccessLevel, PermissionsMap } from '@ocg/db'
+import type { SectionKey, AccessLevel, PermissionsMap, BrandAccessMap } from '@ocg/db'
 
-export type { SectionKey, AccessLevel, PermissionsMap }
+export type { SectionKey, AccessLevel, PermissionsMap, BrandAccessMap }
 
 export interface SectionDef {
   key: SectionKey
@@ -14,13 +14,18 @@ export interface SectionDef {
  *   ops_agents — the agent run/config surface
  *   management / finance / npt_service / rayyan_admin / rhythms_admin — narrower operational modules.
  *     If unset for an existing user, they inherit the broader `ops` grant.
- * "My Tasks" is always visible to any signed-in user (it only ever shows
- * that person's own assigned work).
+ *   meetings — meeting notes + prep (inherits `management`, then `ops`).
+ *   inventory / procurement — stock + purchasing. NO inheritance: like money,
+ *     these require an explicit grant.
+ * "My Tasks", Chat, and the Forum are always visible to any signed-in user.
  */
 export const SECTIONS: SectionDef[] = [
   { key: 'ops',        label: 'Ops',    href: '/' },
   { key: 'management', label: 'Management', href: '/management' },
+  { key: 'meetings', label: 'Meetings', href: '/meetings' },
   { key: 'finance', label: 'Finance', href: '/finance' },
+  { key: 'inventory', label: 'Inventory', href: '/inventory' },
+  { key: 'procurement', label: 'Procurement', href: '/procurement' },
   { key: 'npt_service', label: 'NPT Service', href: '/npt' },
   { key: 'rayyan_admin', label: 'Rayyan Admin', href: '/rayyan' },
   { key: 'rhythms_admin', label: 'Rhythms Admin', href: '/rhythms' },
@@ -28,8 +33,42 @@ export const SECTIONS: SectionDef[] = [
   { key: 'ops_agents', label: 'Agents', href: '/agents' },
 ]
 
+/**
+ * Sections whose access can additionally be restricted to specific brands via
+ * `user_permissions.brand_access` (section → brand UUID array). An empty /
+ * missing list means "all brands". This is how a per-brand accountant or
+ * storekeeper is created: grant the section, then scope it to their brand.
+ */
+export const BRAND_SCOPED_SECTIONS: SectionDef[] = [
+  { key: 'finance', label: 'Finance', href: '/finance' },
+  { key: 'inventory', label: 'Inventory', href: '/inventory' },
+  { key: 'procurement', label: 'Procurement', href: '/procurement' },
+]
+
+/**
+ * The brand UUIDs a user may touch within a section, or null for no
+ * restriction. brandAccess === null → founding admin → unrestricted.
+ */
+export function allowedBrands(
+  brandAccess: BrandAccessMap | null,
+  section: SectionKey,
+): string[] | null {
+  if (brandAccess === null) return null
+  const list = brandAccess[section]
+  if (!Array.isArray(list) || list.length === 0) return null
+  return list
+}
+
 /** Section that controls who may manage portal users (admins only by default). */
 export const USERS_SECTION: SectionDef = { key: 'users', label: 'Manage portal users', href: '/management/users' }
+
+/**
+ * Cross-cutting grant: when set to 'view' (or 'edit'), the user may see EVERY
+ * team member's tasks (the "super admin" task view). Unset → a user only ever
+ * sees their own assigned tasks. The founding admin always has it implicitly.
+ * Deliberately NOT in `inheritedOpsSections` — `ops` access must not imply it.
+ */
+export const ALL_TASKS_SECTION: SectionDef = { key: 'all_tasks', label: "View all team members' tasks", href: '/tasks' }
 
 /** A blank permissions map with every Ops section set to 'none'. */
 export function defaultPermissions(): PermissionsMap {
@@ -48,9 +87,35 @@ export function can(
   level: AccessLevel,
 ): boolean {
   if (permissions === null) return true // admin
-  const inheritedOpsSections: SectionKey[] = ['management', 'finance', 'npt_service', 'rayyan_admin', 'rhythms_admin', 'darul_admin']
-  const granted = permissions[section] ?? (inheritedOpsSections.includes(section) ? permissions.ops : undefined) ?? 'none'
+  // Unset module keys fall back to broader grants so existing users keep
+  // working. inventory/procurement deliberately have NO fallback — like
+  // finance-by-brand, they must be granted explicitly.
+  const fallbacks: Partial<Record<SectionKey, SectionKey[]>> = {
+    management: ['ops'],
+    finance: ['ops'],
+    npt_service: ['ops'],
+    rayyan_admin: ['ops'],
+    rhythms_admin: ['ops'],
+    darul_admin: ['ops'],
+    meetings: ['management', 'ops'],
+  }
+  let granted = permissions[section]
+  if (granted === undefined) {
+    for (const fb of fallbacks[section] ?? []) {
+      if (permissions[fb] !== undefined) { granted = permissions[fb]; break }
+    }
+  }
+  granted = granted ?? 'none'
   if (level === 'view') return granted === 'view' || granted === 'edit'
   if (level === 'edit') return granted === 'edit'
   return false
+}
+
+/**
+ * Whether this user may see every team member's tasks (the "super admin" task
+ * scope). True for the founding admin (permissions === null) or anyone granted
+ * the `all_tasks` section. Everyone else is scoped to their own assigned tasks.
+ */
+export function canSeeAllTasks(permissions: PermissionsMap | null): boolean {
+  return permissions === null || can(permissions, 'all_tasks', 'view')
 }

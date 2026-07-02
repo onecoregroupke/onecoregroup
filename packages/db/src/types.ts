@@ -3,17 +3,26 @@ export type SectionKey =
   | 'dashboard' | 'input' | 'compliance' | 'properties'
   | 'glitz' | 'npt' | 'reports' | 'brands' | 'users' | 'marketing'
   | 'ops' | 'ops_agents' | 'management' | 'finance' | 'npt_service' | 'rayyan_admin' | 'rhythms_admin'
-  | 'darul_admin' | 'personal'
+  | 'darul_admin' | 'personal' | 'all_tasks'
+  | 'meetings' | 'inventory' | 'procurement'
 
 export type AccessLevel = 'none' | 'view' | 'edit'
 
 export type PermissionsMap = Partial<Record<SectionKey, AccessLevel>>
+
+/**
+ * Per-section brand restriction: section → array of brand UUIDs the user is
+ * limited to. Missing key or empty array = no brand restriction. Used to make
+ * e.g. a finance user who only ever sees one brand's money.
+ */
+export type BrandAccessMap = Partial<Record<SectionKey, string[]>>
 
 export interface UserPermission {
   id: string
   user_id: string
   display_name: string | null
   permissions: PermissionsMap
+  brand_access: BrandAccessMap
   is_active: boolean
   created_at: string
   updated_at: string
@@ -643,6 +652,7 @@ export interface OpsProjectRow {
   notes: string
   drive_folder_id: string | null
   folder_status: string
+  parent_project_id: string | null
   created_at: string
   updated_at: string
 }
@@ -655,6 +665,11 @@ export interface OpsTeamMemberRow {
   role: string
   brand_ids: string[]
   active: boolean
+  phone: string
+  job_title: string
+  department: string
+  start_date: string | null
+  notes: string
   created_at: string
 }
 type OpsTeamMemberInsert = Pick<OpsTeamMemberRow, 'name'> & Partial<OpsTeamMemberRow>
@@ -890,10 +905,33 @@ export interface OcgMeetingRow {
   notes: string
   summary: string
   created_by: string
+  project_id: string | null
+  status: string
+  location: string
+  agenda: string
+  series_key: string
+  prep_brief: string
+  prep_generated_at: string | null
   created_at: string
   updated_at: string
 }
 type OcgMeetingInsert = Pick<OcgMeetingRow, 'title'> & Partial<OcgMeetingRow>
+
+export interface OcgMeetingActionItemRow {
+  id: string
+  meeting_id: string
+  brand_id: string | null
+  description: string
+  owner: string
+  due_date: string | null
+  status: string
+  ops_task_id: string | null
+  notes: string
+  created_at: string
+  updated_at: string
+}
+type OcgMeetingActionItemInsert = Pick<OcgMeetingActionItemRow, 'meeting_id' | 'description'> &
+  Partial<OcgMeetingActionItemRow>
 
 export interface OcgDecisionRow {
   id: string
@@ -964,10 +1002,26 @@ export interface FinanceTransactionRow {
   reconciliation_status: string
   source_document_url: string
   notes: string
+  votehead_id: string | null
+  balance_after_ksh: number | null
+  recorded_by: string
   created_at: string
   updated_at: string
 }
 type FinanceTransactionInsert = Partial<FinanceTransactionRow>
+
+export interface FinanceVoteheadRow {
+  id: string
+  brand_id: string
+  name: string
+  kind: string
+  description: string
+  is_active: boolean
+  sort_order: number
+  created_at: string
+  updated_at: string
+}
+type FinanceVoteheadInsert = Pick<FinanceVoteheadRow, 'brand_id' | 'name'> & Partial<FinanceVoteheadRow>
 
 export interface FinanceInterbrandTransferRow {
   id: string
@@ -1744,6 +1798,163 @@ export interface DarulAdminTaskRow {
 }
 type DarulAdminTaskInsert = Pick<DarulAdminTaskRow, 'title'> & Partial<DarulAdminTaskRow>
 
+// ─── Inventory (migration 035) ────────────────────────────────────────────────
+export interface InventoryItemRow {
+  id: string
+  brand_id: string
+  name: string
+  sku: string
+  category: string
+  unit: string
+  quantity: number
+  unit_value_ksh: number
+  reorder_level: number
+  location: string
+  notes: string
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+type InventoryItemInsert = Pick<InventoryItemRow, 'brand_id' | 'name'> & Partial<InventoryItemRow>
+
+export interface InventoryMovementRow {
+  id: string
+  item_id: string
+  brand_id: string | null
+  direction: string
+  quantity: number
+  unit_value_ksh: number
+  movement_date: string
+  reason: string
+  reference: string
+  source: string
+  purchase_id: string | null
+  quantity_after: number | null
+  recorded_by: string
+  notes: string
+  created_at: string
+}
+type InventoryMovementInsert = Pick<InventoryMovementRow, 'item_id'> & Partial<InventoryMovementRow>
+
+// ─── Procurement (migration 035) ─────────────────────────────────────────────
+export interface ProcurementVendorRow {
+  id: string
+  name: string
+  contact_person: string
+  phone: string
+  email: string
+  brand_id: string | null
+  payment_terms: string
+  notes: string
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+type ProcurementVendorInsert = Pick<ProcurementVendorRow, 'name'> & Partial<ProcurementVendorRow>
+
+export interface ProcurementPurchaseRow {
+  id: string
+  brand_id: string
+  vendor_id: string | null
+  purchase_date: string
+  reference: string
+  receipt_url: string
+  status: string
+  payment_status: string
+  total_cost_ksh: number
+  finance_transaction_id: string | null
+  received_at: string | null
+  recorded_by: string
+  notes: string
+  created_at: string
+  updated_at: string
+}
+type ProcurementPurchaseInsert = Pick<ProcurementPurchaseRow, 'brand_id'> & Partial<ProcurementPurchaseRow>
+
+export interface ProcurementPurchaseItemRow {
+  id: string
+  purchase_id: string
+  inventory_item_id: string | null
+  description: string
+  quantity: number
+  unit: string
+  unit_cost_ksh: number
+  created_at: string
+}
+type ProcurementPurchaseItemInsert = Pick<ProcurementPurchaseItemRow, 'purchase_id' | 'description'> &
+  Partial<ProcurementPurchaseItemRow>
+
+// ─── Chat + forum (migration 035) ────────────────────────────────────────────
+export interface OcgConversationRow {
+  id: string
+  type: string
+  name: string
+  created_by: string
+  last_message_at: string
+  created_at: string
+  updated_at: string
+}
+type OcgConversationInsert = Partial<OcgConversationRow>
+
+export interface OcgConversationMemberRow {
+  id: string
+  conversation_id: string
+  member_email: string
+  member_name: string
+  last_read_at: string | null
+  joined_at: string
+}
+type OcgConversationMemberInsert = Pick<OcgConversationMemberRow, 'conversation_id' | 'member_email'> &
+  Partial<OcgConversationMemberRow>
+
+export interface OcgMessageRow {
+  id: string
+  conversation_id: string
+  sender_email: string
+  sender_name: string
+  body: string
+  created_at: string
+}
+type OcgMessageInsert = Pick<OcgMessageRow, 'conversation_id' | 'sender_email' | 'body'> &
+  Partial<OcgMessageRow>
+
+export interface OcgForumPostRow {
+  id: string
+  author_email: string
+  author_name: string
+  title: string
+  body: string
+  category: string
+  pinned: boolean
+  created_at: string
+  updated_at: string
+}
+type OcgForumPostInsert = Pick<OcgForumPostRow, 'title'> & Partial<OcgForumPostRow>
+
+export interface OcgForumReplyRow {
+  id: string
+  post_id: string
+  author_email: string
+  author_name: string
+  body: string
+  created_at: string
+}
+type OcgForumReplyInsert = Pick<OcgForumReplyRow, 'post_id' | 'body'> & Partial<OcgForumReplyRow>
+
+// ─── Day close (migration 035) ───────────────────────────────────────────────
+export interface OcgDayCloseRow {
+  id: string
+  close_date: string
+  status: string
+  closed_by: string
+  summary: Record<string, unknown>
+  narrative: string
+  report_sent: boolean
+  notes: string
+  created_at: string
+}
+type OcgDayCloseInsert = Pick<OcgDayCloseRow, 'close_date'> & Partial<OcgDayCloseRow>
+
 type DbTable<Row, Insert, Update> = {
   Row: Row & Record<string, unknown>
   Insert: Insert & Record<string, unknown>
@@ -1806,6 +2017,19 @@ export interface Database {
       ocg_meetings: DbTable<OcgMeetingRow, OcgMeetingInsert, Partial<OcgMeetingRow>>
       ocg_decisions: DbTable<OcgDecisionRow, OcgDecisionInsert, Partial<OcgDecisionRow>>
       ocg_recurring_tasks: DbTable<OcgRecurringTaskRow, OcgRecurringTaskInsert, Partial<OcgRecurringTaskRow>>
+      ocg_meeting_action_items: DbTable<OcgMeetingActionItemRow, OcgMeetingActionItemInsert, Partial<OcgMeetingActionItemRow>>
+      ocg_conversations: DbTable<OcgConversationRow, OcgConversationInsert, Partial<OcgConversationRow>>
+      ocg_conversation_members: DbTable<OcgConversationMemberRow, OcgConversationMemberInsert, Partial<OcgConversationMemberRow>>
+      ocg_messages: DbTable<OcgMessageRow, OcgMessageInsert, Partial<OcgMessageRow>>
+      ocg_forum_posts: DbTable<OcgForumPostRow, OcgForumPostInsert, Partial<OcgForumPostRow>>
+      ocg_forum_replies: DbTable<OcgForumReplyRow, OcgForumReplyInsert, Partial<OcgForumReplyRow>>
+      ocg_day_closes: DbTable<OcgDayCloseRow, OcgDayCloseInsert, Partial<OcgDayCloseRow>>
+      inventory_items: DbTable<InventoryItemRow, InventoryItemInsert, Partial<InventoryItemRow>>
+      inventory_movements: DbTable<InventoryMovementRow, InventoryMovementInsert, Partial<InventoryMovementRow>>
+      procurement_vendors: DbTable<ProcurementVendorRow, ProcurementVendorInsert, Partial<ProcurementVendorRow>>
+      procurement_purchases: DbTable<ProcurementPurchaseRow, ProcurementPurchaseInsert, Partial<ProcurementPurchaseRow>>
+      procurement_purchase_items: DbTable<ProcurementPurchaseItemRow, ProcurementPurchaseItemInsert, Partial<ProcurementPurchaseItemRow>>
+      finance_voteheads: DbTable<FinanceVoteheadRow, FinanceVoteheadInsert, Partial<FinanceVoteheadRow>>
       finance_accounts: DbTable<FinanceAccountRow, FinanceAccountInsert, Partial<FinanceAccountRow>>
       finance_transactions: DbTable<FinanceTransactionRow, FinanceTransactionInsert, Partial<FinanceTransactionRow>>
       finance_interbrand_transfers: DbTable<FinanceInterbrandTransferRow, FinanceInterbrandTransferInsert, Partial<FinanceInterbrandTransferRow>>

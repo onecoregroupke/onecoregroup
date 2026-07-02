@@ -1,18 +1,23 @@
 import { NextResponse, type NextRequest } from 'next/server'
-import { requireUser } from '@/lib/api-auth'
+import { getApiActor } from '@/lib/api-auth'
 import {
   insertManagedRow,
   updateManagedRow,
   recordDarulFeePayment,
+  sectionForMutationType,
   type MutationType,
 } from '@/lib/managementMutations'
 
 // Recording a fee payment is special-cased so it can roll up into its invoice.
 export async function POST(req: NextRequest) {
-  if (!(await requireUser(req))) return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 })
+  const actor = await getApiActor(req)
+  if (!actor) return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 })
   try {
     const body = await req.json()
     const type = body?.type as MutationType
+    if (!actor.can(sectionForMutationType(type), 'edit')) {
+      return NextResponse.json({ ok: false, error: 'forbidden' }, { status: 403 })
+    }
     const values = body?.values ?? {}
     const row = type === 'darul_fee_payment'
       ? await recordDarulFeePayment(values)
@@ -24,10 +29,15 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
-  if (!(await requireUser(req))) return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 })
+  const actor = await getApiActor(req)
+  if (!actor) return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 })
   try {
     const body = await req.json()
-    const row = await updateManagedRow(body?.type as MutationType, body?.id, body?.values ?? {})
+    const type = body?.type as MutationType
+    if (!actor.can(sectionForMutationType(type), 'edit')) {
+      return NextResponse.json({ ok: false, error: 'forbidden' }, { status: 403 })
+    }
+    const row = await updateManagedRow(type, body?.id, body?.values ?? {})
     return NextResponse.json({ ok: true, row })
   } catch (e) {
     return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 400 })

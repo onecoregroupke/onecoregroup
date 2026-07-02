@@ -2,10 +2,12 @@ import { listTeam } from '@/lib/team'
 import { listDuties, listDutyLogsForDate } from '@/lib/duties'
 import { todayInEat } from '@/lib/serverClient'
 import { DutySetupForm } from '@/components/duties/DutySetupForm'
+import { requireSection } from '@/lib/server-auth'
 
 export const dynamic = 'force-dynamic'
 
 export default async function DailyDutiesPage() {
+  await requireSection('management')
   const today = todayInEat()
   const [team, duties, logs] = await Promise.all([listTeam(), listDuties({ activeOnly: true }), listDutyLogsForDate(today)])
   const memberById = new Map(team.map((m) => [m.id, m]))

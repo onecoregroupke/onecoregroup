@@ -1,9 +1,11 @@
 import { listClients } from '@/lib/clients'
 import { NewClientButton } from '@/components/clients/NewClientButton'
+import { requireSection } from '@/lib/server-auth'
 
 export const dynamic = 'force-dynamic'
 
 export default async function ClientsPage() {
+  await requireSection('ops')
   const clients = await listClients()
 
   return (

@@ -8,19 +8,23 @@ import { api } from '@/lib/apiClient'
 export function NewProjectButton({
   brands,
   clients,
+  parents = [],
 }: {
   brands: { slug: string; name: string }[]
   clients: { id: string; name: string }[]
+  /** Top-level projects that can host a sub-project. */
+  parents?: { id: string; name: string }[]
 }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const [owner, setOwner] = useState<'brand' | 'client'>('brand')
+  const [owner, setOwner] = useState<'brand' | 'client' | 'sub'>('brand')
   const [form, setForm] = useState({
     project_name: '',
     brand: brands[0]?.slug ?? '',
     client_id: clients[0]?.id ?? '',
+    parent_project_id: parents[0]?.id ?? '',
     service_line: '',
     notes: '',
   })
@@ -32,10 +36,13 @@ export function NewProjectButton({
   async function submit() {
     setError('')
     if (!form.project_name) return setError('Project name is required.')
+    if (owner === 'sub' && !form.parent_project_id) return setError('Choose the parent project.')
     const payload =
       owner === 'brand'
         ? { project_name: form.project_name, brand: form.brand, service_line: form.service_line, notes: form.notes }
-        : { project_name: form.project_name, client_id: form.client_id, service_line: form.service_line, notes: form.notes }
+        : owner === 'client'
+        ? { project_name: form.project_name, client_id: form.client_id, service_line: form.service_line, notes: form.notes }
+        : { project_name: form.project_name, parent_project_id: form.parent_project_id, service_line: form.service_line, notes: form.notes }
     setSaving(true)
     const { ok, data } = await api<{ error?: string }>('/api/projects', {
       method: 'POST',
@@ -79,6 +86,12 @@ export function NewProjectButton({
                   onClick={() => setOwner('client')}
                   className={`flex-1 rounded-lg border px-3 py-1.5 ${owner === 'client' ? 'border-ocg-navy bg-ocg-navy text-white' : 'border-gray-200 text-gray-600'}`}
                 >External client</button>
+                {parents.length > 0 && (
+                  <button
+                    onClick={() => setOwner('sub')}
+                    className={`flex-1 rounded-lg border px-3 py-1.5 ${owner === 'sub' ? 'border-ocg-navy bg-ocg-navy text-white' : 'border-gray-200 text-gray-600'}`}
+                  >Sub-project</button>
+                )}
               </div>
 
               {owner === 'brand' ? (
@@ -88,13 +101,21 @@ export function NewProjectButton({
                     {brands.map((b) => <option key={b.slug} value={b.slug}>{b.name}</option>)}
                   </select>
                 </div>
-              ) : (
+              ) : owner === 'client' ? (
                 <div>
                   <label className="mb-1 block text-xs font-medium text-gray-500">Client</label>
                   <select className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm" value={form.client_id} onChange={(e) => set('client_id', e.target.value)}>
                     {clients.length === 0 && <option value="">No clients yet</option>}
                     {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
+                </div>
+              ) : (
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-500">Parent project</label>
+                  <select className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm" value={form.parent_project_id} onChange={(e) => set('parent_project_id', e.target.value)}>
+                    {parents.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                  <p className="mt-1 text-[11px] text-gray-400">Inherits the parent&apos;s brand. Tasks can then be created inside this sub-project.</p>
                 </div>
               )}
 

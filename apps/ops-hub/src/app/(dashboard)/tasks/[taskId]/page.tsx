@@ -1,10 +1,11 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { getTask, listTaskComments } from '@/lib/tasks'
+import { getTask, listTaskComments, isTaskAssignee } from '@/lib/tasks'
 import { getProjectContext } from '@/lib/projects'
 import { resolveBrand } from '@/lib/brands'
 import { db } from '@/lib/serverClient'
 import { statusTone, priorityTone } from '@/lib/taskStatuses'
+import { requireSection } from '@/lib/server-auth'
 import { TaskControls } from '@/components/tasks/TaskControls'
 import type { OpsAgentArtifactRow, OpsCompletionRecordRow } from '@ocg/db'
 
@@ -15,9 +16,12 @@ export default async function TaskDetail({
 }: {
   params: Promise<{ taskId: string }>
 }) {
+  const actor = await requireSection('ops')
   const { taskId } = await params
   const task = await getTask(taskId)
   if (!task) notFound()
+  // A user may only open a task they're assigned to, unless they can see all tasks.
+  if (!actor.isSuperAdmin && !isTaskAssignee(task, actor.name)) notFound()
 
   const [context, brand, artifactsRes, completionRes, comments] = await Promise.all([
     getProjectContext(task.project_id),

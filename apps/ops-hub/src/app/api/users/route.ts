@@ -1,5 +1,5 @@
 import { createServerClient } from '@ocg/db/client'
-import type { PermissionsMap } from '@ocg/db'
+import type { PermissionsMap, BrandAccessMap } from '@ocg/db'
 import { buildCallbackUrl, hubUrl, sendInviteEmail, sendRecoveryEmail } from '@/lib/auth-emails'
 import { upsertTeamMemberByEmail, deactivateTeamMemberByEmail } from '@/lib/team'
 
@@ -9,6 +9,7 @@ type PermRow = {
   user_id: string
   display_name: string | null
   permissions: PermissionsMap
+  brand_access?: BrandAccessMap | null
   is_active: boolean
   created_at: string
   updated_at: string
@@ -51,6 +52,7 @@ export async function GET(req: Request) {
     email: u.email ?? '',
     display_name: permsMap[u.id]?.display_name ?? null,
     permissions: permsMap[u.id]?.permissions ?? null, // null = founding admin
+    brand_access: permsMap[u.id]?.brand_access ?? {},
     is_active: permsMap[u.id]?.is_active ?? true,
     is_admin: !permsMap[u.id],
     email_confirmed_at: u.email_confirmed_at ?? null, // accepted invite
@@ -72,6 +74,7 @@ export async function POST(req: Request) {
     user_id?: string
     display_name?: string
     permissions?: PermissionsMap
+    brand_access?: BrandAccessMap
     brand_ids?: string[]
     role?: string
   }
@@ -138,6 +141,7 @@ export async function POST(req: Request) {
       user_id: userId,
       display_name: body.display_name?.trim() || null,
       permissions: body.permissions ?? {},
+      brand_access: body.brand_access ?? {},
       is_active: true,
     })
     .select()
@@ -176,6 +180,7 @@ export async function PATCH(req: Request) {
     user_id: string
     display_name?: string
     permissions?: PermissionsMap
+    brand_access?: BrandAccessMap
     is_active?: boolean
     email?: string
   }
@@ -192,6 +197,7 @@ export async function PATCH(req: Request) {
   const updates: Record<string, unknown> = {}
   if (body.display_name !== undefined) updates.display_name = body.display_name?.trim() || null
   if (body.permissions !== undefined) updates.permissions = body.permissions
+  if (body.brand_access !== undefined) updates.brand_access = body.brand_access
   if (body.is_active !== undefined) updates.is_active = body.is_active
 
   if (Object.keys(updates).length > 0) {

@@ -4,14 +4,17 @@ import { listProjects } from '@/lib/projects'
 import { listBrands } from '@/lib/brands'
 import { statusTone, priorityTone, isActiveStatus } from '@/lib/taskStatuses'
 import { todayInEat } from '@/lib/serverClient'
+import { requireSection } from '@/lib/server-auth'
+import { DayCloseCard } from '@/components/dayclose/DayCloseCard'
 import type { OpsTaskRow, Brand } from '@ocg/db'
 
 export const dynamic = 'force-dynamic'
 
-async function getData() {
+async function getData(assignedTo?: string) {
   try {
     const [tasks, projects, brands] = await Promise.all([
-      listTasks({ limit: 500 }),
+      // Non-super-admins only ever see their own tasks in these aggregates.
+      listTasks({ limit: 500, assignedTo }),
       listProjects(),
       listBrands(),
     ])
@@ -22,7 +25,8 @@ async function getData() {
 }
 
 export default async function OpsDashboard() {
-  const { tasks, projects, brands } = await getData()
+  const actor = await requireSection('ops')
+  const { tasks, projects, brands } = await getData(actor.isSuperAdmin ? undefined : actor.name)
   const today = todayInEat()
 
   const active = tasks.filter((t) => t.active === 'Yes' && isActiveStatus(t.current_status))
@@ -52,6 +56,8 @@ export default async function OpsDashboard() {
           {brands.length} brands · {projects.length} projects · {active.length} active tasks
         </p>
       </div>
+
+      {actor.can('management', 'edit') && <DayCloseCard />}
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Stat label="Active tasks" value={active.length} href="/tasks?active=1" />

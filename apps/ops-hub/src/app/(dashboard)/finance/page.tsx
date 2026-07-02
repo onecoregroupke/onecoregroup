@@ -1,8 +1,10 @@
 import Link from 'next/link'
-import { ArrowUpRight, Banknote, Building2, CheckCircle2, CircleAlert, Landmark, ListChecks, ListTodo, ReceiptText, Repeat2 } from 'lucide-react'
+import { ArrowUpRight, Banknote, BookOpenCheck, Building2, CheckCircle2, CircleAlert, Landmark, ListChecks, ListTodo, ReceiptText, Repeat2 } from 'lucide-react'
 import { FinanceActionPanel } from '@/components/finance/FinanceActionPanel'
+import { MoneyForms } from '@/components/finance/MoneyForms'
 import { getFinanceData, isOverdue } from '@/lib/management'
-import { isActiveStatus } from '@/lib/taskStatuses'
+import { listVoteheads, scopeBrands, scopeByBrand } from '@/lib/finance'
+import { requireSection } from '@/lib/server-auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,13 +23,41 @@ type MoneyRow = {
 }
 
 export default async function FinancePage() {
-  const data = await getFinanceData()
+  // The layout already gates on `finance` view; we re-resolve the actor here
+  // to apply their per-brand compartment to every dataset on the page.
+  const actor = await requireSection('finance')
+  const allowed = actor.allowedBrandIds('finance')
+  const canEdit = actor.can('finance', 'edit')
+
+  const [data, voteheads] = await Promise.all([getFinanceData(), listVoteheads(allowed)])
+
+  // ── Brand compartment: scoped users only ever see their brands' records ──
+  const brands = scopeBrands(data.brands, allowed)
+  const brandIds = new Set(brands.map((b) => b.id))
+  const slugAllowed = (slug: string) => allowed === null || brands.some((b) => b.slug === slug)
+  const accounts = allowed === null
+    ? data.finance.accounts
+    : data.finance.accounts.filter((a) => a.brand_id !== null && brandIds.has(a.brand_id))
+  const transactions = scopeByBrand(data.finance.transactions, allowed)
+  const transfers = allowed === null
+    ? data.finance.transfers
+    : data.finance.transfers.filter(
+        (t) => (t.from_brand_id && brandIds.has(t.from_brand_id)) || (t.to_brand_id && brandIds.has(t.to_brand_id)),
+      )
+  const exceptions = scopeByBrand(data.finance.exceptions, allowed)
+  const batches = scopeByBrand(data.finance.batches, allowed)
+  const financeTasks = allowed === null
+    ? data.tasks
+    : data.tasks.filter((t) => t.brand_id !== null && brandIds.has(t.brand_id))
+
   const brandById = new Map(data.brands.map((brand) => [brand.id, brand]))
-  const accountById = new Map(data.finance.accounts.map((account) => [account.id, account]))
+  const accountById = new Map(accounts.map((account) => [account.id, account]))
+  const voteheadById = new Map(voteheads.map((v) => [v.id, v]))
+
   const rows: MoneyRow[] = [
-    schoolRow('Darul Swafa', '/darul/fees', data.darul.invoices, data.darul.payments),
-    schoolRow('Ar-Rayyan Playhouse', '/rayyan/schoolpay', data.rayyan.invoices, data.rayyan.payments, data.rayyan.snapshots),
-    schoolRow('Rhythms College', '/rhythms/schoolpay', data.rhythms.invoices, data.rhythms.payments, data.rhythms.snapshots),
+    ...(slugAllowed('darul-swafa') ? [schoolRow('Darul Swafa', '/darul/fees', data.darul.invoices, data.darul.payments)] : []),
+    ...(slugAllowed('ar-rayyan-playhouse') ? [schoolRow('Ar-Rayyan Playhouse', '/rayyan/schoolpay', data.rayyan.invoices, data.rayyan.payments, data.rayyan.snapshots)] : []),
+    ...(slugAllowed('rhythms-college') ? [schoolRow('Rhythms College', '/rhythms/schoolpay', data.rhythms.invoices, data.rhythms.payments, data.rhythms.snapshots)] : []),
   ]
   const totals = rows.reduce((acc, row) => ({
     expected: acc.expected + row.manualExpected,
@@ -35,36 +65,40 @@ export default async function FinancePage() {
     balance: acc.balance + row.manualBalance,
     schoolpayBalance: acc.schoolpayBalance + Number(row.schoolpayBalance ?? 0),
   }), { expected: 0, paid: 0, balance: 0, schoolpayBalance: 0 })
-  const nptInvoiceTotal = data.npt.invoices.reduce((sum, invoice) => sum + Number(invoice.invoice_amount_ksh ?? 0), 0)
-  const nptOpen = data.npt.invoices.filter((invoice) => invoice.record_type === 'invoice' && invoice.payment_status !== 'paid')
-  const activeFinanceTasks = data.tasks.filter((task) => task.active === 'Yes' && isActiveStatus(task.current_status))
-  const overdueTasks = activeFinanceTasks.filter((task) => isOverdue(task.target_date))
-  const inflow = data.finance.transactions.filter((tx) => tx.direction === 'inflow').reduce((sum, tx) => sum + Number(tx.amount_ksh ?? 0), 0)
-  const outflow = data.finance.transactions.filter((tx) => tx.direction === 'outflow').reduce((sum, tx) => sum + Number(tx.amount_ksh ?? 0), 0)
-  const pendingTransfers = data.finance.transfers.filter((transfer) => !['reconciled', 'cleared', 'closed'].includes(transfer.status.toLowerCase()))
-  const openExceptions = data.finance.exceptions.filter((item) => !['resolved', 'closed'].includes(item.status.toLowerCase()))
-  const openBatches = data.finance.batches.filter((batch) => !['closed', 'reconciled'].includes(batch.status.toLowerCase()))
-  const personalAccounts = data.finance.accounts.filter((account) => account.legal_owner === 'personal' || ['nelson', 'fatma'].includes(account.owner_person.toLowerCase()))
-  const brandSummaries = data.brands.map((brand) => {
-    const tx = data.finance.transactions.filter((item) => item.brand_id === brand.id)
+  const showNpt = slugAllowed('nairobi-piano-technicians')
+  const nptInvoiceTotal = showNpt ? data.npt.invoices.reduce((sum, invoice) => sum + Number(invoice.invoice_amount_ksh ?? 0), 0) : 0
+  const nptOpen = showNpt ? data.npt.invoices.filter((invoice) => invoice.record_type === 'invoice' && invoice.payment_status !== 'paid') : []
+  const inflow = transactions.filter((tx) => tx.direction === 'inflow').reduce((sum, tx) => sum + Number(tx.amount_ksh ?? 0), 0)
+  const outflow = transactions.filter((tx) => tx.direction === 'outflow').reduce((sum, tx) => sum + Number(tx.amount_ksh ?? 0), 0)
+  const pendingTransfers = transfers.filter((transfer) => !['reconciled', 'cleared', 'closed'].includes(transfer.status.toLowerCase()))
+  const openExceptions = exceptions.filter((item) => !['resolved', 'closed'].includes(item.status.toLowerCase()))
+  const openBatches = batches.filter((batch) => !['closed', 'reconciled'].includes(batch.status.toLowerCase()))
+  const brandSummaries = brands.map((brand) => {
+    const tx = transactions.filter((item) => item.brand_id === brand.id)
     const brandIn = tx.filter((item) => item.direction === 'inflow' || item.direction === 'transfer_in').reduce((sum, item) => sum + Number(item.amount_ksh ?? 0), 0)
     const brandOut = tx.filter((item) => item.direction === 'outflow' || item.direction === 'transfer_out').reduce((sum, item) => sum + Number(item.amount_ksh ?? 0), 0)
-    const transfersOut = data.finance.transfers.filter((item) => item.from_brand_id === brand.id).reduce((sum, item) => sum + Number(item.amount_ksh ?? 0), 0)
-    const transfersIn = data.finance.transfers.filter((item) => item.to_brand_id === brand.id).reduce((sum, item) => sum + Number(item.amount_ksh ?? 0), 0)
+    const transfersOut = transfers.filter((item) => item.from_brand_id === brand.id).reduce((sum, item) => sum + Number(item.amount_ksh ?? 0), 0)
+    const transfersIn = transfers.filter((item) => item.to_brand_id === brand.id).reduce((sum, item) => sum + Number(item.amount_ksh ?? 0), 0)
     return { brand, inflow: brandIn, outflow: brandOut, transfersIn, transfersOut, net: brandIn + transfersIn - brandOut - transfersOut }
   })
 
-  const brandOptions = data.brands.map((brand) => ({ id: brand.id, label: brand.short_name || brand.name }))
-  const accountOptions = data.finance.accounts.map((account) => ({
+  const brandOptions = brands.map((brand) => ({ id: brand.id, label: brand.short_name || brand.name }))
+  const accountOptions = accounts.map((account) => ({
     id: account.id,
     brandId: account.brand_id,
     label: `${account.account_name}${account.owner_person ? ` · ${account.owner_person}` : ''}`,
   }))
-  const transactionOptions = data.finance.transactions.slice(0, 200).map((tx) => ({
+  const transactionOptions = transactions.slice(0, 200).map((tx) => ({
     id: tx.id,
     label: `${tx.transaction_date} · KSh ${Number(tx.amount_ksh ?? 0).toLocaleString()} · ${tx.description || tx.reference}`,
   }))
   const teamOptions = data.team.map((member) => ({ id: member.id, label: member.name }))
+  const voteheadOptions = voteheads.map((v) => ({ id: v.id, brand_id: v.brand_id, name: v.name, kind: v.kind }))
+
+  // Ledger: newest first, with running balance where an account was involved.
+  const ledger = [...transactions]
+    .sort((a, b) => (b.transaction_date + b.created_at).localeCompare(a.transaction_date + a.created_at))
+    .slice(0, 25)
 
   return (
     <div className="space-y-6">
@@ -73,12 +107,14 @@ export default async function FinancePage() {
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-ocg-gold">Finance Operations</p>
           <h1 className="mt-1 text-2xl font-semibold text-gray-900">Finance cockpit</h1>
           <p className="mt-1 max-w-3xl text-sm text-gray-500">
-            Track brand income, expenses, personal-owner business accounts, inter-brand transfers, and reconciliation exceptions across OCG.
+            {allowed === null
+              ? 'Track brand income, expenses, personal-owner business accounts, inter-brand transfers, and reconciliation exceptions across OCG.'
+              : `You are viewing the finance records for ${brands.map((b) => b.short_name || b.name).join(', ') || 'no assigned brands'} only.`}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <QuickLink href="/rayyan/schoolpay" label="Rayyan fees" />
-          <QuickLink href="/rhythms/schoolpay" label="Rhythms fees" />
+          {slugAllowed('ar-rayyan-playhouse') && <QuickLink href="/rayyan/schoolpay" label="Rayyan fees" />}
+          {slugAllowed('rhythms-college') && <QuickLink href="/rhythms/schoolpay" label="Rhythms fees" />}
           <QuickLink href="/tasks" label="Finance tasks" />
         </div>
       </div>
@@ -92,7 +128,57 @@ export default async function FinancePage() {
         <Stat label="Open exceptions" value={openExceptions.length} tone={openExceptions.length ? 'text-red-600' : 'text-gray-900'} />
       </div>
 
-      <FinanceActionPanel brands={brandOptions} accounts={accountOptions} transactions={transactionOptions} team={teamOptions} />
+      <MoneyForms brands={brandOptions} accounts={accountOptions} voteheads={voteheadOptions} canEdit={canEdit} />
+
+      <section className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+        <SectionTitle icon={BookOpenCheck} title="Transaction ledger" description="Latest recorded movements — money in, money out, votehead, and the balance after each entry." />
+        {ledger.length === 0 ? (
+          <Empty text="No transactions recorded yet. Use the Record money panel above." />
+        ) : (
+          <div className="overflow-x-auto rounded-lg border border-gray-100">
+            <table className="w-full min-w-[820px] text-sm">
+              <thead>
+                <tr className="border-b border-gray-100 text-left text-[11px] uppercase tracking-wider text-gray-400">
+                  <th className="px-3 py-2">Date</th>
+                  <th className="px-3 py-2">Brand</th>
+                  <th className="px-3 py-2 text-right">In</th>
+                  <th className="px-3 py-2 text-right">Out</th>
+                  <th className="px-3 py-2">Votehead</th>
+                  <th className="px-3 py-2">Reference</th>
+                  <th className="px-3 py-2">Reason</th>
+                  <th className="px-3 py-2 text-right">Balance after</th>
+                  <th className="px-3 py-2">By</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {ledger.map((tx) => {
+                  const isIn = tx.direction === 'inflow' || tx.direction === 'transfer_in'
+                  return (
+                    <tr key={tx.id} className="hover:bg-gray-50">
+                      <td className="px-3 py-2.5 whitespace-nowrap text-gray-600">{tx.transaction_date}</td>
+                      <td className="px-3 py-2.5 whitespace-nowrap">
+                        <span className="mr-1.5 inline-block h-2 w-2 rounded-full" style={{ backgroundColor: brandById.get(tx.brand_id ?? '')?.color_hex ?? '#ccc' }} />
+                        <span className="text-gray-700">{brandById.get(tx.brand_id ?? '')?.short_name ?? '—'}</span>
+                      </td>
+                      <td className="px-3 py-2.5 text-right font-medium text-emerald-700">{isIn ? `KSh ${Number(tx.amount_ksh ?? 0).toLocaleString()}` : ''}</td>
+                      <td className="px-3 py-2.5 text-right font-medium text-red-700">{!isIn ? `KSh ${Number(tx.amount_ksh ?? 0).toLocaleString()}` : ''}</td>
+                      <td className="px-3 py-2.5 text-gray-600">{voteheadById.get(tx.votehead_id ?? '')?.name ?? tx.category ?? '—'}</td>
+                      <td className="px-3 py-2.5 text-gray-500">{tx.reference || '—'}</td>
+                      <td className="px-3 py-2.5 max-w-[220px] truncate text-gray-600" title={tx.description}>{tx.description || '—'}</td>
+                      <td className="px-3 py-2.5 text-right text-gray-700">{tx.balance_after_ksh != null ? `KSh ${Number(tx.balance_after_ksh).toLocaleString()}` : '—'}</td>
+                      <td className="px-3 py-2.5 whitespace-nowrap text-gray-500">{tx.recorded_by || tx.owner_person || '—'}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      {canEdit && (
+        <FinanceActionPanel brands={brandOptions} accounts={accountOptions} transactions={transactionOptions} team={teamOptions} />
+      )}
 
       <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
         <section className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
@@ -130,11 +216,11 @@ export default async function FinancePage() {
 
         <section className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
           <SectionTitle icon={Landmark} title="Payment accounts" description="Business and personally registered channels used for operations." />
-          {data.finance.accounts.length === 0 ? (
+          {accounts.length === 0 ? (
             <Empty text="No finance accounts registered yet." />
           ) : (
             <div className="space-y-3">
-              {data.finance.accounts.slice(0, 10).map((account) => (
+              {accounts.slice(0, 10).map((account) => (
                 <div key={account.id} className="rounded-lg border border-gray-100 p-3">
                   <div className="flex items-start justify-between gap-3">
                     <div>
@@ -208,61 +294,67 @@ export default async function FinancePage() {
         </section>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[1.3fr_0.7fr]">
-        <section className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
-          <SectionTitle icon={ReceiptText} title="School fee ledgers" description="Manual records against imported SchoolPay snapshots." />
-          <div className="overflow-hidden rounded-lg border border-gray-100">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-100 text-left text-[11px] uppercase tracking-wider text-gray-400">
-                  <th className="px-3 py-2">Brand</th>
-                  <th className="px-3 py-2 text-right">Manual due</th>
-                  <th className="px-3 py-2 text-right">SchoolPay due</th>
-                  <th className="px-3 py-2 text-right">Unmatched</th>
-                  <th className="px-3 py-2"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {rows.map((row) => (
-                  <tr key={row.label} className="hover:bg-gray-50">
-                    <td className="px-3 py-3">
-                      <p className="font-medium text-gray-800">{row.label}</p>
-                      <p className="text-xs text-gray-400">{row.invoiceCount} invoices · {row.paymentCount} payments</p>
-                    </td>
-                    <td className="px-3 py-3 text-right text-gray-700">KSh {row.manualBalance.toLocaleString()}</td>
-                    <td className="px-3 py-3 text-right text-gray-700">{row.schoolpayBalance == null ? '—' : `KSh ${row.schoolpayBalance.toLocaleString()}`}</td>
-                    <td className="px-3 py-3 text-right text-gray-700">{row.unmatchedCount ?? '—'}</td>
-                    <td className="px-3 py-3 text-right"><Link href={row.href} className="inline-flex items-center gap-1 text-xs font-semibold text-ocg-gold hover:text-ocg-navy">Open <ArrowUpRight size={13} /></Link></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        <section className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
-          <SectionTitle icon={Banknote} title="NPT invoices" description="Piano-service quote and invoice exposure." />
-          <Stat label="Invoice value" value={nptInvoiceTotal} money />
-          <div className="mt-4 space-y-3">
-            {nptOpen.length === 0 ? (
-              <p className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-700">No open NPT invoices found.</p>
-            ) : nptOpen.slice(0, 6).map((invoice) => (
-              <div key={invoice.id} className="rounded-lg border border-gray-100 p-3">
-                <p className="text-sm font-medium text-gray-800">KSh {Number(invoice.invoice_amount_ksh ?? 0).toLocaleString()}</p>
-                <p className="text-xs text-gray-400">{invoice.status} · {invoice.payment_status}</p>
+      {(rows.length > 0 || showNpt) && (
+        <div className="grid gap-6 xl:grid-cols-[1.3fr_0.7fr]">
+          {rows.length > 0 && (
+            <section className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+              <SectionTitle icon={ReceiptText} title="School fee ledgers" description="Manual records against imported SchoolPay snapshots." />
+              <div className="overflow-hidden rounded-lg border border-gray-100">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-100 text-left text-[11px] uppercase tracking-wider text-gray-400">
+                      <th className="px-3 py-2">Brand</th>
+                      <th className="px-3 py-2 text-right">Manual due</th>
+                      <th className="px-3 py-2 text-right">SchoolPay due</th>
+                      <th className="px-3 py-2 text-right">Unmatched</th>
+                      <th className="px-3 py-2"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {rows.map((row) => (
+                      <tr key={row.label} className="hover:bg-gray-50">
+                        <td className="px-3 py-3">
+                          <p className="font-medium text-gray-800">{row.label}</p>
+                          <p className="text-xs text-gray-400">{row.invoiceCount} invoices · {row.paymentCount} payments</p>
+                        </td>
+                        <td className="px-3 py-3 text-right text-gray-700">KSh {row.manualBalance.toLocaleString()}</td>
+                        <td className="px-3 py-3 text-right text-gray-700">{row.schoolpayBalance == null ? '—' : `KSh ${row.schoolpayBalance.toLocaleString()}`}</td>
+                        <td className="px-3 py-3 text-right text-gray-700">{row.unmatchedCount ?? '—'}</td>
+                        <td className="px-3 py-3 text-right"><Link href={row.href} className="inline-flex items-center gap-1 text-xs font-semibold text-ocg-gold hover:text-ocg-navy">Open <ArrowUpRight size={13} /></Link></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-            ))}
-          </div>
-        </section>
-      </div>
+            </section>
+          )}
+
+          {showNpt && (
+            <section className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+              <SectionTitle icon={Banknote} title="NPT invoices" description="Piano-service quote and invoice exposure." />
+              <Stat label="Invoice value" value={nptInvoiceTotal} money />
+              <div className="mt-4 space-y-3">
+                {nptOpen.length === 0 ? (
+                  <p className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-700">No open NPT invoices found.</p>
+                ) : nptOpen.slice(0, 6).map((invoice) => (
+                  <div key={invoice.id} className="rounded-lg border border-gray-100 p-3">
+                    <p className="text-sm font-medium text-gray-800">KSh {Number(invoice.invoice_amount_ksh ?? 0).toLocaleString()}</p>
+                    <p className="text-xs text-gray-400">{invoice.status} · {invoice.payment_status}</p>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+        </div>
+      )}
 
       <section className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
         <SectionTitle icon={ListTodo} title="Finance tasks" description="Ops tasks tagged by finance, invoice, payment, fee, receipt, SchoolPay, or reconciliation language." />
-        {data.tasks.length === 0 ? (
+        {financeTasks.length === 0 ? (
           <p className="text-sm text-gray-500">No finance-related tasks found yet.</p>
         ) : (
           <div className="grid gap-3 lg:grid-cols-2">
-            {data.tasks.slice(0, 12).map((task) => {
+            {financeTasks.slice(0, 12).map((task) => {
               const overdue = task.active === 'Yes' && isOverdue(task.target_date)
               return (
                 <Link key={task.task_id} href={`/tasks/${task.task_id}`} className="rounded-lg border border-gray-100 p-4 hover:border-ocg-gold/50">
