@@ -26,5 +26,5 @@ export default async function NptReportsPage() {
 }
 
 function Stat({ label, value, tone = 'text-gray-900' }: { label: string; value: number; tone?: string }) {
-  return <div className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm"><p className={`text-3xl font-light ${tone}`}>{value}</p><p className="mt-1 text-[11px] font-semibold uppercase tracking-wider text-gray-400">{label}</p></div>
+  return <div className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm"><p className={`text-3xl font-light ${tone}`}>{value.toLocaleString()}</p><p className="mt-1 text-[11px] font-semibold uppercase tracking-wider text-gray-400">{label}</p></div>
 }

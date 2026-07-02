@@ -73,6 +73,25 @@ export async function safeRows<T>(
   opts: { limit?: number; order?: string; ascending?: boolean } = {},
 ): Promise<T[]> {
   try {
+    if (opts.limit && opts.limit > 1000) {
+      const rows: T[] = []
+      const pageSize = 1000
+      for (let start = 0; start < opts.limit; start += pageSize) {
+        const end = Math.min(start + pageSize, opts.limit) - 1
+        let q = db().from(table).select('*')
+        if (opts.order) q = q.order(opts.order, { ascending: opts.ascending ?? false })
+        const { data, error } = await q.range(start, end)
+        if (error) {
+          console.warn(`Management table read skipped for ${String(table)}: ${error.message}`)
+          return rows
+        }
+        const page = (data as T[] | null) ?? []
+        rows.push(...page)
+        if (page.length < end - start + 1) break
+      }
+      return rows
+    }
+
     let q = db().from(table).select('*')
     if (opts.order) q = q.order(opts.order, { ascending: opts.ascending ?? false })
     if (opts.limit) q = q.limit(opts.limit)
@@ -88,14 +107,16 @@ export async function safeRows<T>(
   }
 }
 
+const NPT_ROW_LIMIT = 10000
+
 export async function getNptServiceData() {
   const [customers, pianos, jobs, history, quoteInvoices, reminders, team] = await Promise.all([
-    safeRows<import('@ocg/db').NptCustomerRow>('npt_customers', { limit: 500, order: 'created_at' }),
-    safeRows<import('@ocg/db').NptPianoRow>('npt_pianos', { limit: 500, order: 'created_at' }),
-    safeRows<NptServiceJobRow>('npt_service_jobs', { limit: 500, order: 'created_at' }),
-    safeRows<import('@ocg/db').NptServiceHistoryRow>('npt_service_history', { limit: 500, order: 'service_date' }),
-    safeRows<import('@ocg/db').NptQuoteInvoiceRow>('npt_quote_invoice_records', { limit: 500, order: 'created_at' }),
-    safeRows<NptReminderRow>('npt_reminders', { limit: 500, order: 'due_at', ascending: true }),
+    safeRows<import('@ocg/db').NptCustomerRow>('npt_customers', { limit: NPT_ROW_LIMIT, order: 'created_at' }),
+    safeRows<import('@ocg/db').NptPianoRow>('npt_pianos', { limit: NPT_ROW_LIMIT, order: 'created_at' }),
+    safeRows<NptServiceJobRow>('npt_service_jobs', { limit: NPT_ROW_LIMIT, order: 'created_at' }),
+    safeRows<import('@ocg/db').NptServiceHistoryRow>('npt_service_history', { limit: NPT_ROW_LIMIT, order: 'service_date' }),
+    safeRows<import('@ocg/db').NptQuoteInvoiceRow>('npt_quote_invoice_records', { limit: NPT_ROW_LIMIT, order: 'created_at' }),
+    safeRows<NptReminderRow>('npt_reminders', { limit: NPT_ROW_LIMIT, order: 'due_at', ascending: true }),
     listTeam(),
   ])
   return { customers, pianos, jobs, history, quoteInvoices, reminders, team }
@@ -260,8 +281,8 @@ export async function getManagementData(): Promise<ManagementData> {
     safeRows<OcgRecurringTaskRow>('ocg_recurring_tasks', { limit: 100, order: 'next_run_at', ascending: true }),
     safeRows<MarketingContentRow>('marketing_content', { limit: 500, order: 'created_at' }),
     safeRows<MarketingCampaignRow>('marketing_campaigns', { limit: 100, order: 'created_at' }),
-    safeRows<NptServiceJobRow>('npt_service_jobs', { limit: 300, order: 'created_at' }),
-    safeRows<NptReminderRow>('npt_reminders', { limit: 100, order: 'due_at', ascending: true }),
+    safeRows<NptServiceJobRow>('npt_service_jobs', { limit: NPT_ROW_LIMIT, order: 'created_at' }),
+    safeRows<NptReminderRow>('npt_reminders', { limit: NPT_ROW_LIMIT, order: 'due_at', ascending: true }),
     safeRows<RayyanStudentRow>('rayyan_students', { limit: 500, order: 'created_at' }),
     safeRows<RayyanAdmissionRow>('rayyan_admissions', { limit: 200, order: 'created_at' }),
     safeRows<RayyanFeeFollowupRow>('rayyan_fee_followups', { limit: 200, order: 'next_follow_up_date', ascending: true }),
