@@ -62,12 +62,16 @@ export interface RecordMovementInput {
   transaction_date?: string
   account_id?: string | null
   votehead_id?: string | null
+  category?: string
   reference?: string
   /** Reason for the movement — "Reason for expenditure" / "Source of income". */
   description: string
   counterparty_name?: string
   payment_channel?: string
   source_document_url?: string
+  statement_import_id?: string | null
+  statement_line_id?: string | null
+  transaction_cost_ksh?: number
   notes?: string
   recorded_by: string
 }
@@ -88,7 +92,7 @@ export async function recordMoneyMovement(
   if (!Number.isFinite(amount) || amount <= 0) throw new Error('Amount must be greater than 0')
   if (!input.description?.trim()) throw new Error('Reason / description is required')
 
-  let category = 'uncategorized'
+  let category = input.category?.trim() || 'uncategorized'
   if (input.votehead_id) {
     const { data: votehead } = await supabase
       .from('finance_voteheads')
@@ -129,6 +133,9 @@ export async function recordMoneyMovement(
       reference: input.reference ?? '',
       counterparty_name: input.counterparty_name ?? '',
       source_document_url: input.source_document_url ?? '',
+      statement_import_id: input.statement_import_id || null,
+      statement_line_id: input.statement_line_id || null,
+      transaction_cost_ksh: Number(input.transaction_cost_ksh ?? 0),
       notes: input.notes ?? '',
       balance_after_ksh: balanceAfter,
       recorded_by: input.recorded_by,

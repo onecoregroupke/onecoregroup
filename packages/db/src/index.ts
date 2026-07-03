@@ -77,6 +77,8 @@ export type {
   FinanceVoteheadRow,
   FinanceAccountRow,
   FinanceTransactionRow,
+  FinanceStatementImportRow,
+  FinanceStatementLineRow,
   FinanceInterbrandTransferRow,
   FinanceReconciliationBatchRow,
   FinanceReconciliationMatchRow,

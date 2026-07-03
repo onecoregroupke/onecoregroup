@@ -1005,10 +1005,65 @@ export interface FinanceTransactionRow {
   votehead_id: string | null
   balance_after_ksh: number | null
   recorded_by: string
+  statement_import_id: string | null
+  statement_line_id: string | null
+  transaction_cost_ksh: number
   created_at: string
   updated_at: string
 }
 type FinanceTransactionInsert = Partial<FinanceTransactionRow>
+
+export interface FinanceStatementImportRow {
+  id: string
+  brand_id: string | null
+  account_id: string | null
+  statement_type: string
+  source_filename: string
+  storage_bucket: string
+  storage_path: string
+  parse_status: string
+  period_start: string | null
+  period_end: string | null
+  opening_balance_ksh: number | null
+  closing_balance_ksh: number | null
+  imported_by: string
+  reviewed_by: string
+  approved_at: string | null
+  extracted_text: string
+  notes: string
+  created_at: string
+  updated_at: string
+}
+type FinanceStatementImportInsert = Partial<FinanceStatementImportRow>
+
+export interface FinanceStatementLineRow {
+  id: string
+  import_id: string
+  brand_id: string | null
+  account_id: string | null
+  statement_date: string | null
+  raw_description: string
+  reference: string
+  counterparty_name: string
+  counterparty_account_hint: string
+  direction: string
+  amount_ksh: number
+  transaction_cost_ksh: number
+  running_balance_ksh: number | null
+  suggested_category: string
+  suggested_votehead_id: string | null
+  suggested_counterparty_brand_id: string | null
+  suggested_internal_account_id: string | null
+  matched_transaction_id: string | null
+  confidence: number
+  review_status: string
+  ledger_transaction_id: string | null
+  notes: string
+  raw_payload: Record<string, unknown>
+  created_at: string
+  updated_at: string
+}
+type FinanceStatementLineInsert = Pick<FinanceStatementLineRow, 'import_id'> & Partial<FinanceStatementLineRow>
 
 export interface FinanceVoteheadRow {
   id: string
@@ -2089,6 +2144,8 @@ export interface Database {
       finance_voteheads: DbTable<FinanceVoteheadRow, FinanceVoteheadInsert, Partial<FinanceVoteheadRow>>
       finance_accounts: DbTable<FinanceAccountRow, FinanceAccountInsert, Partial<FinanceAccountRow>>
       finance_transactions: DbTable<FinanceTransactionRow, FinanceTransactionInsert, Partial<FinanceTransactionRow>>
+      finance_statement_imports: DbTable<FinanceStatementImportRow, FinanceStatementImportInsert, Partial<FinanceStatementImportRow>>
+      finance_statement_lines: DbTable<FinanceStatementLineRow, FinanceStatementLineInsert, Partial<FinanceStatementLineRow>>
       finance_interbrand_transfers: DbTable<FinanceInterbrandTransferRow, FinanceInterbrandTransferInsert, Partial<FinanceInterbrandTransferRow>>
       finance_reconciliation_batches: DbTable<FinanceReconciliationBatchRow, FinanceReconciliationBatchInsert, Partial<FinanceReconciliationBatchRow>>
       finance_reconciliation_matches: DbTable<FinanceReconciliationMatchRow, FinanceReconciliationMatchInsert, Partial<FinanceReconciliationMatchRow>>

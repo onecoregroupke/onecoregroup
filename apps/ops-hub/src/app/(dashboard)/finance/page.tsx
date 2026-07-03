@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { ArrowUpRight, Banknote, BookOpenCheck, Building2, CheckCircle2, CircleAlert, Landmark, ListChecks, ListTodo, ReceiptText, Repeat2 } from 'lucide-react'
 import { FinanceActionPanel } from '@/components/finance/FinanceActionPanel'
 import { FinanceAccountEditButton } from '@/components/finance/FinanceAccountEditButton'
+import { FinanceStatementImportPanel } from '@/components/finance/FinanceStatementImportPanel'
 import { MoneyForms } from '@/components/finance/MoneyForms'
 import { getFinanceData, isOverdue } from '@/lib/management'
 import { listVoteheads, scopeBrands, scopeByBrand } from '@/lib/finance'
@@ -130,6 +131,8 @@ export default async function FinancePage() {
       </div>
 
       <MoneyForms brands={brandOptions} accounts={accountOptions} voteheads={voteheadOptions} canEdit={canEdit} />
+
+      <FinanceStatementImportPanel brands={brandOptions} accounts={accountOptions} canEdit={canEdit} />
 
       <section className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
         <SectionTitle icon={BookOpenCheck} title="Transaction ledger" description="Latest recorded movements — money in, money out, votehead, and the balance after each entry." />
