@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const action = body?.action as string
     const values = (body?.values ?? {}) as Record<string, unknown>
-    const allowed = actor.allowedBrandIds('finance')
+    const allowed = actor.permissions === null || actor.isSuperAdmin ? null : (actor.allowedBrandIds('finance') ?? [])
 
     if (action === 'record') {
       assertBrandInScope(values.brand_id as string, allowed, 'record money')

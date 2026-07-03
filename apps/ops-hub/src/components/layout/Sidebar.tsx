@@ -6,7 +6,7 @@ import {
   LayoutDashboard, ListTodo, FolderKanban, Building2, Bot,
   CheckSquare, Settings, LogOut, X, BriefcaseBusiness, Wrench, GraduationCap,
   UsersRound, BookOpen, BookMarked, UserCog, CalendarCheck, Lock, Landmark,
-  CalendarClock, MessagesSquare, Megaphone, Boxes, ShoppingCart,
+  CalendarClock, MessagesSquare, Megaphone, Boxes, ShoppingCart, ClipboardCheck,
 } from 'lucide-react'
 import { usePermissions } from '@/contexts/PermissionsContext'
 import type { SectionKey } from '@/lib/permissions'
@@ -31,6 +31,7 @@ export const MAIN_NAV: { href: string; label: string; icon: React.ElementType; s
   { href: '/management/team', label: 'Team', icon: UsersRound, section: 'management' },
   { href: '/management/users', label: 'Portal Access', icon: UserCog, section: 'users' },
   { href: '/management/duties', label: 'Daily Duties', icon: CalendarCheck, section: 'management' },
+  { href: '/attendance', label: 'Attendance', icon: ClipboardCheck, section: null },
   { href: '/personal',  label: 'Personal',  icon: Lock,            section: 'personal' },
   { href: '/my-tasks',  label: 'My Tasks',  icon: CheckSquare,     section: null },
   { href: '/chat',      label: 'Chat',      icon: MessagesSquare,  section: null },

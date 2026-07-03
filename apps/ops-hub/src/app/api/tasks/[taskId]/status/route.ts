@@ -3,6 +3,7 @@ import { getApiActor } from '@/lib/api-auth'
 import { getTask, setTaskStatus, isTaskAssignee } from '@/lib/tasks'
 import { TASK_STATUSES } from '@/lib/taskStatuses'
 import { notifyMarketingOnApproval } from '@/lib/marketingSync'
+import { auditEvent } from '@/lib/audit'
 
 export async function POST(
   req: NextRequest,
@@ -29,6 +30,15 @@ export async function POST(
     const task = await setTaskStatus(taskId, status, {
       note: body?.note,
       by: actor.email ?? 'admin',
+    })
+    await auditEvent({
+      actor,
+      action: 'status',
+      entity_table: 'ops_tasks',
+      entity_id: taskId,
+      entity_label: task.task_name,
+      before_data: task0 as unknown as Record<string, unknown>,
+      after_data: task as unknown as Record<string, unknown>,
     })
     if (status === 'Approved') await notifyMarketingOnApproval(taskId)
     return NextResponse.json({ ok: true, task })

@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { ArrowUpRight, Banknote, BookOpenCheck, Building2, CheckCircle2, CircleAlert, Landmark, ListChecks, ListTodo, ReceiptText, Repeat2 } from 'lucide-react'
 import { FinanceActionPanel } from '@/components/finance/FinanceActionPanel'
+import { FinanceAccountEditButton } from '@/components/finance/FinanceAccountEditButton'
 import { MoneyForms } from '@/components/finance/MoneyForms'
 import { getFinanceData, isOverdue } from '@/lib/management'
 import { listVoteheads, scopeBrands, scopeByBrand } from '@/lib/finance'
@@ -26,7 +27,7 @@ export default async function FinancePage() {
   // The layout already gates on `finance` view; we re-resolve the actor here
   // to apply their per-brand compartment to every dataset on the page.
   const actor = await requireSection('finance')
-  const allowed = actor.allowedBrandIds('finance')
+  const allowed = actor.permissions === null || actor.isSuperAdmin ? null : (actor.allowedBrandIds('finance') ?? [])
   const canEdit = actor.can('finance', 'edit')
 
   const [data, voteheads] = await Promise.all([getFinanceData(), listVoteheads(allowed)])
@@ -229,7 +230,10 @@ export default async function FinancePage() {
                         {brandById.get(account.brand_id ?? '')?.short_name ?? 'Shared'} · {account.account_type} · {account.provider || 'provider unknown'}
                       </p>
                     </div>
-                    <p className="text-sm font-medium text-gray-800">KSh {Number(account.current_balance_ksh ?? 0).toLocaleString()}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium text-gray-800">KSh {Number(account.current_balance_ksh ?? 0).toLocaleString()}</p>
+                      {canEdit && <FinanceAccountEditButton account={account} brands={brandOptions} canUseShared={allowed === null} />}
+                    </div>
                   </div>
                   {(account.legal_owner === 'personal' || account.owner_person) && (
                     <p className="mt-2 rounded-md bg-amber-50 px-2 py-1 text-xs text-amber-700">

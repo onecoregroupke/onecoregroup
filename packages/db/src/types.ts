@@ -1955,6 +1955,60 @@ export interface OcgDayCloseRow {
 }
 type OcgDayCloseInsert = Pick<OcgDayCloseRow, 'close_date'> & Partial<OcgDayCloseRow>
 
+// ─── Audit, inbox, attendance (migration 036) ───────────────────────────────
+export interface OcgAuditEventRow {
+  id: string
+  actor_user_id: string | null
+  actor_email: string
+  actor_name: string
+  action: string
+  entity_table: string
+  entity_id: string
+  entity_label: string
+  before_data: Record<string, unknown> | null
+  after_data: Record<string, unknown> | null
+  changed_fields: string[]
+  undo_event_id: string | null
+  request_id: string
+  created_at: string
+}
+type OcgAuditEventInsert = Partial<OcgAuditEventRow>
+
+export interface OcgNotificationRow {
+  id: string
+  recipient_email: string
+  recipient_name: string
+  sender_email: string
+  sender_name: string
+  kind: string
+  title: string
+  body: string
+  href: string
+  metadata: Record<string, unknown>
+  read_at: string | null
+  created_at: string
+}
+type OcgNotificationInsert = Pick<OcgNotificationRow, 'recipient_email' | 'title'> & Partial<OcgNotificationRow>
+
+export interface OpsAttendanceRecordRow {
+  id: string
+  team_member_id: string | null
+  employee_code: string
+  employee_name: string
+  employee_email: string
+  attendance_date: string
+  check_in_at: string | null
+  check_out_at: string | null
+  source: string
+  device_name: string
+  raw_payload: Record<string, unknown>
+  imported_by: string
+  notes: string
+  created_at: string
+  updated_at: string
+}
+type OpsAttendanceRecordInsert = Pick<OpsAttendanceRecordRow, 'attendance_date'> & Partial<OpsAttendanceRecordRow>
+
 type DbTable<Row, Insert, Update> = {
   Row: Row & Record<string, unknown>
   Insert: Insert & Record<string, unknown>
@@ -2024,6 +2078,9 @@ export interface Database {
       ocg_forum_posts: DbTable<OcgForumPostRow, OcgForumPostInsert, Partial<OcgForumPostRow>>
       ocg_forum_replies: DbTable<OcgForumReplyRow, OcgForumReplyInsert, Partial<OcgForumReplyRow>>
       ocg_day_closes: DbTable<OcgDayCloseRow, OcgDayCloseInsert, Partial<OcgDayCloseRow>>
+      ocg_audit_events: DbTable<OcgAuditEventRow, OcgAuditEventInsert, Partial<OcgAuditEventRow>>
+      ocg_notifications: DbTable<OcgNotificationRow, OcgNotificationInsert, Partial<OcgNotificationRow>>
+      ops_attendance_records: DbTable<OpsAttendanceRecordRow, OpsAttendanceRecordInsert, Partial<OpsAttendanceRecordRow>>
       inventory_items: DbTable<InventoryItemRow, InventoryItemInsert, Partial<InventoryItemRow>>
       inventory_movements: DbTable<InventoryMovementRow, InventoryMovementInsert, Partial<InventoryMovementRow>>
       procurement_vendors: DbTable<ProcurementVendorRow, ProcurementVendorInsert, Partial<ProcurementVendorRow>>

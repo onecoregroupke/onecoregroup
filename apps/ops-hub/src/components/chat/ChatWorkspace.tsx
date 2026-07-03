@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { MessageSquarePlus, MessagesSquare, Send, Users2, X } from 'lucide-react'
+import { Laugh, MessageSquarePlus, MessagesSquare, Send, Users2, X } from 'lucide-react'
 import { api } from '@/lib/apiClient'
 
 type Contact = { email: string; name: string }
@@ -25,6 +25,7 @@ type Message = {
 }
 
 const POLL_MS = 5000
+const EMOJI_PACK = ['😀', '😂', '😊', '😍', '🙏', '👏', '👍', '✅', '🔥', '🎉', '💡', '📌', '👀', '💪', '❤️', '✨', '🚀', '☕', '📣', '📝', '⏰', '💰', '🎯', '🙌']
 
 /**
  * Slack-style internal chat: conversation list on the left, thread on the
@@ -47,6 +48,7 @@ export function ChatWorkspace({
   const [sending, setSending] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
+  const [showEmoji, setShowEmoji] = useState(false)
 
   // New conversation modal
   const [showNew, setShowNew] = useState(false)
@@ -101,6 +103,7 @@ export function ChatWorkspace({
     setSending(false)
     if (!ok) { setError(data?.error ?? 'Failed to send.'); return }
     setDraft('')
+    setShowEmoji(false)
     if (data.message) setMessages((prev) => [...prev, data.message!])
     setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50)
     void loadConversations()
@@ -205,7 +208,7 @@ export function ChatWorkspace({
                         )}
                         <p className="whitespace-pre-wrap text-sm">{m.body}</p>
                         <p className={`mt-1 text-right text-[10px] ${mine ? 'text-white/50' : 'text-gray-400'}`}>
-                          {new Date(m.created_at).toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' })}
+                          {new Date(m.created_at).toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Nairobi' })}
                         </p>
                       </div>
                     </div>
@@ -213,7 +216,29 @@ export function ChatWorkspace({
                 })}
                 <div ref={bottomRef} />
               </div>
-              <div className="flex items-end gap-2 border-t border-gray-100 p-3">
+              <div className="relative flex items-end gap-2 border-t border-gray-100 p-3">
+                {showEmoji && (
+                  <div className="absolute bottom-16 left-3 z-10 grid w-64 grid-cols-6 gap-1 rounded-xl border border-gray-100 bg-white p-2 shadow-xl">
+                    {EMOJI_PACK.map((emoji) => (
+                      <button
+                        key={emoji}
+                        type="button"
+                        onClick={() => setDraft((value) => `${value}${emoji}`)}
+                        className="flex h-9 w-9 items-center justify-center rounded-lg text-lg hover:bg-gray-50"
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  title="Add emoji"
+                  onClick={() => setShowEmoji((value) => !value)}
+                  className="rounded-lg border border-gray-200 p-2.5 text-gray-500 hover:border-ocg-gold hover:text-ocg-gold"
+                >
+                  <Laugh size={17} />
+                </button>
                 <textarea
                   className="input min-h-[42px] max-h-32 flex-1 resize-none"
                   rows={1}

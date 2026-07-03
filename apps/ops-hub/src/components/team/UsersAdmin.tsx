@@ -11,6 +11,7 @@ import { usePermissions } from '@/contexts/PermissionsContext'
 import type { PermissionsMap, BrandAccessMap, AccessLevel, SectionKey } from '@/lib/permissions'
 
 type BrandOption = { id: string; label: string }
+type TeamOption = { id: string; name: string; email: string; role: string; brand_ids: string[] }
 
 interface PortalUser {
   id: string
@@ -41,7 +42,7 @@ function avatarColor(email: string) {
   return palette[Math.abs(hash) % palette.length]
 }
 
-export function UsersAdmin({ brands }: { brands: BrandOption[] }) {
+export function UsersAdmin({ brands, team }: { brands: BrandOption[]; team: TeamOption[] }) {
   const { can, isAdmin } = usePermissions()
 
   const [users, setUsers] = useState<PortalUser[]>([])
@@ -60,6 +61,7 @@ export function UsersAdmin({ brands }: { brands: BrandOption[] }) {
   const [invitePerms, setInvitePerms] = useState<PermissionsMap>(defaultPermissions())
   const [inviteBrandAccess, setInviteBrandAccess] = useState<BrandAccessMap>({})
   const [inviting, setInviting] = useState(false)
+  const [pickedTeamId, setPickedTeamId] = useState('')
 
   // Editor state
   const [editPerms, setEditPerms] = useState<PermissionsMap>({})
@@ -204,7 +206,7 @@ export function UsersAdmin({ brands }: { brands: BrandOption[] }) {
       if (!res.ok) throw new Error(json.error)
       setUsers(prev => [...prev, json.user!])
       setShowInvite(false)
-      setInviteEmail(''); setInviteName(''); setInviteRole(''); setInviteBrands([]); setInvitePerms(defaultPermissions()); setInviteBrandAccess({})
+      setPickedTeamId(''); setInviteEmail(''); setInviteName(''); setInviteRole(''); setInviteBrands([]); setInvitePerms(defaultPermissions()); setInviteBrandAccess({})
       setMessage(`Invite sent to ${json.user!.email}. They'll get an email to set their password and access their portal.`)
       selectUser(json.user!)
     } catch (e) {
@@ -216,6 +218,16 @@ export function UsersAdmin({ brands }: { brands: BrandOption[] }) {
 
   function toggleBrand(id: string) {
     setInviteBrands(prev => prev.includes(id) ? prev.filter(b => b !== id) : [...prev, id])
+  }
+
+  function pickTeamMember(id: string) {
+    setPickedTeamId(id)
+    const member = team.find((item) => item.id === id)
+    if (!member) return
+    setInviteName(member.name)
+    setInviteEmail(member.email)
+    setInviteRole(member.role)
+    setInviteBrands(member.brand_ids ?? [])
   }
 
   if (!can('users', 'view') && !isAdmin) {
@@ -268,12 +280,24 @@ export function UsersAdmin({ brands }: { brands: BrandOption[] }) {
 
       {showInvite && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg my-8">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[calc(100vh-2rem)] my-4 overflow-hidden flex flex-col">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
               <p className="font-semibold text-gray-900">Invite a team member to their portal</p>
               <button onClick={() => setShowInvite(false)} className="text-gray-400 hover:text-gray-700"><X size={18} /></button>
             </div>
-            <div className="p-5 space-y-4">
+            <div className="p-5 space-y-4 overflow-y-auto">
+              {team.length > 0 && (
+                <Label text="Choose from team">
+                  <select className="input" value={pickedTeamId} onChange={e => pickTeamMember(e.target.value)}>
+                    <option value="">Manual entry</option>
+                    {team.map((member) => (
+                      <option key={member.id} value={member.id}>
+                        {member.name}{member.email ? ` · ${member.email}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </Label>
+              )}
               <div className="grid gap-4 sm:grid-cols-2">
                 <Label text="Email *"><input type="email" value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} className="input" placeholder="team@example.com" /></Label>
                 <Label text="Display name"><input type="text" value={inviteName} onChange={e => setInviteName(e.target.value)} className="input" placeholder="Jane Doe" /></Label>

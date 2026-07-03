@@ -11,6 +11,8 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [showPw, setShowPw] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [resetting, setResetting] = useState(false)
+  const [notice, setNotice] = useState('')
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -30,6 +32,23 @@ export default function LoginPage() {
       return
     }
     router.push('/')
+  }
+
+  async function resetPassword() {
+    setError('')
+    setNotice('')
+    if (!email.trim()) {
+      setError('Enter your email address first, then request a reset link.')
+      return
+    }
+    setResetting(true)
+    await fetch('/api/auth/reset-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    })
+    setResetting(false)
+    setNotice('If that email has portal access, a reset link has been sent.')
   }
 
   return (
@@ -88,6 +107,11 @@ export default function LoginPage() {
                 {error}
               </div>
             )}
+            {notice && (
+              <div className="text-sm rounded-lg bg-emerald-50 p-3 text-emerald-700">
+                {notice}
+              </div>
+            )}
 
             <button
               type="submit"
@@ -95,6 +119,14 @@ export default function LoginPage() {
               className="w-full bg-ocg-navy text-white font-medium py-3 rounded-lg hover:bg-slate-800 transition-colors disabled:opacity-60 mt-2"
             >
               {loading ? 'Signing in...' : 'Sign in'}
+            </button>
+            <button
+              type="button"
+              onClick={resetPassword}
+              disabled={resetting}
+              className="w-full text-center text-sm font-medium text-ocg-gold hover:text-ocg-navy disabled:opacity-60"
+            >
+              {resetting ? 'Sending reset link...' : 'Forgot password?'}
             </button>
           </form>
         </div>

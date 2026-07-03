@@ -4,6 +4,7 @@ import { db } from '@/lib/serverClient'
 import {
   insertManagedRow, updateManagedRow, sectionForMutationType, tableForType, type MutationType,
 } from '@/lib/managementMutations'
+import { auditEvent } from '@/lib/audit'
 
 /**
  * Brand compartmentalization for finance_* writes: a finance user scoped to
@@ -17,11 +18,14 @@ async function assertFinanceScope(
   existingId?: string,
 ): Promise<void> {
   if (!type.startsWith('finance_')) return
-  const allowed = actor.allowedBrandIds('finance')
+  const allowed = actor.permissions === null || actor.isSuperAdmin ? null : (actor.allowedBrandIds('finance') ?? [])
   if (allowed === null) return
 
   const brandFields = ['brand_id', 'from_brand_id', 'to_brand_id', 'counterparty_brand_id']
   const present = brandFields.filter((f) => values[f] !== undefined && values[f] !== '')
+  if (allowed !== null && ['brand_id', 'from_brand_id'].some((field) => values[field] === '')) {
+    throw new Error('Select one of your brands for this finance record.')
+  }
   for (const field of present) {
     const v = values[field]
     if (v !== null && !allowed.includes(String(v))) {
@@ -61,6 +65,13 @@ export async function POST(req: NextRequest) {
     }
     await assertFinanceScope(actor, type, values)
     const row = await insertManagedRow(type, values)
+    await auditEvent({
+      actor,
+      action: 'create',
+      entity_table: tableForType(type),
+      entity_id: String((row as Record<string, unknown>).id ?? ''),
+      after_data: row as Record<string, unknown>,
+    })
     return NextResponse.json({ ok: true, row }, { status: 201 })
   } catch (e) {
     return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 400 })
@@ -77,7 +88,17 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ ok: false, error: 'forbidden' }, { status: 403 })
     }
     await assertFinanceScope(actor, type, body?.values ?? {}, body?.id)
+    const table = tableForType(type)
+    const { data: before } = await db().from(table).select('*').eq('id', body?.id).maybeSingle()
     const row = await updateManagedRow(type, body?.id, body?.values ?? {})
+    await auditEvent({
+      actor,
+      action: 'update',
+      entity_table: table,
+      entity_id: String(body?.id ?? ''),
+      before_data: (before as Record<string, unknown> | null) ?? null,
+      after_data: row as Record<string, unknown>,
+    })
     return NextResponse.json({ ok: true, row })
   } catch (e) {
     return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 400 })

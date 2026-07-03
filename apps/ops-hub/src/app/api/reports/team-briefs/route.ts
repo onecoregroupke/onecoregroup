@@ -3,6 +3,7 @@ import { sendTeamTaskBrief } from '@/lib/email'
 import { listTeam } from '@/lib/team'
 import { listTasksForAssignee } from '@/lib/tasks'
 import { isActiveStatus } from '@/lib/taskStatuses'
+import { createNotification } from '@/lib/notifications'
 
 export async function GET(req: NextRequest) {
   // Fail closed: without a configured CRON_SECRET this endpoint stays locked
@@ -20,6 +21,10 @@ export async function GET(req: NextRequest) {
     const tasks = (await listTasksForAssignee(member.name))
       .filter((task) => isActiveStatus(task.current_status))
       .slice(0, 25)
+    if (tasks.length === 0) {
+      results.push({ member: member.name, email: member.email, open: 0, sent: false, skipped: 'no open tasks' })
+      continue
+    }
     const sent = await sendTeamTaskBrief({
       to: member.email,
       name: member.name,
@@ -32,6 +37,16 @@ export async function GET(req: NextRequest) {
         current_status: task.current_status,
       })),
       portalUrl: `${baseUrl}/my-tasks`,
+    })
+    await createNotification({
+      recipient_email: member.email,
+      recipient_name: member.name,
+      sender_name: 'Ops Hub',
+      kind: 'morning_task_brief',
+      title: `Morning task brief: ${tasks.length} open`,
+      body: tasks.map((task) => `${task.task_id}: ${task.task_name}`).join('\n'),
+      href: '/my-tasks',
+      metadata: { task_ids: tasks.map((task) => task.task_id) },
     })
     results.push({ member: member.name, email: member.email, open: tasks.length, sent })
   }

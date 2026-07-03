@@ -104,3 +104,40 @@ export async function createTeamMember(input: {
   if (error) throw new Error(error.message)
   return data as OpsTeamMemberRow
 }
+
+export async function updateTeamMember(
+  id: string,
+  input: Partial<{
+    name: string
+    email: string
+    role: string
+    brand_ids: string[]
+    active: boolean
+    phone: string
+    job_title: string
+    department: string
+    start_date: string | null
+    notes: string
+  }>,
+): Promise<OpsTeamMemberRow> {
+  if (!id) throw new Error('id is required')
+  const patch: Record<string, unknown> = {}
+  if (input.name !== undefined) patch.name = input.name.trim()
+  if (input.email !== undefined) patch.email = input.email.trim() || null
+  if (input.role !== undefined) patch.role = input.role.trim() || 'Team member'
+  if (input.brand_ids !== undefined) patch.brand_ids = input.brand_ids
+  if (input.active !== undefined) patch.active = input.active
+  if (input.phone !== undefined) patch.phone = input.phone.trim()
+  if (input.job_title !== undefined) patch.job_title = input.job_title.trim()
+  if (input.department !== undefined) patch.department = input.department.trim()
+  if (input.start_date !== undefined) patch.start_date = input.start_date || null
+  if (input.notes !== undefined) patch.notes = input.notes
+  const { data, error } = await db()
+    .from('ops_team_members')
+    .update(patch)
+    .eq('id', id)
+    .select('*')
+    .single()
+  if (error) throw new Error(error.message)
+  return data as OpsTeamMemberRow
+}

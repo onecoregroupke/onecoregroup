@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { activeTasks, getManagementData, isOverdue, workloadLabel } from '@/lib/management'
 import { TeamMemberCreateForm } from '@/components/team/TeamMemberCreateForm'
+import { TeamMemberEditButton } from '@/components/team/TeamMemberEditButton'
 import { requireSection } from '@/lib/server-auth'
 
 export const dynamic = 'force-dynamic'
@@ -48,13 +49,19 @@ export default async function TeamWorkloadPage() {
                 const blocked = memberActive.filter((t) => t.current_status === 'Blocked')
                 const completed = completions.filter((c) => c.submitted_by === member.name || tasks.find((t) => t.task_id === c.task_id && matchesAssignee(t.assigned_to, member.name)))
                 const workload = workloadLabel(memberActive.length, overdue.length)
+                const brandOptions = brands.map((brand) => ({ id: brand.id, label: brand.short_name || brand.name }))
                 return (
                   <tr key={member.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3">
-                      <Link href={`/management/team/${member.id}`} className="font-medium text-gray-800 hover:text-ocg-gold">
-                        {member.name}
-                      </Link>
-                      <p className="text-xs text-gray-400">{member.role}{member.email ? ` · ${member.email}` : ''}</p>
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <Link href={`/management/team/${member.id}`} className="font-medium text-gray-800 hover:text-ocg-gold">
+                            {member.name}
+                          </Link>
+                          <p className="text-xs text-gray-400">{member.role}{member.email ? ` · ${member.email}` : ''}</p>
+                        </div>
+                        <TeamMemberEditButton member={member} brands={brandOptions} />
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-gray-600">
                       {member.brand_ids.length === 0 ? (

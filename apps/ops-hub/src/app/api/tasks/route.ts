@@ -5,6 +5,9 @@ import { listTeam, lookupAssigneeEmail } from '@/lib/team'
 import { resolveBrand } from '@/lib/brands'
 import { sendTaskAssignment } from '@/lib/email'
 import { completionUrl } from '@/lib/completion'
+import { auditEvent } from '@/lib/audit'
+import { createNotification } from '@/lib/notifications'
+import { sendMessage, startConversation } from '@/lib/chat'
 
 export async function GET(req: NextRequest) {
   const actor = await getApiActor(req)
@@ -43,6 +46,14 @@ export async function POST(req: NextRequest) {
       )
     }
     const task = await createTask({ ...body, created_by: actor.email ?? 'admin' })
+    await auditEvent({
+      actor,
+      action: 'create',
+      entity_table: 'ops_tasks',
+      entity_id: task.task_id,
+      entity_label: task.task_name,
+      after_data: task as unknown as Record<string, unknown>,
+    })
 
     // Best-effort assignment email (never blocks task creation).
     let emailNote: string | undefined
@@ -63,6 +74,32 @@ export async function POST(req: NextRequest) {
           completionUrl: completionUrl(task.task_id, task.hmac_token),
         })
         if (!sent) emailNote = 'Assignment email not sent (RESEND_API_KEY missing or send failed).'
+        await createNotification({
+          recipient_email: to,
+          recipient_name: task.assigned_to,
+          sender_email: actor.email ?? '',
+          sender_name: actor.name,
+          kind: 'task_assignment',
+          title: `New task: ${task.task_name}`,
+          body: `${actor.name} assigned ${task.task_id}${task.target_date ? ` due ${task.target_date}` : ''}.`,
+          href: `/tasks/${task.task_id}`,
+          metadata: { task_id: task.task_id, project_id: task.project_id },
+        })
+        try {
+          const conversation = await startConversation({
+            creator_email: actor.email ?? 'admin@onecoregroup.com',
+            creator_name: actor.name,
+            member_emails: [{ email: to, name: task.assigned_to }],
+          })
+          await sendMessage({
+            conversation_id: conversation.id,
+            sender_email: actor.email ?? 'admin@onecoregroup.com',
+            sender_name: actor.name,
+            body: `New task assigned: ${task.task_name}\n\n${task.task_id} · ${task.project_name} · ${task.priority} priority${task.target_date ? ` · due ${task.target_date}` : ''}\n\n${task.task_description || task.notes || ''}\n\nOpen: ${process.env['NEXT_PUBLIC_OPS_URL'] ?? ''}/tasks/${task.task_id}`,
+          })
+        } catch {
+          // Chat notification is best-effort; task creation/email should still succeed.
+        }
       } else if (!to) {
         emailNote = `No email found for "${task.assigned_to}" in the team list — task created without notification.`
       }

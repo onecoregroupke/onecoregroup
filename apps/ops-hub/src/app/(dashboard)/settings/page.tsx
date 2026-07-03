@@ -1,3 +1,5 @@
+import { requireActor } from '@/lib/server-auth'
+
 export const dynamic = 'force-dynamic'
 
 const ENV_KEYS: { key: string; what: string }[] = [
@@ -11,7 +13,25 @@ const ENV_KEYS: { key: string; what: string }[] = [
   { key: 'GOOGLE_DRIVE_ROOT_FOLDER_ID', what: 'Drive delivery root' },
 ]
 
-export default function SettingsPage() {
+export default async function SettingsPage() {
+  const actor = await requireActor()
+  if (actor.permissions !== null) {
+    return (
+      <div className="space-y-5">
+        <div>
+          <h1 className="text-2xl font-semibold text-gray-900">Settings</h1>
+          <p className="text-sm text-gray-500">Account and portal preferences.</p>
+        </div>
+        <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+          <p className="text-sm font-semibold text-gray-900">{actor.name}</p>
+          <p className="mt-1 text-sm text-gray-500">{actor.email}</p>
+          <p className="mt-4 text-xs text-gray-400">
+            Deployment environment checks are visible only to the main administrator.
+          </p>
+        </div>
+      </div>
+    )
+  }
   const rows = ENV_KEYS.map((e) => ({ ...e, set: Boolean(process.env[e.key]) }))
 
   return (

@@ -6,6 +6,7 @@ import { resolveBrand } from '@/lib/brands'
 import { db } from '@/lib/serverClient'
 import { statusTone, priorityTone } from '@/lib/taskStatuses'
 import { requireSection } from '@/lib/server-auth'
+import { listAuditEvents } from '@/lib/audit'
 import { TaskControls } from '@/components/tasks/TaskControls'
 import type { OpsAgentArtifactRow, OpsCompletionRecordRow } from '@ocg/db'
 
@@ -23,12 +24,13 @@ export default async function TaskDetail({
   // A user may only open a task they're assigned to, unless they can see all tasks.
   if (!actor.isSuperAdmin && !isTaskAssignee(task, actor.name)) notFound()
 
-  const [context, brand, artifactsRes, completionRes, comments] = await Promise.all([
+  const [context, brand, artifactsRes, completionRes, comments, auditEvents] = await Promise.all([
     getProjectContext(task.project_id),
     task.brand_id ? resolveBrand(task.brand_id) : Promise.resolve(null),
     db().from('ops_agent_artifacts').select('*').eq('task_id', taskId).order('created_at', { ascending: false }),
     db().from('ops_completion_records').select('*').eq('task_id', taskId).order('submitted_at', { ascending: false }),
     listTaskComments(taskId),
+    listAuditEvents('ops_tasks', taskId, 20),
   ])
   const artifacts = (artifactsRes.data as OpsAgentArtifactRow[] | null) ?? []
   const completions = (completionRes.data as OpsCompletionRecordRow[] | null) ?? []
@@ -140,6 +142,28 @@ export default async function TaskDetail({
             <p className="whitespace-pre-wrap text-xs text-gray-600">
               {context || 'No project context captured yet. Use the oc-ops CLI set-project-context to add the ideal end state, definition of done, and code refs.'}
             </p>
+          </Card>
+
+          <Card title="Audit trail">
+            {auditEvents.length === 0 ? (
+              <p className="text-sm text-gray-500">No audit events captured yet.</p>
+            ) : (
+              <ul className="space-y-3">
+                {auditEvents.map((event) => (
+                  <li key={String(event.id)} className="rounded-lg border border-gray-100 p-3">
+                    <p className="text-sm font-medium text-gray-800">
+                      {String(event.action)} by {String(event.actor_name || event.actor_email || 'system')}
+                    </p>
+                    <p className="mt-1 text-xs text-gray-400">
+                      {new Date(String(event.created_at)).toLocaleString('en-KE', { timeZone: 'Africa/Nairobi' })}
+                    </p>
+                    {Array.isArray(event.changed_fields) && event.changed_fields.length > 0 && (
+                      <p className="mt-1 text-xs text-gray-500">Changed: {event.changed_fields.join(', ')}</p>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
           </Card>
         </div>
       </div>
