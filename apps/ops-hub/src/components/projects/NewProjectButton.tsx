@@ -19,7 +19,7 @@ export function NewProjectButton({
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const [owner, setOwner] = useState<'brand' | 'client' | 'sub'>('brand')
+  const [owner, setOwner] = useState<'brand' | 'client' | 'shared' | 'sub'>('brand')
   const [form, setForm] = useState({
     project_name: '',
     brand: brands[0]?.slug ?? '',
@@ -42,6 +42,8 @@ export function NewProjectButton({
         ? { project_name: form.project_name, brand: form.brand, service_line: form.service_line, notes: form.notes }
         : owner === 'client'
         ? { project_name: form.project_name, client_id: form.client_id, service_line: form.service_line, notes: form.notes }
+        : owner === 'shared'
+        ? { project_name: form.project_name, shared: true, service_line: form.service_line, notes: form.notes }
         : { project_name: form.project_name, parent_project_id: form.parent_project_id, service_line: form.service_line, notes: form.notes }
     setSaving(true)
     const { ok, data } = await api<{ error?: string }>('/api/projects', {
@@ -86,6 +88,10 @@ export function NewProjectButton({
                   onClick={() => setOwner('client')}
                   className={`flex-1 rounded-lg border px-3 py-1.5 ${owner === 'client' ? 'border-ocg-navy bg-ocg-navy text-white' : 'border-gray-200 text-gray-600'}`}
                 >External client</button>
+                <button
+                  onClick={() => setOwner('shared')}
+                  className={`flex-1 rounded-lg border px-3 py-1.5 ${owner === 'shared' ? 'border-ocg-navy bg-ocg-navy text-white' : 'border-gray-200 text-gray-600'}`}
+                >Joint / shared</button>
                 {parents.length > 0 && (
                   <button
                     onClick={() => setOwner('sub')}
@@ -109,6 +115,10 @@ export function NewProjectButton({
                     {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
                 </div>
+              ) : owner === 'shared' ? (
+                <p className="rounded-lg bg-gray-50 p-3 text-xs text-gray-500">
+                  This project will be available as shared operating work and won&apos;t be tied to a specific brand or client.
+                </p>
               ) : (
                 <div>
                   <label className="mb-1 block text-xs font-medium text-gray-500">Parent project</label>

@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { listTasks, brandIdFromParam } from '@/lib/tasks'
 import { listProjects } from '@/lib/projects'
 import { listBrands } from '@/lib/brands'
+import { listClients } from '@/lib/clients'
 import { listTeam } from '@/lib/team'
 import { TASK_STATUSES } from '@/lib/taskStatuses'
 import { requireSection } from '@/lib/server-auth'
@@ -21,7 +22,7 @@ export default async function TasksPage({
   // Non-super-admins are scoped to their own tasks; the assignee filter is only
   // honoured for those who may see all tasks.
   const assignedTo = actor.isSuperAdmin ? sp.assignee : actor.name
-  const [tasks, projects, brands, team] = await Promise.all([
+  const [tasks, projects, brands, clients, team] = await Promise.all([
     listTasks({
       brandId,
       projectId: sp.project,
@@ -32,6 +33,7 @@ export default async function TasksPage({
     }),
     listProjects(),
     listBrands(),
+    listClients(),
     listTeam(),
   ])
   const activeBrand = sp.brand ? brands.find((b) => b.slug === sp.brand) : null
@@ -49,6 +51,8 @@ export default async function TasksPage({
         {canEdit && (
           <NewTaskButton
             projects={projects.map((p) => ({ id: p.project_id, name: p.project_name }))}
+            brands={brands.map((b) => ({ slug: b.slug, name: b.name }))}
+            clients={clients.map((c) => ({ id: c.client_id, name: c.client_name }))}
             team={team.map((t) => t.name)}
           />
         )}

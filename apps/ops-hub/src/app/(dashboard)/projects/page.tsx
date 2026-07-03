@@ -42,7 +42,8 @@ export default async function ProjectsPage() {
   const brandGroups = brands
     .map((brand) => ({ brand, projects: topLevel.filter((p) => p.brand_id === brand.id) }))
     .filter((g) => g.projects.length > 0)
-  const clientProjects = topLevel.filter((p) => !p.brand_id)
+  const sharedProjects = topLevel.filter((p) => !p.brand_id && !p.client_id)
+  const clientProjects = topLevel.filter((p) => !p.brand_id && p.client_id)
 
   const parentOptions = topLevel.map((p) => ({ id: p.project_id, name: p.project_name }))
 
@@ -82,6 +83,26 @@ export default async function ProjectsPage() {
           </div>
         </section>
       ))}
+
+      {sharedProjects.length > 0 && (
+        <section>
+          <div className="mb-3 flex items-center gap-2">
+            <FolderKanban size={14} className="text-gray-400" />
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-gray-700">Joint / shared</h2>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {sharedProjects.map((p) => (
+              <ProjectCard
+                key={p.project_id}
+                project={p}
+                subs={children.get(p.project_id) ?? []}
+                taskCount={taskCount}
+                clientName="Shared operating work"
+              />
+            ))}
+          </div>
+        </section>
+      )}
 
       {clientProjects.length > 0 && (
         <section>

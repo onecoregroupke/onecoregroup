@@ -30,6 +30,8 @@ export interface CreateProjectInput {
   project_name: string
   /** brand slug or UUID (internal work) */
   brand?: string
+  /** Joint/shared work not tied to one brand or external client. */
+  shared?: boolean
   /** CLIENT-XXX (external work) */
   client_id?: string
   /** PROJ-XXX — creates this project as a sub-project; inherits the parent's
@@ -55,8 +57,7 @@ export function brandDesignSystemPath(slug: string | null | undefined): string |
   }
 }
 
-/** Create a project under a brand and/or an external client. At least one
- *  owner (brand or client) is required by the DB CHECK constraint.
+/** Create a project under a brand, client, parent, or shared operating bucket.
  *  Auto-seeds project context with the brand's local Design System path when known. */
 export async function createProject(input: CreateProjectInput): Promise<OpsProjectRow> {
   const supabase = db()
@@ -101,7 +102,7 @@ export async function createProject(input: CreateProjectInput): Promise<OpsProje
     if (!client) throw new Error(`Unknown client: ${input.client_id}`)
     clientName = client.client_name
   }
-  if (!brandId && !clientId) {
+  if (!brandId && !clientId && !input.shared) {
     throw new Error('A project must belong to a brand or a client')
   }
 
@@ -111,7 +112,7 @@ export async function createProject(input: CreateProjectInput): Promise<OpsProje
     project_name: name,
     brand_id: brandId,
     client_id: clientId,
-    client_name: clientName,
+    client_name: input.shared && !clientName ? 'Joint / shared' : clientName,
     parent_project_id: parentId,
     service_line: input.service_line ?? '',
     status: 'Active',
