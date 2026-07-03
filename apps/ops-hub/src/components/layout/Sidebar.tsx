@@ -24,7 +24,7 @@ export const OPS_BRANDS = [
 export const MAIN_NAV: { href: string; label: string; icon: React.ElementType; section: SectionKey | null }[] = [
   { href: '/',          label: 'Dashboard', icon: LayoutDashboard, section: 'ops' },
   { href: '/management', label: 'Management', icon: BriefcaseBusiness, section: 'management' },
-  { href: '/meetings', label: 'Meetings', icon: CalendarClock, section: 'meetings' },
+  { href: '/meetings', label: 'Meetings', icon: CalendarClock, section: null },
   { href: '/finance', label: 'Finance', icon: Landmark, section: 'finance' },
   { href: '/inventory', label: 'Inventory', icon: Boxes, section: 'inventory' },
   { href: '/procurement', label: 'Procurement', icon: ShoppingCart, section: 'procurement' },

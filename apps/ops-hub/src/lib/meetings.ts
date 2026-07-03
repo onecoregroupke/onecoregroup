@@ -1,7 +1,18 @@
 import Groq from 'groq-sdk'
+import { hubUrl } from './auth-emails'
+import { ensureConversationMembers, postConversationMessage, startConversation } from './chat'
+import { sendMeetingInvite } from './email'
+import { createNotification } from './notifications'
 import { db, nowIso } from './serverClient'
 import { createTask } from './tasks'
-import type { OcgMeetingRow, OcgMeetingActionItemRow, OpsTaskRow } from '@ocg/db'
+import type {
+  OcgMeetingRow,
+  OcgMeetingActionItemRow,
+  OcgMeetingTemplateRow,
+  OpsTaskRow,
+  OpsTeamMemberRow,
+} from '@ocg/db'
+import type { Actor } from './server-auth'
 
 // =============================================================================
 // Meetings — scheduling, minutes, action items, and the context-aware prep
@@ -20,6 +31,27 @@ export async function listMeetings(limit = 200): Promise<OcgMeetingRow[]> {
     .order('meeting_date', { ascending: false })
     .limit(limit)
   return (data as OcgMeetingRow[] | null) ?? []
+}
+
+export async function listMeetingsForActor(actor: Actor, limit = 200): Promise<OcgMeetingRow[]> {
+  const meetings = await listMeetings(limit)
+  if (actor.can('meetings', 'view')) return meetings
+  return meetings.filter((meeting) => canAccessMeeting(actor, meeting))
+}
+
+export async function listMeetingTemplatesForActor(actor: Actor): Promise<OcgMeetingTemplateRow[]> {
+  const { data } = await db()
+    .from('ocg_meeting_templates')
+    .select('*')
+    .order('updated_at', { ascending: false })
+    .limit(200)
+  const templates = (data as OcgMeetingTemplateRow[] | null) ?? []
+  if (actor.can('meetings', 'view')) return templates
+  const email = cleanEmail(actor.email ?? '')
+  return templates.filter((template) =>
+    cleanEmail(template.created_by_email) === email ||
+    template.attendee_emails.map(cleanEmail).includes(email),
+  )
 }
 
 export async function getMeeting(id: string): Promise<OcgMeetingRow | null> {
@@ -44,12 +76,20 @@ export interface CreateMeetingInput {
   location?: string
   agenda?: string
   attendees?: string[]
+  attendee_emails?: string[]
+  attendee_member_ids?: string[]
+  meeting_mode?: string
+  meeting_url?: string
   series_key?: string
   created_by: string
+  created_by_email?: string | null
+  save_as_template?: boolean
 }
 
 export async function createMeeting(input: CreateMeetingInput): Promise<OcgMeetingRow> {
   if (!input.title?.trim()) throw new Error('Meeting title is required')
+  const attendeeEmails = cleanEmailList(input.attendee_emails ?? [])
+  const attendeeMemberIds = [...new Set((input.attendee_member_ids ?? []).filter(Boolean))]
   const { data, error } = await db()
     .from('ocg_meetings')
     .insert({
@@ -60,6 +100,10 @@ export async function createMeeting(input: CreateMeetingInput): Promise<OcgMeeti
       location: input.location ?? '',
       agenda: input.agenda ?? '',
       attendees: input.attendees ?? [],
+      attendee_emails: attendeeEmails,
+      attendee_member_ids: attendeeMemberIds,
+      meeting_mode: input.meeting_mode || 'in_person',
+      meeting_url: input.meeting_url ?? '',
       series_key: input.series_key?.trim() || slugifySeries(input.title),
       status: 'scheduled',
       created_by: input.created_by,
@@ -67,12 +111,21 @@ export async function createMeeting(input: CreateMeetingInput): Promise<OcgMeeti
     .select('*')
     .single()
   if (error) throw new Error(error.message)
-  return data as OcgMeetingRow
+  const meeting = data as OcgMeetingRow
+  if (input.save_as_template) {
+    await saveMeetingTemplateFromMeeting(meeting, input.created_by, input.created_by_email ?? '')
+  }
+  await notifyMeetingInvites(meeting, {
+    createdByName: input.created_by,
+    createdByEmail: input.created_by_email ?? '',
+  })
+  return meeting
 }
 
 const MEETING_EDITABLE = new Set([
   'title', 'meeting_date', 'brand_id', 'project_id', 'location', 'agenda',
   'attendees', 'series_key', 'status', 'notes', 'summary',
+  'attendee_emails', 'attendee_member_ids', 'meeting_mode', 'meeting_url',
 ])
 
 export async function updateMeeting(id: string, values: Record<string, unknown>): Promise<OcgMeetingRow> {
@@ -83,6 +136,105 @@ export async function updateMeeting(id: string, values: Record<string, unknown>)
   const { data, error } = await db().from('ocg_meetings').update(patch).eq('id', id).select('*').single()
   if (error) throw new Error(error.message)
   return data as OcgMeetingRow
+}
+
+export async function updateMeetingAttendees(
+  id: string,
+  input: {
+    attendees: string[]
+    attendee_emails: string[]
+    attendee_member_ids: string[]
+    actorName: string
+    actorEmail: string
+  },
+): Promise<OcgMeetingRow> {
+  const before = await getMeeting(id)
+  if (!before) throw new Error('Meeting not found')
+  const previous = new Set(before.attendee_emails.map(cleanEmail))
+  const nextEmails = cleanEmailList(input.attendee_emails)
+  const newEmails = nextEmails.filter((email) => !previous.has(email))
+  const { data, error } = await db()
+    .from('ocg_meetings')
+    .update({
+      attendees: input.attendees,
+      attendee_emails: nextEmails,
+      attendee_member_ids: [...new Set(input.attendee_member_ids.filter(Boolean))],
+      updated_at: nowIso(),
+    })
+    .eq('id', id)
+    .select('*')
+    .single()
+  if (error) throw new Error(error.message)
+  const meeting = data as OcgMeetingRow
+  if (newEmails.length > 0) {
+    await notifyMeetingInvites({ ...meeting, attendee_emails: newEmails }, {
+      createdByName: input.actorName,
+      createdByEmail: input.actorEmail,
+    })
+  }
+  return meeting
+}
+
+export async function updateMeetingNotes(
+  id: string,
+  values: { notes?: string; summary?: string },
+  actorName: string,
+): Promise<OcgMeetingRow> {
+  const patch: Record<string, unknown> = {
+    updated_at: nowIso(),
+    notes_updated_by: actorName,
+    notes_updated_at: nowIso(),
+  }
+  if (values.notes !== undefined) patch.notes = values.notes
+  if (values.summary !== undefined) patch.summary = values.summary
+  const { data, error } = await db().from('ocg_meetings').update(patch).eq('id', id).select('*').single()
+  if (error) throw new Error(error.message)
+  return data as OcgMeetingRow
+}
+
+export function canAccessMeeting(actor: Pick<Actor, 'email' | 'name' | 'can'>, meeting: OcgMeetingRow): boolean {
+  if (actor.can('meetings', 'view')) return true
+  const email = cleanEmail(actor.email ?? '')
+  const name = actor.name.trim().toLowerCase()
+  const creator = meeting.created_by.trim().toLowerCase()
+  return (
+    (!!email && meeting.attendee_emails.map(cleanEmail).includes(email)) ||
+    (!!name && meeting.attendees.map((a) => a.trim().toLowerCase()).includes(name)) ||
+    (!!name && creator === name) ||
+    (!!email && creator === email)
+  )
+}
+
+export function canEditMeetingNotes(actor: Pick<Actor, 'email' | 'name' | 'can'>, meeting: OcgMeetingRow): boolean {
+  return actor.can('meetings', 'edit') || canAccessMeeting(actor, meeting)
+}
+
+export async function saveMeetingTemplateFromMeeting(
+  meeting: OcgMeetingRow,
+  createdBy: string,
+  createdByEmail: string,
+): Promise<OcgMeetingTemplateRow> {
+  const { data, error } = await db()
+    .from('ocg_meeting_templates')
+    .insert({
+      title: meeting.title,
+      brand_id: meeting.brand_id,
+      project_id: meeting.project_id,
+      location: meeting.location,
+      agenda: meeting.agenda,
+      attendees: meeting.attendees,
+      attendee_emails: meeting.attendee_emails,
+      attendee_member_ids: meeting.attendee_member_ids,
+      meeting_mode: meeting.meeting_mode,
+      meeting_url: meeting.meeting_url,
+      series_key: meeting.series_key,
+      created_by: createdBy,
+      created_by_email: cleanEmail(createdByEmail),
+    })
+    .select('*')
+    .single()
+  if (error) throw new Error(error.message)
+  return data as OcgMeetingTemplateRow
 }
 
 export async function addActionItem(input: {
@@ -342,4 +494,91 @@ async function updateMeetingPrep(id: string, brief: string): Promise<OcgMeetingR
     .single()
   if (error) throw new Error(error.message)
   return data as OcgMeetingRow
+}
+
+function cleanEmail(email: string): string {
+  return email.trim().toLowerCase()
+}
+
+function cleanEmailList(emails: string[]): string[] {
+  return [...new Set(emails.map(cleanEmail).filter(Boolean))]
+}
+
+async function teamByEmail(): Promise<Map<string, OpsTeamMemberRow>> {
+  const { data } = await db().from('ops_team_members').select('*').eq('active', true)
+  const team = (data as OpsTeamMemberRow[] | null) ?? []
+  return new Map(team.filter((m) => m.email).map((m) => [cleanEmail(m.email!), m]))
+}
+
+async function notifyMeetingInvites(
+  meeting: OcgMeetingRow,
+  creator: { createdByName: string; createdByEmail: string },
+): Promise<void> {
+  const emails = cleanEmailList(meeting.attendee_emails)
+  if (emails.length === 0) return
+  const members = await teamByEmail()
+  const meetingUrl = `${hubUrl()}/meetings/${meeting.id}`
+  const invitedMembers = emails.map((email) => ({
+    email,
+    name: members.get(email)?.name || meeting.attendees.find((a) => a.toLowerCase() === email) || email,
+  }))
+
+  let conversationId = meeting.chat_conversation_id
+  try {
+    if (creator.createdByEmail && invitedMembers.length > 0) {
+      if (!conversationId) {
+        const conversation = await startConversation({
+          creator_email: creator.createdByEmail,
+          creator_name: creator.createdByName,
+          member_emails: invitedMembers,
+          name: meeting.title,
+        })
+        conversationId = conversation.id
+        await db().from('ocg_meetings').update({ chat_conversation_id: conversationId }).eq('id', meeting.id)
+      } else {
+        await ensureConversationMembers(conversationId, [
+          { email: creator.createdByEmail, name: creator.createdByName },
+          ...invitedMembers,
+        ])
+      }
+      await postConversationMessage({
+        conversation_id: conversationId,
+        sender_email: creator.createdByEmail,
+        sender_name: creator.createdByName,
+        body:
+          `Meeting invite: ${meeting.title}\n` +
+          `When: ${new Date(meeting.meeting_date).toLocaleString('en-KE', { dateStyle: 'full', timeStyle: 'short', timeZone: 'Africa/Nairobi' })}\n` +
+          `${meeting.location ? `Where: ${meeting.location}\n` : ''}` +
+          `${meeting.agenda ? `Agenda:\n${meeting.agenda}\n` : ''}` +
+          `Notes: ${meetingUrl}`,
+      })
+    }
+  } catch {
+    // Chat is helpful but non-critical; email + portal inbox still deliver.
+  }
+
+  await Promise.all(invitedMembers.map(async (member) => {
+    await createNotification({
+      recipient_email: member.email,
+      recipient_name: member.name,
+      sender_email: creator.createdByEmail,
+      sender_name: creator.createdByName,
+      kind: 'meeting_invite',
+      title: `Meeting invite: ${meeting.title}`,
+      body: `${new Date(meeting.meeting_date).toLocaleString('en-KE', { dateStyle: 'full', timeStyle: 'short', timeZone: 'Africa/Nairobi' })}${meeting.location ? ` · ${meeting.location}` : ''}`,
+      href: `/meetings/${meeting.id}`,
+      metadata: { meeting_id: meeting.id, chat_conversation_id: conversationId },
+    })
+    await sendMeetingInvite({
+      to: member.email,
+      name: member.name,
+      meetingTitle: meeting.title,
+      meetingDate: meeting.meeting_date,
+      location: meeting.location,
+      agenda: meeting.agenda,
+      invitedBy: creator.createdByName,
+      meetingUrl,
+      meetingJoinUrl: meeting.meeting_url || undefined,
+    })
+  }))
 }

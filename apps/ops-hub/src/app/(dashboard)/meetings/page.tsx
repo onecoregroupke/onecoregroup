@@ -1,21 +1,21 @@
 import Link from 'next/link'
 import { CalendarClock, CalendarCheck2, ListChecks, Sparkles } from 'lucide-react'
-import { listMeetings } from '@/lib/meetings'
+import { listMeetingsForActor, listMeetingTemplatesForActor } from '@/lib/meetings'
 import { listBrands } from '@/lib/brands'
 import { listProjects } from '@/lib/projects'
 import { listTeam } from '@/lib/team'
 import { NewMeetingButton } from '@/components/meetings/NewMeetingButton'
-import { requireSection } from '@/lib/server-auth'
+import { requireActor } from '@/lib/server-auth'
 import { db } from '@/lib/serverClient'
 import type { OcgMeetingActionItemRow, OcgMeetingRow } from '@ocg/db'
 
 export const dynamic = 'force-dynamic'
 
 export default async function MeetingsPage() {
-  const actor = await requireSection('meetings')
-  const canEdit = actor.can('meetings', 'edit')
-  const [meetings, brands, projects, team] = await Promise.all([
-    listMeetings(),
+  const actor = await requireActor()
+  const [meetings, templates, brands, projects, team] = await Promise.all([
+    listMeetingsForActor(actor),
+    listMeetingTemplatesForActor(actor),
     listBrands(),
     listProjects(),
     listTeam(),
@@ -28,8 +28,9 @@ export default async function MeetingsPage() {
     .in('status', ['open', 'carried_over'])
     .order('due_date', { ascending: true })
     .limit(50)
-  const openActions = (actionRows as OcgMeetingActionItemRow[] | null) ?? []
   const meetingById = new Map(meetings.map((m) => [m.id, m]))
+  const openActions = ((actionRows as OcgMeetingActionItemRow[] | null) ?? [])
+    .filter((action) => meetingById.has(action.meeting_id))
 
   const nowIso = new Date().toISOString()
   const upcoming = meetings
@@ -49,13 +50,22 @@ export default async function MeetingsPage() {
             brief built from the previous meeting and the live state of the work.
           </p>
         </div>
-        {canEdit && (
-          <NewMeetingButton
-            brands={brands.map((b) => ({ id: b.id, label: b.short_name || b.name }))}
-            projects={projects.filter((p) => !p.parent_project_id).map((p) => ({ id: p.project_id, label: p.project_name }))}
-            team={team.map((m) => ({ id: m.id, label: m.name }))}
-          />
-        )}
+        <NewMeetingButton
+          brands={brands.map((b) => ({ id: b.id, label: b.short_name || b.name }))}
+          projects={projects.filter((p) => !p.parent_project_id).map((p) => ({ id: p.project_id, label: p.project_name }))}
+          team={team.map((m) => ({ id: m.id, label: m.name, email: m.email ?? '' }))}
+          templates={templates.map((t) => ({
+            id: t.id,
+            title: t.title,
+            brand_id: t.brand_id ?? '',
+            project_id: t.project_id ?? '',
+            location: t.location,
+            agenda: t.agenda,
+            attendees: t.attendee_member_ids,
+            meeting_mode: t.meeting_mode,
+            meeting_url: t.meeting_url,
+          }))}
+        />
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">

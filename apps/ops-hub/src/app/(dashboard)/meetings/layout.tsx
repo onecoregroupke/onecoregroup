@@ -1,8 +1,9 @@
-import { requireSection } from '@/lib/server-auth'
+import { requireActor } from '@/lib/server-auth'
 
-// Server-side gate for every /meetings page. `meetings` inherits from
-// `management` / `ops` grants for existing users.
+// Every signed-in portal user can see their own invited meetings. The pages
+// themselves scope rows to attendee/creator access unless the user has the
+// broader meetings permission.
 export default async function MeetingsLayout({ children }: { children: React.ReactNode }) {
-  await requireSection('meetings')
+  await requireActor()
   return <>{children}</>
 }

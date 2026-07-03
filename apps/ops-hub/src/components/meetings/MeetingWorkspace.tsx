@@ -5,12 +5,12 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
   CalendarClock, CheckCircle2, CircleDashed, ClipboardList, ListTodo,
-  MapPin, NotebookPen, Plus, RefreshCw, Save, Sparkles, Users,
+  Copy, Download, ExternalLink, MapPin, MessageSquare, NotebookPen, Plus, RefreshCw, Save, Sparkles, Users,
 } from 'lucide-react'
 import { api } from '@/lib/apiClient'
 import type { OcgMeetingRow, OcgMeetingActionItemRow } from '@ocg/db'
 
-type Option = { id: string; label: string }
+type Option = { id: string; label: string; email?: string }
 
 /**
  * The interactive meeting page: minutes + summary editing, status, the action
@@ -26,6 +26,7 @@ export function MeetingWorkspace({
   brandColor,
   projectName,
   canEdit,
+  canManageMeeting,
 }: {
   meeting: OcgMeetingRow
   actions: OcgMeetingActionItemRow[]
@@ -34,6 +35,7 @@ export function MeetingWorkspace({
   brandColor: string | null
   projectName: string | null
   canEdit: boolean
+  canManageMeeting: boolean
 }) {
   const router = useRouter()
   const [notes, setNotes] = useState(meeting.notes)
@@ -42,6 +44,12 @@ export function MeetingWorkspace({
   const [prepLoading, setPrepLoading] = useState(false)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
+  const [selectedMembers, setSelectedMembers] = useState<string[]>(
+    meeting.attendee_member_ids?.length
+      ? meeting.attendee_member_ids
+      : team.filter((m) => meeting.attendees.includes(m.label)).map((m) => m.id),
+  )
+  const [savingAttendees, setSavingAttendees] = useState(false)
 
   // New action item form
   const [newAction, setNewAction] = useState({ description: '', owner: '', due_date: '' })
@@ -65,6 +73,21 @@ export function MeetingWorkspace({
     setSaving(true)
     await call({ action: 'update_meeting', id: meeting.id, values: { notes, summary } }, 'Minutes saved.')
     setSaving(false)
+  }
+
+  async function copyMinutes() {
+    const text = [
+      meeting.title,
+      date.toLocaleString('en-KE', { dateStyle: 'full', timeStyle: 'short' }),
+      '',
+      'Summary',
+      summary || 'No summary recorded.',
+      '',
+      'Notes',
+      notes || 'No notes recorded.',
+    ].join('\n')
+    await navigator.clipboard.writeText(text)
+    setMessage('Meeting notes copied.')
   }
 
   async function setStatus(status: string) {
@@ -96,6 +119,25 @@ export function MeetingWorkspace({
     await call({ action: 'to_task', id }, 'Task created from action point.')
   }
 
+  function toggleMember(id: string) {
+    setSelectedMembers((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
+  }
+
+  async function saveAttendees() {
+    setSavingAttendees(true)
+    const selected = team.filter((m) => selectedMembers.includes(m.id))
+    await call({
+      action: 'update_attendees',
+      id: meeting.id,
+      values: {
+        attendees: selected.map((m) => m.label),
+        attendee_emails: selected.map((m) => m.email).filter(Boolean),
+        attendee_member_ids: selectedMembers,
+      },
+    }, 'Attendees updated. New attendees have been invited.')
+    setSavingAttendees(false)
+  }
+
   const openActions = actions.filter((a) => a.status === 'open' || a.status === 'carried_over')
   const closedActions = actions.filter((a) => a.status === 'done' || a.status === 'dropped')
 
@@ -112,14 +154,25 @@ export function MeetingWorkspace({
             {meeting.location && <span className="inline-flex items-center gap-1.5"><MapPin size={14} /> {meeting.location}</span>}
             {brandName && <span>{brandName}</span>}
             {projectName && <span className="inline-flex items-center gap-1.5"><ClipboardList size={14} /> {projectName}</span>}
+            {meeting.meeting_mode !== 'in_person' && <span>{meeting.meeting_mode.replace('_', ' ')}</span>}
           </div>
           {meeting.attendees.length > 0 && (
             <p className="mt-2 inline-flex items-center gap-1.5 text-sm text-gray-500">
               <Users size={14} /> {meeting.attendees.join(', ')}
             </p>
           )}
+          {meeting.chat_conversation_id && (
+            <Link href="/chat" className="mt-2 inline-flex items-center gap-1.5 text-sm text-ocg-gold hover:underline">
+              <MessageSquare size={14} /> Meeting chat is active
+            </Link>
+          )}
+          {meeting.meeting_url && (
+            <a href={meeting.meeting_url} target="_blank" rel="noreferrer" className="mt-2 ml-0 inline-flex items-center gap-1.5 rounded-lg bg-ocg-navy px-3 py-2 text-sm font-medium text-white hover:bg-slate-800 sm:ml-3">
+              <ExternalLink size={14} /> Join meeting
+            </a>
+          )}
         </div>
-        {canEdit && (
+        {canManageMeeting && (
           <div className="flex shrink-0 gap-2">
             {meeting.status !== 'held' && (
               <button onClick={() => setStatus('held')} className="rounded-lg border border-emerald-200 px-3 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-50">
@@ -171,9 +224,26 @@ export function MeetingWorkspace({
 
           {/* Minutes */}
           <section className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
-            <h2 className="mb-3 inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-ocg-gold">
-              <NotebookPen size={14} /> Minutes & summary
-            </h2>
+            <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h2 className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-ocg-gold">
+                  <NotebookPen size={14} /> Shared notes workspace
+                </h2>
+                <p className="mt-1 text-xs text-gray-400">
+                  {meeting.notes_updated_at
+                    ? `Last edited by ${meeting.notes_updated_by || 'a collaborator'} · ${new Date(meeting.notes_updated_at).toLocaleString('en-KE')}`
+                    : 'Everyone invited to this meeting can open and edit these notes.'}
+                </p>
+              </div>
+              <div className="flex shrink-0 gap-2">
+                <button onClick={copyMinutes} className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-gray-600 hover:bg-gray-50">
+                  <Copy size={14} /> Copy
+                </button>
+                <a href={`/api/meetings/${meeting.id}/notes/docx`} className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-gray-600 hover:bg-gray-50">
+                  <Download size={14} /> DOCX
+                </a>
+              </div>
+            </div>
             <label className="mb-1 block text-xs font-medium text-gray-500">Meeting notes</label>
             <textarea className="input min-h-[180px]" value={notes} onChange={(e) => setNotes(e.target.value)} disabled={!canEdit}
               placeholder="What was discussed, decisions made, numbers shared…" />
@@ -192,6 +262,38 @@ export function MeetingWorkspace({
         </div>
 
         {/* Action points */}
+        <div className="space-y-6">
+        <section className="h-fit rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+          <h2 className="mb-3 inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-ocg-gold">
+            <Users size={14} /> Attendees
+          </h2>
+          <div className="flex flex-wrap gap-2">
+            {team.map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => toggleMember(m.id)}
+                className={`rounded-full border px-3 py-1 text-xs font-medium ${
+                  selectedMembers.includes(m.id)
+                    ? 'border-ocg-navy bg-ocg-navy text-white'
+                    : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                }`}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
+          {canEdit && (
+            <button
+              onClick={saveAttendees}
+              disabled={savingAttendees}
+              className="mt-3 inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-60"
+            >
+              <Save size={14} /> {savingAttendees ? 'Saving...' : 'Save attendees'}
+            </button>
+          )}
+        </section>
+
         <section className="h-fit rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
           <h2 className="mb-3 inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-ocg-gold">
             <ListTodo size={14} /> Action points
@@ -231,7 +333,7 @@ export function MeetingWorkspace({
                     </p>
                   </div>
                 </div>
-                {canEdit && (
+                {canManageMeeting && (
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     <MiniBtn onClick={() => setActionStatus(a.id, 'done')} tone="green">Done</MiniBtn>
                     <MiniBtn onClick={() => setActionStatus(a.id, 'carried_over')} tone="amber">Carry over</MiniBtn>
@@ -252,6 +354,7 @@ export function MeetingWorkspace({
             ))}
           </div>
         </section>
+        </div>
       </div>
     </div>
   )

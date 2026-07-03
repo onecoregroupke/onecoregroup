@@ -22,6 +22,18 @@ export interface TaskAssignmentParams {
   completionUrl: string
 }
 
+export interface MeetingInviteParams {
+  to: string
+  name?: string
+  meetingTitle: string
+  meetingDate: string
+  location?: string
+  agenda?: string
+  invitedBy: string
+  meetingUrl: string
+  meetingJoinUrl?: string
+}
+
 const GOLD = '#b07a00'
 const NAVY = '#1a1a2e'
 
@@ -134,6 +146,56 @@ export async function sendTeamTaskBrief(p: {
       from: fromAddress(),
       to: p.to,
       subject: `OCG Morning Tasks · ${p.tasks.length} open`,
+      html,
+    })
+    return true
+  } catch {
+    return false
+  }
+}
+
+export async function sendMeetingInvite(p: MeetingInviteParams): Promise<boolean> {
+  const resend = client()
+  if (!resend) return false
+  const when = new Date(p.meetingDate).toLocaleString('en-KE', {
+    dateStyle: 'full',
+    timeStyle: 'short',
+    timeZone: 'Africa/Nairobi',
+  })
+  const html = `
+  <div style="font-family:Inter,Arial,sans-serif;max-width:600px;margin:0 auto;color:#1a1a2e">
+    <div style="background:${NAVY};padding:20px 24px;border-radius:12px 12px 0 0">
+      <span style="color:#fff;font-weight:700;font-size:18px">One Core Group</span>
+      <span style="color:${GOLD};font-size:13px;margin-left:6px">Meeting invite</span>
+    </div>
+    <div style="border:1px solid #eee;border-top:none;padding:24px;border-radius:0 0 12px 12px">
+      <p style="font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#888;margin:0">
+        Invited by ${escapeHtml(p.invitedBy)}
+      </p>
+      <h1 style="font-size:20px;margin:8px 0 8px">${escapeHtml(p.meetingTitle)}</h1>
+      <p style="color:#555;font-size:14px;margin:0 0 12px"><b>When:</b> ${escapeHtml(when)}</p>
+      ${p.location ? `<p style="color:#555;font-size:14px;margin:0 0 12px"><b>Where:</b> ${escapeHtml(p.location)}</p>` : ''}
+      ${p.agenda ? `<p style="font-size:14px;line-height:1.5;margin:16px 0"><b>Agenda</b><br>${escapeHtml(p.agenda).replace(/\n/g, '<br>')}</p>` : ''}
+      ${p.meetingJoinUrl ? `<a href="${p.meetingJoinUrl}"
+         style="display:inline-block;margin-top:12px;margin-right:8px;background:${NAVY};color:#fff;text-decoration:none;
+                padding:12px 20px;border-radius:8px;font-weight:600;font-size:14px">
+        Join meeting
+      </a>` : ''}
+      <a href="${p.meetingUrl}"
+         style="display:inline-block;margin-top:16px;background:${GOLD};color:#fff;text-decoration:none;
+                padding:12px 20px;border-radius:8px;font-weight:600;font-size:14px">
+        Open meeting notes
+      </a>
+      <p style="color:#aaa;font-size:11px;margin-top:20px">
+        The meeting will also appear in your Ops Hub meetings portal and chat.
+      </p>
+    </div>
+  </div>`
+  try {
+    await resend.emails.send({
+      from: fromAddress(),
+      to: p.to,
+      subject: `[Meeting] ${p.meetingTitle}`,
       html,
     })
     return true

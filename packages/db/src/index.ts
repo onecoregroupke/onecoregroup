@@ -57,6 +57,7 @@ export type {
   OcgApprovalRow,
   OcgBlockerRow,
   OcgMeetingRow,
+  OcgMeetingTemplateRow,
   OcgMeetingActionItemRow,
   OcgDecisionRow,
   OcgRecurringTaskRow,

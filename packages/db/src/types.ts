@@ -902,6 +902,8 @@ export interface OcgMeetingRow {
   title: string
   meeting_date: string
   attendees: string[]
+  attendee_emails: string[]
+  attendee_member_ids: string[]
   notes: string
   summary: string
   created_by: string
@@ -912,10 +914,36 @@ export interface OcgMeetingRow {
   series_key: string
   prep_brief: string
   prep_generated_at: string | null
+  chat_conversation_id: string | null
+  notes_updated_by: string
+  notes_updated_at: string | null
+  meeting_mode: string
+  meeting_url: string
+  google_calendar_event_id: string
   created_at: string
   updated_at: string
 }
 type OcgMeetingInsert = Pick<OcgMeetingRow, 'title'> & Partial<OcgMeetingRow>
+
+export interface OcgMeetingTemplateRow {
+  id: string
+  title: string
+  brand_id: string | null
+  project_id: string | null
+  location: string
+  agenda: string
+  attendees: string[]
+  attendee_emails: string[]
+  attendee_member_ids: string[]
+  meeting_mode: string
+  meeting_url: string
+  series_key: string
+  created_by: string
+  created_by_email: string
+  created_at: string
+  updated_at: string
+}
+type OcgMeetingTemplateInsert = Pick<OcgMeetingTemplateRow, 'title'> & Partial<OcgMeetingTemplateRow>
 
 export interface OcgMeetingActionItemRow {
   id: string
@@ -2124,6 +2152,7 @@ export interface Database {
       ocg_approvals: DbTable<OcgApprovalRow, OcgApprovalInsert, Partial<OcgApprovalRow>>
       ocg_blockers: DbTable<OcgBlockerRow, OcgBlockerInsert, Partial<OcgBlockerRow>>
       ocg_meetings: DbTable<OcgMeetingRow, OcgMeetingInsert, Partial<OcgMeetingRow>>
+      ocg_meeting_templates: DbTable<OcgMeetingTemplateRow, OcgMeetingTemplateInsert, Partial<OcgMeetingTemplateRow>>
       ocg_decisions: DbTable<OcgDecisionRow, OcgDecisionInsert, Partial<OcgDecisionRow>>
       ocg_recurring_tasks: DbTable<OcgRecurringTaskRow, OcgRecurringTaskInsert, Partial<OcgRecurringTaskRow>>
       ocg_meeting_action_items: DbTable<OcgMeetingActionItemRow, OcgMeetingActionItemInsert, Partial<OcgMeetingActionItemRow>>

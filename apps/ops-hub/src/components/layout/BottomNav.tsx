@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import { MAIN_NAV } from './Sidebar'
 import { usePermissions } from '@/contexts/PermissionsContext'
 
-const MOBILE_HREFS = ['/', '/my-tasks', '/tasks', '/management/team', '/npt']
+const MOBILE_HREFS = ['/', '/my-tasks', '/meetings', '/chat', '/tasks']
 
 export function BottomNav() {
   const path = usePathname()

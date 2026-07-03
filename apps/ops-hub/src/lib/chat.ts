@@ -129,6 +129,46 @@ export async function sendMessage(input: {
   return data as OcgMessageRow
 }
 
+export async function postConversationMessage(input: {
+  conversation_id: string
+  sender_email: string
+  sender_name: string
+  body: string
+}): Promise<OcgMessageRow> {
+  if (!input.body?.trim()) throw new Error('Message cannot be empty.')
+  const supabase = db()
+  const { data, error } = await supabase
+    .from('ocg_messages')
+    .insert({
+      conversation_id: input.conversation_id,
+      sender_email: normEmail(input.sender_email),
+      sender_name: input.sender_name,
+      body: input.body.trim(),
+    })
+    .select('*')
+    .single()
+  if (error) throw new Error(error.message)
+  await supabase
+    .from('ocg_conversations')
+    .update({ last_message_at: nowIso(), updated_at: nowIso() })
+    .eq('id', input.conversation_id)
+  return data as OcgMessageRow
+}
+
+export async function ensureConversationMembers(
+  conversationId: string,
+  members: { email: string; name: string }[],
+): Promise<void> {
+  const rows = members
+    .map((m) => ({ conversation_id: conversationId, member_email: normEmail(m.email), member_name: m.name }))
+    .filter((m) => m.member_email)
+  if (rows.length === 0) return
+  await db().from('ocg_conversation_members').upsert(rows, {
+    onConflict: 'conversation_id,member_email',
+    ignoreDuplicates: true,
+  })
+}
+
 /**
  * Start a conversation. DMs are deduplicated: if a dm between exactly these
  * two people exists, it is returned instead of creating a duplicate.
