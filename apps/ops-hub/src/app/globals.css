@@ -61,4 +61,23 @@
       display: none;
     }
   }
+
+  /* Printing (transcripts, report cards): strip the app chrome so only the
+     page content (the printable sheet) is on paper. */
+  @media print {
+    body {
+      background: #fff;
+    }
+
+    aside,
+    header,
+    nav {
+      display: none !important;
+    }
+
+    main {
+      padding: 0 !important;
+      overflow: visible !important;
+    }
+  }
 }

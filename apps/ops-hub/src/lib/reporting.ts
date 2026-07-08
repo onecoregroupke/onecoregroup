@@ -2,6 +2,7 @@ import Groq from 'groq-sdk'
 import { db } from './serverClient'
 import { sendReport } from './email'
 import { brandMap } from './brands'
+import { listBrandManagers } from './brandManagers'
 import { listTeam } from './team'
 import { dutyProgressByPerson } from './duties'
 import type { OpsTaskRow, OpsCompletionRecordRow, OpsTaskCommentRow } from '@ocg/db'
@@ -46,7 +47,7 @@ export interface ReportData {
   dutiesToday: { person: string; done: number; total: number }[]
 }
 
-export async function gatherReportData(period: ReportPeriod): Promise<ReportData> {
+export async function gatherReportData(period: ReportPeriod, brandIds?: string[]): Promise<ReportData> {
   const supabase = db()
   const { sinceIso } = periodWindow(period)
   const today = new Date().toISOString().slice(0, 10)
@@ -64,7 +65,11 @@ export async function gatherReportData(period: ReportPeriod): Promise<ReportData
       .order('created_at', { ascending: false }),
     brandMap(),
   ])
-  const tasks = (tasksRes.data as OpsTaskRow[] | null) ?? []
+  let tasks = (tasksRes.data as OpsTaskRow[] | null) ?? []
+  // Brand-scoped report (brand managers): only their brands' tasks count.
+  if (brandIds && brandIds.length > 0) {
+    tasks = tasks.filter((t) => t.brand_id && brandIds.includes(t.brand_id))
+  }
   const completions = (completionsRes.data as OpsCompletionRecordRow[] | null) ?? []
   const comments = (commentsRes.data as OpsTaskCommentRow[] | null) ?? []
 
@@ -86,12 +91,15 @@ export async function gatherReportData(period: ReportPeriod): Promise<ReportData
     draftReady: draftReady.filter((t) => t.brand_id === b).length,
   }))
 
-  // Today's daily-duty completion per person.
+  // Today's daily-duty completion per person (group-wide report only — duties
+  // are not brand-scoped, so they would mislead in a brand manager's report).
   const [team, dutyProgress] = await Promise.all([listTeam(), dutyProgressByPerson()])
   const teamName = (id: string | null) => team.find((m) => m.id === id)?.name ?? 'Unassigned'
-  const dutiesToday = dutyProgress
-    .map((d) => ({ person: d.assignee_id ? teamName(d.assignee_id) : 'Unassigned', done: d.done, total: d.total }))
-    .sort((a, b) => a.person.localeCompare(b.person))
+  const dutiesToday = brandIds?.length
+    ? []
+    : dutyProgress
+        .map((d) => ({ person: d.assignee_id ? teamName(d.assignee_id) : 'Unassigned', done: d.done, total: d.total }))
+        .sort((a, b) => a.person.localeCompare(b.person))
 
   // Progress comments in the window on tasks that are NOT yet completed.
   const taskById = new Map(tasks.map((t) => [t.task_id, t]))
@@ -233,5 +241,40 @@ export async function generateAndSendReport(
       triggered_by: 'cron',
     })
 
+  // Brand managers get their OWN report, scoped to just their brand(s)' tasks.
+  await sendBrandManagerReports(period).catch(() => {
+    // Brand reports are best-effort; the group report already went out.
+  })
+
   return { ok: true, sent, data, note: sent ? undefined : 'Email not sent (RESEND_API_KEY/recipients missing) — report still logged.' }
+}
+
+/** Per-brand-manager report: same digest, filtered to the manager's brands. */
+async function sendBrandManagerReports(period: ReportPeriod): Promise<void> {
+  const managers = await listBrandManagers()
+  if (managers.length === 0) return
+  const bmap = await brandMap()
+  const label = period[0].toUpperCase() + period.slice(1)
+
+  for (const manager of managers) {
+    const data = await gatherReportData(period, manager.brandIds)
+    const narrative = await narrateReport(data)
+    const html = buildHtml(data, narrative)
+    const brandNames = manager.brandIds
+      .map((id) => bmap.get(id)?.short_name || bmap.get(id)?.name || '')
+      .filter(Boolean)
+      .join(', ')
+    const subject = `OCG ${brandNames || 'Brand'} — ${label} report · ${data.completedCount} completed, ${data.activeCount} active`
+    const sent = await sendReport(subject, html, [manager.email])
+    await db()
+      .from('ops_report_logs')
+      .insert({
+        report_type: `${period}-brand`,
+        subject,
+        html,
+        recipient: manager.email,
+        triggered_by: 'cron',
+      })
+    if (!sent) continue
+  }
 }

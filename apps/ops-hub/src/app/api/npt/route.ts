@@ -8,6 +8,8 @@ import {
   type MutationType,
 } from '@/lib/managementMutations'
 import { completeAppointment } from '@/lib/npt'
+import { sendAppointmentCreatedComms, sendAppointmentRescheduledComms } from '@/lib/nptComms'
+import { db } from '@/lib/serverClient'
 
 export async function POST(req: NextRequest) {
   const actor = await getApiActor(req)
@@ -19,6 +21,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: 'forbidden' }, { status: 403 })
     }
     const row = await insertManagedRow(type, body?.values ?? {})
+    // New appointment → confirmation to the client + notice to the technician.
+    // Best-effort: comms never block scheduling.
+    if (type === 'npt_appointment' && (row as { id?: string })?.id) {
+      await sendAppointmentCreatedComms((row as { id: string }).id)
+    }
     return NextResponse.json({ ok: true, row }, { status: 201 })
   } catch (e) {
     return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 400 })
@@ -40,7 +47,18 @@ export async function PATCH(req: NextRequest) {
     let row
     if (body?.action === 'complete-job') row = await completeNptJob(body?.id, body?.values ?? {})
     else if (body?.action === 'complete-appointment') row = await completeAppointment(body?.id, body?.values ?? {})
-    else row = await updateManagedRow(body?.type as MutationType, body?.id, body?.values ?? {})
+    else {
+      // Capture the previous start time so a reschedule can notify the client.
+      let previousStart: string | null = null
+      if (body?.type === 'npt_appointment' && body?.id) {
+        const { data: before } = await db().from('npt_appointments').select('start_at').eq('id', body.id).maybeSingle()
+        previousStart = (before as { start_at: string | null } | null)?.start_at ?? null
+      }
+      row = await updateManagedRow(body?.type as MutationType, body?.id, body?.values ?? {})
+      if (body?.type === 'npt_appointment' && body?.id) {
+        await sendAppointmentRescheduledComms(body.id, previousStart)
+      }
+    }
     return NextResponse.json({ ok: true, row })
   } catch (e) {
     return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 400 })

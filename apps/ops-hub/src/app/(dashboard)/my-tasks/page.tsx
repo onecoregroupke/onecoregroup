@@ -2,15 +2,20 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { CalendarClock, MapPin } from 'lucide-react'
 import { api } from '@/lib/apiClient'
 import { statusTone, priorityTone, TASK_STATUSES } from '@/lib/taskStatuses'
+import { formatEatRange } from '@/lib/kenyaTime'
 import { MyDuties } from '@/components/duties/MyDuties'
+import { PrivateTasks } from '@/components/personal/PrivateTasks'
 import type { OpsTaskRow } from '@ocg/db'
+import type { MyAppointment } from '@/app/api/my-tasks/route'
 
 export default function MyTasksPage() {
   const [loading, setLoading] = useState(true)
   const [name, setName] = useState('')
   const [tasks, setTasks] = useState<OpsTaskRow[]>([])
+  const [appointments, setAppointments] = useState<MyAppointment[]>([])
 
   useEffect(() => {
     load()
@@ -18,9 +23,10 @@ export default function MyTasksPage() {
 
   function load() {
     setLoading(true)
-    api<{ name: string; tasks: OpsTaskRow[] }>('/api/my-tasks').then(({ data }) => {
+    api<{ name: string; tasks: OpsTaskRow[]; appointments: MyAppointment[] }>('/api/my-tasks').then(({ data }) => {
       setName(data.name ?? '')
       setTasks(data.tasks ?? [])
+      setAppointments(data.appointments ?? [])
       setLoading(false)
     })
   }
@@ -41,6 +47,25 @@ export default function MyTasksPage() {
         <p className="text-sm text-gray-500">Loading…</p>
       ) : (
         <>
+          {appointments.length > 0 && (
+            <Section title={`My appointments (${appointments.length})`}>
+              {appointments.map((a) => (
+                <div key={a.id} className="grid gap-2 rounded-lg border border-gray-100 p-3 md:grid-cols-[1fr_auto] md:items-center">
+                  <div className="min-w-0">
+                    <p className="flex items-center gap-1.5 truncate text-sm font-medium text-gray-800">
+                      <CalendarClock size={14} className="shrink-0 text-ocg-gold" /> {a.title}
+                      {a.customer_name && <span className="text-gray-400">· {a.customer_name}</span>}
+                    </p>
+                    <p className="mt-0.5 flex items-center gap-1 truncate text-xs text-gray-400">
+                      {formatEatRange(a.start_at, a.end_at)}
+                      {a.location && <><MapPin size={11} className="ml-1 shrink-0" /> {a.location}</>}
+                    </p>
+                  </div>
+                  <span className="w-fit rounded bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-700">{a.status}</span>
+                </div>
+              ))}
+            </Section>
+          )}
           <Section title={`Open (${open.length})`}>
             {open.length === 0 ? (
               <Empty>Nothing open. Nice.</Empty>
@@ -55,6 +80,8 @@ export default function MyTasksPage() {
           )}
         </>
       )}
+
+      <PrivateTasks />
     </div>
   )
 }

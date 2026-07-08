@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { getApiActor } from '@/lib/api-auth'
 import { listTasks, createTask, brandIdFromParam } from '@/lib/tasks'
+import { getProject } from '@/lib/projects'
 import { listTeam, lookupAssigneeEmail } from '@/lib/team'
 import { resolveBrand } from '@/lib/brands'
 import { sendTaskAssignment } from '@/lib/email'
@@ -14,13 +15,15 @@ export async function GET(req: NextRequest) {
   if (!actor) return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 })
   const url = new URL(req.url)
   const brandId = await brandIdFromParam(url.searchParams.get('brand'))
-  // Non-super-admins are scoped to their own assigned tasks; the `assignee`
-  // query param is only honoured for users who may see all tasks.
-  const assignedTo = actor.isSuperAdmin
-    ? (url.searchParams.get('assignee') ?? undefined)
-    : actor.name
+  // Scope: 'own' users only see their assigned tasks; brand managers see all
+  // tasks within their brands; the `assignee` param is honoured otherwise.
+  const scope = actor.taskScope
+  const assignedTo = scope.kind === 'own'
+    ? actor.name
+    : (url.searchParams.get('assignee') ?? undefined)
   const tasks = await listTasks({
     brandId,
+    brandIds: scope.kind === 'brands' ? scope.brandIds : undefined,
     projectId: url.searchParams.get('project') ?? undefined,
     status: url.searchParams.get('status') ?? undefined,
     assignedTo,
@@ -44,6 +47,16 @@ export async function POST(req: NextRequest) {
         { ok: false, error: 'task_name and project_id are required' },
         { status: 400 },
       )
+    }
+    // Brand managers may only create tasks under their own brands' projects.
+    if (actor.taskScope.kind === 'brands') {
+      const project = await getProject(body.project_id)
+      if (!project || !project.brand_id || !actor.taskScope.brandIds.includes(project.brand_id)) {
+        return NextResponse.json(
+          { ok: false, error: 'You can only create tasks within your own brand.' },
+          { status: 403 },
+        )
+      }
     }
     const task = await createTask({ ...body, created_by: actor.email ?? 'admin' })
     await auditEvent({

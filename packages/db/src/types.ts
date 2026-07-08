@@ -1198,6 +1198,10 @@ export interface NptCustomerRow {
   referred_by: string
   tax_exempt: boolean
   tags: string[]
+  secondary_phone: string
+  address: string
+  city: string
+  send_auto_reminders: boolean
   created_at: string
   updated_at: string
 }
@@ -1357,6 +1361,21 @@ export interface NptTimelineEventRow {
 }
 type NptTimelineEventInsert = Partial<NptTimelineEventRow>
 
+// ─── NPT communications log (migration 041) ──────────────────────────────────
+export interface NptCommLogRow {
+  id: string
+  appointment_id: string | null
+  customer_id: string | null
+  kind: string
+  channel: string
+  recipient: string
+  subject: string
+  status: string
+  detail: string
+  sent_at: string
+}
+type NptCommLogInsert = Pick<NptCommLogRow, 'kind'> & Partial<NptCommLogRow>
+
 export interface RayyanGuardianRow {
   id: string
   full_name: string
@@ -1415,6 +1434,59 @@ export interface RayyanFeeFollowupRow {
   updated_at: string
 }
 type RayyanFeeFollowupInsert = Partial<RayyanFeeFollowupRow>
+
+// ─── Rayyan academics (migration 043) ─────────────────────────────────────────
+export interface RayyanActivityRow {
+  id: string
+  name: string
+  description: string
+  is_active: boolean
+  created_at: string
+}
+type RayyanActivityInsert = Pick<RayyanActivityRow, 'name'> & Partial<RayyanActivityRow>
+
+export interface RayyanStudentActivityRow {
+  id: string
+  student_id: string
+  activity_id: string
+  joined_on: string | null
+  notes: string
+  is_active: boolean
+  created_at: string
+}
+type RayyanStudentActivityInsert = Pick<RayyanStudentActivityRow, 'student_id' | 'activity_id'> &
+  Partial<RayyanStudentActivityRow>
+
+export interface RayyanAssessmentRow {
+  id: string
+  student_id: string
+  academic_year: string
+  term: string
+  learning_area: string
+  assessment_type: string
+  performance_level: string
+  score: number | null
+  remarks: string
+  assessed_on: string | null
+  teacher: string
+  created_at: string
+  updated_at: string
+}
+type RayyanAssessmentInsert = Pick<RayyanAssessmentRow, 'student_id' | 'learning_area'> &
+  Partial<RayyanAssessmentRow>
+
+export interface RayyanStudentHistoryRow {
+  id: string
+  student_id: string
+  event_type: string
+  title: string
+  details: string
+  occurred_on: string
+  recorded_by: string
+  created_at: string
+}
+type RayyanStudentHistoryInsert = Pick<RayyanStudentHistoryRow, 'student_id' | 'title'> &
+  Partial<RayyanStudentHistoryRow>
 
 export interface RayyanSchoolpayImportBatchRow {
   id: string
@@ -1930,6 +2002,10 @@ export interface ProcurementVendorRow {
   payment_terms: string
   notes: string
   is_active: boolean
+  is_blacklisted: boolean
+  blacklist_reason: string
+  blacklisted_by: string
+  blacklisted_at: string | null
   created_at: string
   updated_at: string
 }
@@ -1942,6 +2018,7 @@ export interface ProcurementPurchaseRow {
   purchase_date: string
   reference: string
   receipt_url: string
+  category: string
   status: string
   payment_status: string
   total_cost_ksh: number
@@ -2073,6 +2150,47 @@ export interface OcgNotificationRow {
 }
 type OcgNotificationInsert = Pick<OcgNotificationRow, 'recipient_email' | 'title'> & Partial<OcgNotificationRow>
 
+// ─── Custom forms (migration 042) ─────────────────────────────────────────────
+/** One field in a custom form template. */
+export interface OcgFormFieldDef {
+  key: string
+  label: string
+  type: 'text' | 'textarea' | 'number' | 'date' | 'time' | 'select' | 'checkbox'
+  required?: boolean
+  options?: string[]
+  placeholder?: string
+}
+
+export interface OcgFormTemplateRow {
+  id: string
+  brand_id: string | null
+  module: string
+  name: string
+  description: string
+  frequency: string
+  fields: OcgFormFieldDef[]
+  is_active: boolean
+  sort_order: number
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+type OcgFormTemplateInsert = Pick<OcgFormTemplateRow, 'name'> & Partial<OcgFormTemplateRow>
+
+export interface OcgFormSubmissionRow {
+  id: string
+  template_id: string
+  brand_id: string | null
+  submitted_by: string
+  submitted_by_name: string
+  submission_date: string
+  values: Record<string, unknown>
+  notes: string
+  created_at: string
+  updated_at: string
+}
+type OcgFormSubmissionInsert = Pick<OcgFormSubmissionRow, 'template_id'> & Partial<OcgFormSubmissionRow>
+
 export interface OpsAttendanceRecordRow {
   id: string
   team_member_id: string | null
@@ -2164,6 +2282,8 @@ export interface Database {
       ocg_day_closes: DbTable<OcgDayCloseRow, OcgDayCloseInsert, Partial<OcgDayCloseRow>>
       ocg_audit_events: DbTable<OcgAuditEventRow, OcgAuditEventInsert, Partial<OcgAuditEventRow>>
       ocg_notifications: DbTable<OcgNotificationRow, OcgNotificationInsert, Partial<OcgNotificationRow>>
+      ocg_form_templates: DbTable<OcgFormTemplateRow, OcgFormTemplateInsert, Partial<OcgFormTemplateRow>>
+      ocg_form_submissions: DbTable<OcgFormSubmissionRow, OcgFormSubmissionInsert, Partial<OcgFormSubmissionRow>>
       ops_attendance_records: DbTable<OpsAttendanceRecordRow, OpsAttendanceRecordInsert, Partial<OpsAttendanceRecordRow>>
       inventory_items: DbTable<InventoryItemRow, InventoryItemInsert, Partial<InventoryItemRow>>
       inventory_movements: DbTable<InventoryMovementRow, InventoryMovementInsert, Partial<InventoryMovementRow>>
@@ -2189,6 +2309,7 @@ export interface Database {
       npt_appointments: DbTable<NptAppointmentRow, NptAppointmentInsert, Partial<NptAppointmentRow>>
       npt_piano_measurements: DbTable<NptPianoMeasurementRow, NptPianoMeasurementInsert, Partial<NptPianoMeasurementRow>>
       npt_timeline_events: DbTable<NptTimelineEventRow, NptTimelineEventInsert, Partial<NptTimelineEventRow>>
+      npt_comm_logs: DbTable<NptCommLogRow, NptCommLogInsert, Partial<NptCommLogRow>>
       rayyan_guardians: DbTable<RayyanGuardianRow, RayyanGuardianInsert, Partial<RayyanGuardianRow>>
       rayyan_students: DbTable<RayyanStudentRow, RayyanStudentInsert, Partial<RayyanStudentRow>>
       rayyan_admissions: DbTable<RayyanAdmissionRow, RayyanAdmissionInsert, Partial<RayyanAdmissionRow>>
@@ -2200,6 +2321,10 @@ export interface Database {
       rayyan_classes: DbTable<RayyanClassRow, RayyanClassInsert, Partial<RayyanClassRow>>
       rayyan_attendance_notes: DbTable<RayyanAttendanceNoteRow, RayyanAttendanceNoteInsert, Partial<RayyanAttendanceNoteRow>>
       rayyan_admin_tasks: DbTable<RayyanAdminTaskRow, RayyanAdminTaskInsert, Partial<RayyanAdminTaskRow>>
+      rayyan_activities: DbTable<RayyanActivityRow, RayyanActivityInsert, Partial<RayyanActivityRow>>
+      rayyan_student_activities: DbTable<RayyanStudentActivityRow, RayyanStudentActivityInsert, Partial<RayyanStudentActivityRow>>
+      rayyan_assessments: DbTable<RayyanAssessmentRow, RayyanAssessmentInsert, Partial<RayyanAssessmentRow>>
+      rayyan_student_history: DbTable<RayyanStudentHistoryRow, RayyanStudentHistoryInsert, Partial<RayyanStudentHistoryRow>>
       rhythms_students: DbTable<RhythmsStudentRow, RhythmsStudentInsert, Partial<RhythmsStudentRow>>
       rhythms_schoolpay_import_batches: DbTable<RhythmsSchoolpayImportBatchRow, RhythmsSchoolpayImportBatchInsert, Partial<RhythmsSchoolpayImportBatchRow>>
       rhythms_schoolpay_payment_snapshots: DbTable<RhythmsSchoolpayPaymentSnapshotRow, RhythmsSchoolpayPaymentSnapshotInsert, Partial<RhythmsSchoolpayPaymentSnapshotRow>>

@@ -7,6 +7,8 @@ import type { OpsTaskRow, OpsTaskCommentRow } from '@ocg/db'
 
 export interface TaskFilter {
   brandId?: string
+  /** Restrict to these brand ids (brand-manager scope). Applied on top of brandId. */
+  brandIds?: string[]
   projectId?: string
   clientId?: string
   status?: string
@@ -19,6 +21,7 @@ export interface TaskFilter {
 export async function listTasks(filter: TaskFilter = {}): Promise<OpsTaskRow[]> {
   let q = db().from('ops_tasks').select('*').order('created_at', { ascending: false })
   if (filter.brandId) q = q.eq('brand_id', filter.brandId)
+  if (filter.brandIds) q = q.in('brand_id', filter.brandIds)
   if (filter.projectId) q = q.eq('project_id', filter.projectId)
   if (filter.clientId) q = q.eq('client_id', filter.clientId)
   if (filter.status) q = q.eq('current_status', filter.status)

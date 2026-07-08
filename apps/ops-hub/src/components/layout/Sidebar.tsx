@@ -7,6 +7,7 @@ import {
   CheckSquare, Settings, LogOut, X, BriefcaseBusiness, Wrench, GraduationCap,
   UsersRound, BookOpen, BookMarked, UserCog, CalendarCheck, Lock, Landmark,
   CalendarClock, MessagesSquare, Megaphone, Boxes, ShoppingCart, ClipboardCheck,
+  ClipboardList,
 } from 'lucide-react'
 import { usePermissions } from '@/contexts/PermissionsContext'
 import type { SectionKey } from '@/lib/permissions'
@@ -32,8 +33,10 @@ export const MAIN_NAV: { href: string; label: string; icon: React.ElementType; s
   { href: '/management/users', label: 'Portal Access', icon: UserCog, section: 'users' },
   { href: '/management/duties', label: 'Daily Duties', icon: CalendarCheck, section: 'management' },
   { href: '/attendance', label: 'Attendance', icon: ClipboardCheck, section: null },
-  { href: '/personal',  label: 'Personal',  icon: Lock,            section: 'personal' },
+  // Personal is every user's PRIVATE task space — always visible, own rows only.
+  { href: '/personal',  label: 'Personal',  icon: Lock,            section: null },
   { href: '/my-tasks',  label: 'My Tasks',  icon: CheckSquare,     section: null },
+  { href: '/forms',     label: 'Forms',     icon: ClipboardList,   section: null },
   { href: '/chat',      label: 'Chat',      icon: MessagesSquare,  section: null },
   { href: '/forum',     label: 'Forum',     icon: Megaphone,       section: null },
   { href: '/tasks',     label: 'Tasks',     icon: ListTodo,        section: 'ops' },

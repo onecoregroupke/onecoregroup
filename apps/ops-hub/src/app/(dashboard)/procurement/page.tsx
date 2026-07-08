@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { ArrowUpRight, Contact, ShoppingCart } from 'lucide-react'
+import { ArrowUpRight, Ban, Contact, ShoppingCart } from 'lucide-react'
 import { listBrands } from '@/lib/brands'
 import { listItems } from '@/lib/inventory'
 import { listPurchases, listVendors } from '@/lib/procurement'
@@ -7,6 +7,7 @@ import { scopeBrands } from '@/lib/finance'
 import { requireSection } from '@/lib/server-auth'
 import { ProcurementForms } from '@/components/procurement/ProcurementForms'
 import { ReceiveButton } from '@/components/procurement/ReceiveButton'
+import { VendorBlacklistButton } from '@/components/procurement/VendorBlacklistButton'
 
 export const dynamic = 'force-dynamic'
 
@@ -54,8 +55,8 @@ export default async function ProcurementPage() {
 
       {canEdit && (
         <ProcurementForms
-          brands={brands.map((b) => ({ id: b.id, label: b.short_name || b.name }))}
-          vendors={vendors.map((v) => ({ id: v.id, label: v.name }))}
+          brands={brands.map((b) => ({ id: b.id, label: b.short_name || b.name, slug: b.slug }))}
+          vendors={vendors.map((v) => ({ id: v.id, label: v.name, blacklisted: v.is_blacklisted ?? false, blacklistReason: v.blacklist_reason ?? '' }))}
           inventoryItems={inventoryItems.map((i) => ({ id: i.id, brandId: i.brand_id, label: `${i.name}${i.sku ? ` (${i.sku})` : ''}` }))}
         />
       )}
@@ -84,7 +85,7 @@ export default async function ProcurementPage() {
                           {vendorById.get(p.vendor_id ?? '')?.name ?? 'Unknown vendor'} · KSh {Number(p.total_cost_ksh).toLocaleString()}
                         </p>
                         <p className="mt-0.5 text-xs text-gray-400">
-                          {p.purchase_date} · {brand?.short_name ?? 'Brand'} · {p.reference || 'no reference'} · {p.payment_status}
+                          {p.purchase_date} · {brand?.short_name ?? 'Brand'}{p.category ? ` · ${p.category}` : ''} · {p.reference || 'no reference'} · {p.payment_status}
                           {p.recorded_by ? ` · by ${p.recorded_by}` : ''}
                         </p>
                       </div>
@@ -130,13 +131,29 @@ export default async function ProcurementPage() {
           ) : (
             <div className="space-y-2.5">
               {vendors.map((v) => (
-                <div key={v.id} className="rounded-lg border border-gray-100 p-3">
-                  <p className="text-sm font-medium text-gray-800">{v.name}</p>
+                <div key={v.id} className={`rounded-lg border p-3 ${v.is_blacklisted ? 'border-red-200 bg-red-50/50' : 'border-gray-100'}`}>
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-sm font-medium text-gray-800">
+                      {v.name}
+                      {v.is_blacklisted && (
+                        <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold uppercase text-red-700">
+                          <Ban size={10} /> Blacklisted
+                        </span>
+                      )}
+                    </p>
+                    {canEdit && <VendorBlacklistButton vendorId={v.id} vendorName={v.name} blacklisted={v.is_blacklisted ?? false} />}
+                  </div>
                   <p className="mt-0.5 text-xs text-gray-400">
                     {[v.contact_person, v.phone, v.email].filter(Boolean).join(' · ') || 'No contact details'}
                     {v.brand_id ? ` · ${brandById.get(v.brand_id)?.short_name ?? ''}` : ' · group-wide'}
                   </p>
                   {v.payment_terms && <p className="mt-1 text-xs text-gray-500">Terms: {v.payment_terms}</p>}
+                  {v.is_blacklisted && (
+                    <p className="mt-1.5 rounded-md bg-red-50 px-2 py-1.5 text-xs text-red-700">
+                      <b>Do not buy from this vendor.</b> {v.blacklist_reason || 'No reason recorded.'}
+                      {v.blacklisted_by && <span className="text-red-500"> — {v.blacklisted_by}{v.blacklisted_at ? `, ${new Date(v.blacklisted_at).toLocaleDateString('en-KE')}` : ''}</span>}
+                    </p>
+                  )}
                 </div>
               ))}
             </div>

@@ -2,10 +2,12 @@
 
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { CheckCircle2, Contact, Plus, ShoppingCart, Trash2 } from 'lucide-react'
+import { Ban, CheckCircle2, Contact, Plus, ShoppingCart, Trash2 } from 'lucide-react'
 import { api } from '@/lib/apiClient'
+import { procurementCategories } from '@/lib/brandCategories'
 
-type Option = { id: string; label: string }
+type BrandOption = { id: string; label: string; slug: string }
+type VendorOption = { id: string; label: string; blacklisted: boolean; blacklistReason?: string }
 type ItemOption = { id: string; brandId: string; label: string }
 type Line = { description: string; quantity: string; unit: string; unit_cost_ksh: string; inventory_item_id: string }
 
@@ -22,8 +24,8 @@ export function ProcurementForms({
   vendors,
   inventoryItems,
 }: {
-  brands: Option[]
-  vendors: Option[]
+  brands: BrandOption[]
+  vendors: VendorOption[]
   inventoryItems: ItemOption[]
 }) {
   const router = useRouter()
@@ -46,6 +48,11 @@ export function ProcurementForms({
     [inventoryItems, purchase.brand_id],
   )
   const total = lines.reduce((sum, l) => sum + Number(l.quantity || 0) * Number(l.unit_cost_ksh || 0), 0)
+  const categories = useMemo(
+    () => procurementCategories(brands.find((b) => b.id === purchase.brand_id)?.slug),
+    [brands, purchase.brand_id],
+  )
+  const selectedVendor = vendors.find((v) => v.id === purchase.vendor_id)
 
   function setP(name: string, value: string) {
     setPurchase((c) => ({ ...c, [name]: value }))
@@ -110,7 +117,17 @@ export function ProcurementForms({
             <Field label="Vendor">
               <select className="input" value={purchase.vendor_id ?? ''} onChange={(e) => setP('vendor_id', e.target.value)}>
                 <option value="">Choose vendor</option>
-                {vendors.map((v) => <option key={v.id} value={v.id}>{v.label}</option>)}
+                {vendors.map((v) => (
+                  <option key={v.id} value={v.id} disabled={v.blacklisted}>
+                    {v.blacklisted ? `🚫 ${v.label} — BLACKLISTED` : v.label}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Category">
+              <select className="input" value={purchase.category ?? ''} onChange={(e) => setP('category', e.target.value)}>
+                <option value="">Choose category</option>
+                {categories.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </Field>
             <Field label="Date *"><input type="date" className="input" value={purchase.purchase_date ?? ''} onChange={(e) => setP('purchase_date', e.target.value)} /></Field>
@@ -125,6 +142,17 @@ export function ProcurementForms({
             </Field>
             <Field label="Notes" className="lg:col-span-2"><input className="input" value={purchase.notes ?? ''} onChange={(e) => setP('notes', e.target.value)} /></Field>
           </div>
+
+          {selectedVendor?.blacklisted && (
+            <p className="mt-3 flex items-start gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-700">
+              <Ban size={15} className="mt-0.5 shrink-0" />
+              <span>
+                <b>{selectedVendor.label} is blacklisted</b>
+                {selectedVendor.blacklistReason ? ` — ${selectedVendor.blacklistReason}` : ''}. New purchases
+                against this vendor are blocked; restore them from the vendor register first.
+              </span>
+            </p>
+          )}
 
           <p className="mb-2 mt-4 text-xs font-semibold uppercase tracking-wide text-gray-500">Line items</p>
           <div className="space-y-2">

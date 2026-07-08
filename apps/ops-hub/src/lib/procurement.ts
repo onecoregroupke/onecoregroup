@@ -26,6 +26,46 @@ export async function listVendors(): Promise<ProcurementVendorRow[]> {
   return (data as ProcurementVendorRow[] | null) ?? []
 }
 
+/**
+ * Blacklist (or restore) a vendor. The vendor stays visible in the register —
+ * with the reason and who flagged them — so anyone operating the system knows
+ * how to go about it, but new purchases against them are blocked.
+ */
+export async function setVendorBlacklist(
+  vendorId: string,
+  blacklisted: boolean,
+  opts: { reason?: string; by: string },
+): Promise<ProcurementVendorRow> {
+  if (!vendorId) throw new Error('vendor id is required')
+  if (blacklisted && !opts.reason?.trim()) {
+    throw new Error('A reason is required when blacklisting a vendor.')
+  }
+  const { data, error } = await db()
+    .from('procurement_vendors')
+    .update(
+      blacklisted
+        ? {
+            is_blacklisted: true,
+            blacklist_reason: opts.reason!.trim(),
+            blacklisted_by: opts.by,
+            blacklisted_at: nowIso(),
+            updated_at: nowIso(),
+          }
+        : {
+            is_blacklisted: false,
+            blacklist_reason: '',
+            blacklisted_by: '',
+            blacklisted_at: null,
+            updated_at: nowIso(),
+          },
+    )
+    .eq('id', vendorId)
+    .select('*')
+    .single()
+  if (error) throw new Error(error.message)
+  return data as ProcurementVendorRow
+}
+
 export async function createVendor(input: {
   name: string
   contact_person?: string
@@ -88,6 +128,7 @@ export async function createPurchase(input: {
   purchase_date?: string
   reference?: string
   receipt_url?: string
+  category?: string
   payment_status?: string
   notes?: string
   recorded_by: string
@@ -96,6 +137,23 @@ export async function createPurchase(input: {
   if (!input.brand_id) throw new Error('brand_id is required')
   const lines = (input.items ?? []).filter((l) => l.description?.trim())
   if (lines.length === 0) throw new Error('Add at least one line item')
+
+  // Blacklisted vendors are blocked from new business — surface the reason so
+  // the operator knows why and who flagged them.
+  if (input.vendor_id) {
+    const { data: vendorRow } = await db()
+      .from('procurement_vendors')
+      .select('name, is_blacklisted, blacklist_reason, blacklisted_by')
+      .eq('id', input.vendor_id)
+      .maybeSingle()
+    const vendor = vendorRow as Pick<ProcurementVendorRow, 'name' | 'is_blacklisted' | 'blacklist_reason' | 'blacklisted_by'> | null
+    if (vendor?.is_blacklisted) {
+      throw new Error(
+        `${vendor.name} is blacklisted${vendor.blacklisted_by ? ` by ${vendor.blacklisted_by}` : ''}` +
+          `${vendor.blacklist_reason ? `: ${vendor.blacklist_reason}` : ''}. Restore the vendor before recording new purchases.`,
+      )
+    }
+  }
 
   const total = lines.reduce(
     (sum, l) => sum + Number(l.quantity ?? 0) * Number(l.unit_cost_ksh ?? 0), 0,
@@ -109,6 +167,7 @@ export async function createPurchase(input: {
       purchase_date: input.purchase_date || nowIso().slice(0, 10),
       reference: input.reference ?? '',
       receipt_url: input.receipt_url ?? '',
+      category: input.category ?? '',
       payment_status: input.payment_status || 'unpaid',
       total_cost_ksh: total,
       recorded_by: input.recorded_by,
@@ -175,7 +234,7 @@ export async function receivePurchase(
           unit: line.unit || 'pcs',
           quantity: 0,
           unit_value_ksh: Number(line.unit_cost_ksh ?? 0),
-          category: 'Procured',
+          category: purchase.category || 'Procured',
         })
         .select('*')
         .single()

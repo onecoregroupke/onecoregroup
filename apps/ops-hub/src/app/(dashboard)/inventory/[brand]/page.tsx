@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { ArrowLeft, TriangleAlert } from 'lucide-react'
 import { resolveBrand } from '@/lib/brands'
+import { inventoryCategories } from '@/lib/brandCategories'
 import { listItems, listMovements } from '@/lib/inventory'
 import { requireSection } from '@/lib/server-auth'
 import { InventoryForms } from '@/components/inventory/InventoryForms'
@@ -29,6 +30,20 @@ export default async function BrandInventoryPage({
   const itemById = new Map(items.map((i) => [i.id, i]))
   const totalValue = items.reduce((sum, i) => sum + Number(i.quantity) * Number(i.unit_value_ksh), 0)
   const canEdit = actor.can('inventory', 'edit')
+  const categories = inventoryCategories(brand.slug)
+
+  // Classification summary: the brand's preset categories first, then any
+  // custom categories already in use, then uncategorised.
+  const byCategory = [...categories, ...new Set(items.map((i) => i.category).filter((c) => c && !categories.includes(c)))]
+    .map((category) => {
+      const catItems = items.filter((i) => i.category === category)
+      return {
+        category,
+        count: catItems.length,
+        value: catItems.reduce((sum, i) => sum + Number(i.quantity) * Number(i.unit_value_ksh), 0),
+      }
+    })
+  const uncategorised = items.filter((i) => !i.category).length
 
   return (
     <div className="space-y-6">
@@ -48,8 +63,26 @@ export default async function BrandInventoryPage({
         <InventoryForms
           brandId={brand.id}
           items={items.map((i) => ({ id: i.id, label: `${i.name}${i.sku ? ` (${i.sku})` : ''}`, unit: i.unit, quantity: Number(i.quantity) }))}
+          categories={categories}
         />
       )}
+
+      <section className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+        <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-ocg-gold">Classification</h2>
+        <div className="flex flex-wrap gap-2">
+          {byCategory.map(({ category, count, value }) => (
+            <span key={category} className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm ${count ? 'border-gray-200 text-gray-700' : 'border-dashed border-gray-200 text-gray-400'}`}>
+              <span className="font-medium">{category}</span>
+              <span className="text-xs text-gray-400">{count} item{count === 1 ? '' : 's'}{value > 0 ? ` · KSh ${value.toLocaleString()}` : ''}</span>
+            </span>
+          ))}
+          {uncategorised > 0 && (
+            <span className="inline-flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-sm text-amber-700">
+              Uncategorised <span className="text-xs">{uncategorised} item{uncategorised === 1 ? '' : 's'}</span>
+            </span>
+          )}
+        </div>
+      </section>
 
       <section className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
         <h2 className="mb-4 text-xs font-semibold uppercase tracking-wider text-ocg-gold">Stock register</h2>

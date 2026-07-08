@@ -10,11 +10,12 @@ import type { OpsTaskRow, Brand } from '@ocg/db'
 
 export const dynamic = 'force-dynamic'
 
-async function getData(assignedTo?: string) {
+async function getData(assignedTo?: string, brandIds?: string[]) {
   try {
     const [tasks, projects, brands] = await Promise.all([
-      // Non-super-admins only ever see their own tasks in these aggregates.
-      listTasks({ limit: 500, assignedTo }),
+      // 'own' users only see their own tasks in these aggregates; brand
+      // managers see their whole brand; group admins see everything.
+      listTasks({ limit: 500, assignedTo, brandIds }),
       listProjects(),
       listBrands(),
     ])
@@ -26,7 +27,16 @@ async function getData(assignedTo?: string) {
 
 export default async function OpsDashboard() {
   const actor = await requireSection('ops')
-  const { tasks, projects, brands } = await getData(actor.isSuperAdmin ? undefined : actor.name)
+  const scope = actor.taskScope
+  const { tasks, projects: allProjects, brands: allBrands } = await getData(
+    scope.kind === 'own' ? actor.name : undefined,
+    scope.kind === 'brands' ? scope.brandIds : undefined,
+  )
+  // Brand managers get a dashboard of THEIR organisation only.
+  const brands = scope.kind === 'brands' ? allBrands.filter((b) => scope.brandIds.includes(b.id)) : allBrands
+  const projects = scope.kind === 'brands'
+    ? allProjects.filter((p) => p.brand_id && scope.brandIds.includes(p.brand_id))
+    : allProjects
   const today = todayInEat()
 
   const active = tasks.filter((t) => t.active === 'Yes' && isActiveStatus(t.current_status))
@@ -51,7 +61,11 @@ export default async function OpsDashboard() {
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-ocg-gold">
           Internal · Ops Hub
         </p>
-        <h1 className="mt-1 text-2xl font-semibold text-gray-900">Task delivery across the group</h1>
+        <h1 className="mt-1 text-2xl font-semibold text-gray-900">
+          {scope.kind === 'brands'
+            ? `Your organisation · ${brands.map((b) => b.short_name || b.name).join(', ') || 'no brands assigned'}`
+            : 'Task delivery across the group'}
+        </h1>
         <p className="mt-1 text-sm text-gray-500">
           {brands.length} brands · {projects.length} projects · {active.length} active tasks
         </p>

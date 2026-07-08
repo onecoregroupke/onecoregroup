@@ -38,11 +38,16 @@ export const SECTIONS: SectionDef[] = [
  * `user_permissions.brand_access` (section → brand UUID array). An empty /
  * missing list means "all brands". This is how a per-brand accountant or
  * storekeeper is created: grant the section, then scope it to their brand.
+ *
+ * `all_tasks` scoped to brands is the BRAND MANAGER: they see every task in
+ * their brand(s) (not just their own), can assign within their team, get the
+ * per-brand ops report by email, and their dashboard is scoped to their brand.
  */
 export const BRAND_SCOPED_SECTIONS: SectionDef[] = [
   { key: 'finance', label: 'Finance', href: '/finance' },
   { key: 'inventory', label: 'Inventory', href: '/inventory' },
   { key: 'procurement', label: 'Procurement', href: '/procurement' },
+  { key: 'all_tasks', label: 'Task oversight (brand manager)', href: '/tasks' },
 ]
 
 /**
@@ -118,4 +123,25 @@ export function can(
  */
 export function canSeeAllTasks(permissions: PermissionsMap | null): boolean {
   return permissions === null || can(permissions, 'all_tasks', 'view')
+}
+
+/**
+ * The caller's task visibility scope:
+ *   'all'    — founding admin or unrestricted all_tasks grant (whole group)
+ *   'brands' — all_tasks restricted to specific brands = BRAND MANAGER: they
+ *              see/steer every task within those brands only
+ *   'own'    — everyone else: only their own assigned tasks
+ */
+export type TaskScope =
+  | { kind: 'all' }
+  | { kind: 'brands'; brandIds: string[] }
+  | { kind: 'own' }
+
+export function taskScope(
+  permissions: PermissionsMap | null,
+  brandAccess: BrandAccessMap | null,
+): TaskScope {
+  if (!canSeeAllTasks(permissions)) return { kind: 'own' }
+  const brandIds = allowedBrands(brandAccess, 'all_tasks')
+  return brandIds === null ? { kind: 'all' } : { kind: 'brands', brandIds }
 }

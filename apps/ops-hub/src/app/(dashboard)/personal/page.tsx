@@ -3,14 +3,14 @@
 import { useEffect, useState } from 'react'
 import { CheckCircle2, Circle, Lock, Plus, Trash2 } from 'lucide-react'
 import { getClient } from '@/lib/supabase'
-import { usePermissions } from '@/contexts/PermissionsContext'
 import type { OcgPersonalTaskRow } from '@ocg/db'
 
 const CATEGORIES = ['Personal', 'Home', 'Family', 'Errand', 'Finance', 'Health']
 const PRIORITIES = ['Low', 'Medium', 'High']
 
+// Every portal user's private space — the API only ever serves the signed-in
+// user's own rows, so no permission gate is needed here.
 export default function PersonalPage() {
-  const { can, isAdmin } = usePermissions()
   const [tasks, setTasks] = useState<OcgPersonalTaskRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -60,16 +60,6 @@ export default function PersonalPage() {
   async function remove(t: OcgPersonalTaskRow) {
     setTasks(prev => prev.filter(x => x.id !== t.id))
     await fetch(`/api/personal?id=${t.id}`, { method: 'DELETE', headers: await authHeaders() })
-  }
-
-  if (!can('personal', 'view') && !isAdmin) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4 text-gray-400">
-        <Lock size={44} className="text-gray-200" />
-        <p className="text-lg font-semibold">Private</p>
-        <p className="text-sm">This is a private personal space.</p>
-      </div>
-    )
   }
 
   const open = tasks.filter(t => t.status !== 'done')

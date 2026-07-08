@@ -1,4 +1,5 @@
 import { db, nowIso } from './serverClient'
+import { EAT_TZ } from './kenyaTime'
 import { listTeam } from './team'
 import { safeRows } from './management'
 import type {
@@ -36,8 +37,8 @@ function teamNamer(team: { id: string; name: string }[]) {
 
 function fmtRange(start: string | null, end: string | null): string {
   if (!start) return ''
+  const opts: Intl.DateTimeFormatOptions = { hour: 'numeric', minute: '2-digit', timeZone: EAT_TZ }
   const s = new Date(start)
-  const opts: Intl.DateTimeFormatOptions = { hour: 'numeric', minute: '2-digit' }
   const startStr = s.toLocaleTimeString('en-KE', opts)
   if (!end) return startStr
   const e = new Date(end)

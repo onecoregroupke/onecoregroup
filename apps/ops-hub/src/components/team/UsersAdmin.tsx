@@ -414,6 +414,16 @@ export function UsersAdmin({ brands, team }: { brands: BrandOption[]; team: Team
                       <Label text="Email (login)"><input type="email" value={editEmail} onChange={e => setEditEmail(e.target.value)} disabled={!canEdit} className="input disabled:bg-gray-50" /></Label>
                     </div>
 
+                    {canEdit && (
+                      <BrandManagerPreset
+                        key={selected.id}
+                        brands={brands}
+                        permissions={editPerms}
+                        brandAccess={editBrandAccess}
+                        onApply={(perms, access) => { setEditPerms(perms); setEditBrandAccess(access) }}
+                      />
+                    )}
+
                     <div>
                       <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-4">What they can access</p>
                       <PermissionMatrix permissions={editPerms} onChange={setEditPerms} includeUsers={isAdmin} readonly={!canEdit} />
@@ -460,6 +470,95 @@ function Badge({ children, active, tone }: { children: React.ReactNode; active: 
 
 function Label({ text, children }: { text: string; children: React.ReactNode }) {
   return <label className="block"><span className="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">{text}</span>{children}</label>
+}
+
+/**
+ * One-click BRAND MANAGER setup. Picking brand(s) and applying sets the whole
+ * preset in one go: ops edit (create/assign tasks), all_tasks scoped to those
+ * brands (sees every task + results in their brand, gets the per-brand ops
+ * report email, brand-scoped dashboard), plus an optional finance grant locked
+ * to the same brands — the on/off toggle for their money visibility.
+ */
+function BrandManagerPreset({ brands, permissions, brandAccess, onApply }: {
+  brands: BrandOption[]
+  permissions: PermissionsMap
+  brandAccess: BrandAccessMap
+  onApply: (permissions: PermissionsMap, brandAccess: BrandAccessMap) => void
+}) {
+  const currentBrands = brandAccess.all_tasks ?? []
+  const isManager = (permissions.all_tasks === 'view' || permissions.all_tasks === 'edit') && currentBrands.length > 0
+  const [selected, setSelected] = useState<string[]>(currentBrands)
+  const [financeOn, setFinanceOn] = useState((permissions.finance ?? 'none') !== 'none')
+
+  function toggleBrand(id: string) {
+    setSelected(prev => prev.includes(id) ? prev.filter(b => b !== id) : [...prev, id])
+  }
+
+  function apply() {
+    if (selected.length === 0) return
+    const perms: PermissionsMap = {
+      ...permissions,
+      ops: 'edit',            // create + assign tasks within their team
+      all_tasks: 'view',      // see every task in scope (scoped below)
+      ...(financeOn ? { finance: 'view' as AccessLevel } : { finance: 'none' as AccessLevel }),
+    }
+    const access: BrandAccessMap = {
+      ...brandAccess,
+      all_tasks: selected,
+      ...(financeOn ? { finance: selected } : {}),
+    }
+    if (!financeOn) delete access.finance
+    onApply(perms, access)
+  }
+
+  function remove() {
+    const perms: PermissionsMap = { ...permissions, all_tasks: 'none' }
+    const access: BrandAccessMap = { ...brandAccess }
+    delete access.all_tasks
+    onApply(perms, access)
+  }
+
+  return (
+    <div className="rounded-2xl border border-ocg-gold/30 bg-amber-50/40 p-5">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs font-bold uppercase tracking-wide text-ocg-gold">Brand manager setup</p>
+        {isManager && (
+          <span className="rounded-full bg-ocg-navy px-2 py-0.5 text-[10px] font-bold uppercase text-white">Brand manager</span>
+        )}
+      </div>
+      <p className="mt-1 text-xs text-gray-500">
+        A brand manager sees <b>all tasks and results in their brand</b>, can assign work within
+        their team, receives the brand&apos;s ops reports by email, and gets a dashboard scoped to
+        their organisation. Finance visibility is a separate switch, locked to the same brand.
+      </p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {brands.map(b => (
+          <button key={b.id} type="button" onClick={() => toggleBrand(b.id)}
+            className={`rounded-full px-3 py-1 text-xs font-medium border transition-colors ${selected.includes(b.id) ? 'bg-ocg-navy text-white border-ocg-navy' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'}`}>
+            {b.label}
+          </button>
+        ))}
+      </div>
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+        <label className="flex items-center gap-2 text-sm text-gray-700">
+          <input type="checkbox" checked={financeOn} onChange={e => setFinanceOn(e.target.checked)} className="h-4 w-4 accent-[#1a1a2e]" />
+          Finance access for their brand{selected.length > 1 ? 's' : ''}
+        </label>
+        <div className="flex gap-2">
+          {isManager && (
+            <button onClick={remove} className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50">
+              Remove manager role
+            </button>
+          )}
+          <button onClick={apply} disabled={selected.length === 0}
+            className="rounded-lg bg-ocg-navy px-4 py-1.5 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-50">
+            Apply manager preset
+          </button>
+        </div>
+      </div>
+      <p className="mt-2 text-[11px] text-gray-400">Applies to the form below — review, adjust anything, then Save changes.</p>
+    </div>
+  )
 }
 
 /**

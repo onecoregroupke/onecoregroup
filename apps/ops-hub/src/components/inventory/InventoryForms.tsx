@@ -11,8 +11,10 @@ type Mode = 'in' | 'out' | 'item'
 /**
  * Brand inventory actions: stock-in and stock-out forms (the tracked ways
  * goods enter and leave), plus new-item registration with opening stock.
+ * `categories` carries the department's classification presets (e.g. Glitz:
+ * Raw Material / Packaging / WIP / Finished Goods / Others).
  */
-export function InventoryForms({ brandId, items }: { brandId: string; items: ItemOption[] }) {
+export function InventoryForms({ brandId, items, categories = [] }: { brandId: string; items: ItemOption[]; categories?: string[] }) {
   const router = useRouter()
   const today = new Date().toISOString().slice(0, 10)
   const [mode, setMode] = useState<Mode>('in')
@@ -107,7 +109,16 @@ export function InventoryForms({ brandId, items }: { brandId: string; items: Ite
         <div className="grid gap-3 lg:grid-cols-4">
           <Field label="Item name *"><input className="input" value={values.name ?? ''} onChange={(e) => set('name', e.target.value)} /></Field>
           <Field label="SKU / code"><input className="input" value={values.sku ?? ''} onChange={(e) => set('sku', e.target.value)} /></Field>
-          <Field label="Category"><input className="input" placeholder="Furniture, Learning materials…" value={values.category ?? ''} onChange={(e) => set('category', e.target.value)} /></Field>
+          <Field label="Category">
+            {categories.length > 0 ? (
+              <select className="input" value={values.category ?? ''} onChange={(e) => set('category', e.target.value)}>
+                <option value="">Choose category</option>
+                {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            ) : (
+              <input className="input" placeholder="Furniture, Learning materials…" value={values.category ?? ''} onChange={(e) => set('category', e.target.value)} />
+            )}
+          </Field>
           <Field label="Unit">
             <select className="input" value={values.unit ?? 'pcs'} onChange={(e) => set('unit', e.target.value)}>
               {['pcs', 'sets', 'boxes', 'kg', 'litres', 'reams', 'packets'].map((u) => <option key={u} value={u}>{u}</option>)}

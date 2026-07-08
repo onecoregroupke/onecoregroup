@@ -13,6 +13,7 @@ const LINKS = [
   ['Fee follow-ups', '/rayyan/fee-follow-ups'],
   ['SchoolPay reconciliation', '/rayyan/schoolpay'],
   ['Reports', '/rayyan/reports'],
+  ['Daily report books & forms', '/forms?brand=ar-rayyan-playhouse'],
 ] as const
 
 export default async function RayyanAdminPage() {

@@ -24,6 +24,7 @@ import {
 } from 'lucide-react'
 import { api } from '@/lib/apiClient'
 import { nextTuningDue } from '@/lib/npt'
+import { formatEatDate, formatEatDateTime, formatEatRange } from '@/lib/kenyaTime'
 import type {
   NptAppointmentRow,
   NptContactRow,
@@ -40,7 +41,7 @@ import type {
 
 type ModuleKey = 'dashboard' | 'clients' | 'pianos' | 'calendar' | 'estimates' | 'invoices' | 'call_center' | 'messages' | 'settings'
 type Selection = { kind: 'customer' | 'piano' | 'appointment' | 'job'; id: string } | null
-type ActionKey = 'contact' | 'schedule' | 'estimate' | 'invoice' | 'status' | 'measurement' | 'reminder'
+type ActionKey = 'contact' | 'schedule' | 'estimate' | 'invoice' | 'status' | 'measurement' | 'reminder' | 'new_client' | 'new_piano'
 type TimelineType = 'appointment' | 'service' | 'measurement' | 'estimate' | 'invoice' | 'message' | 'call' | 'notice' | 'system' | 'reminder'
 
 export interface NptWorkspaceData {
@@ -174,7 +175,11 @@ export function NptWorkspace({ data }: { data: NptWorkspaceData }) {
             ))}
           </nav>
           <div className={`mt-auto border-t border-[#d7dde3] py-3 text-xs text-[#7a8793] ${modulesCollapsed ? 'px-2' : 'px-4'}`}>
-            <button title="New" className={`flex items-center gap-2 hover:text-[#1c2833] ${modulesCollapsed ? 'mx-auto justify-center' : ''}`}><Plus size={14} /> {!modulesCollapsed && 'New'}</button>
+            <button
+              title={module === 'pianos' ? 'New piano' : 'New client'}
+              onClick={() => setActiveAction(module === 'pianos' ? 'new_piano' : 'new_client')}
+              className={`flex items-center gap-2 hover:text-[#1c2833] ${modulesCollapsed ? 'mx-auto justify-center' : ''}`}
+            ><Plus size={14} /> {!modulesCollapsed && (module === 'pianos' ? 'New piano' : 'New client')}</button>
             <button title="Help" className={`mt-2 flex items-center gap-2 hover:text-[#1c2833] ${modulesCollapsed ? 'mx-auto justify-center' : ''}`}><HelpCircle size={14} /> {!modulesCollapsed && 'Help'}</button>
           </div>
         </aside>
@@ -186,6 +191,8 @@ export function NptWorkspace({ data }: { data: NptWorkspaceData }) {
               <h2 className="text-xl font-semibold text-[#1c2833]">{titleForModule(module)}</h2>
             </div>
             <div className="flex flex-wrap items-center gap-2">
+              <WorkspaceAction action="new_client" icon={UsersRound} label="New client" onClick={setActiveAction} />
+              <WorkspaceAction action="new_piano" icon={Wrench} label="New piano" onClick={setActiveAction} />
               <WorkspaceAction action="contact" icon={MessageSquare} label="Contact" onClick={setActiveAction} />
               <WorkspaceAction action="schedule" icon={CalendarDays} label="Schedule" onClick={setActiveAction} />
               <WorkspaceAction action="estimate" icon={FileText} label="Estimate" onClick={setActiveAction} />
@@ -276,6 +283,13 @@ export function NptWorkspace({ data }: { data: NptWorkspaceData }) {
           <div className={timelineCollapsed ? 'block' : 'grid grid-cols-[1fr_46px]'}>
             {!timelineCollapsed && (
               <div className="max-h-[calc(100vh-123px)] overflow-y-auto p-3">
+                {selectedCustomer && selection?.kind === 'customer' && (
+                  <LinkedPianosPanel
+                    customer={selectedCustomer}
+                    pianos={data.pianos.filter((item) => item.customer_id === selectedCustomer.id)}
+                    onOpen={(id) => setSelection({ kind: 'piano', id })}
+                  />
+                )}
                 {visibleTimeline.length === 0 ? (
                   <p className="rounded border border-dashed border-[#ccd4dc] bg-white p-4 text-sm text-[#7a8793]">No activity for this record yet.</p>
                 ) : (
@@ -412,10 +426,13 @@ function CustomerDetail({ customer, data }: { customer: NptCustomerRow; data: Np
             ['Lead source', customer.lead_source || '-'],
             ['Referred by', customer.referred_by || '-'],
             ['Tax handling', customer.tax_exempt ? 'Tax exempt' : 'Standard'],
+            ['Secondary phone', customer.secondary_phone || '-'],
+            ['Address', [customer.address, customer.city].filter(Boolean).join(', ') || '-'],
+            ['Auto reminders', customer.send_auto_reminders === false ? 'Off' : 'On — email'],
           ]} />
         </Panel>
         <Panel title="Upcoming messages and reminders">
-          {reminders.length === 0 ? <Muted>No pending reminders.</Muted> : reminders.map((reminder) => <p key={reminder.id} className="rounded border border-[#e3e8ed] p-3 text-sm">{reminder.title}<span className="block text-xs text-[#7a8793]">{reminder.due_at?.slice(0, 16).replace('T', ' ') || 'No date'}</span></p>)}
+          {reminders.length === 0 ? <Muted>No pending reminders.</Muted> : reminders.map((reminder) => <p key={reminder.id} className="rounded border border-[#e3e8ed] p-3 text-sm">{reminder.title}<span className="block text-xs text-[#7a8793]">{reminder.due_at ? formatDateTime(reminder.due_at) : 'No date'}</span></p>)}
         </Panel>
         <Panel title="Referral metadata">
           <InfoGrid rows={[['Referred by', customer.referred_by || '-'], ['Referred clients', 'Track via linked customer notes']]}/>
@@ -492,7 +509,7 @@ function AppointmentDetail({ appointment, data }: { appointment: NptAppointmentR
 function JobDetail({ job, data }: { job: NptServiceJobRow; data: NptWorkspaceData }) {
   return (
     <div className="p-5">
-      <RecordHeader eyebrow="Service job" title={job.service_type || 'Service job'} meta={[job.scheduled_at?.slice(0, 16).replace('T', ' '), job.location, job.status].filter(Boolean).join(' · ')} tags={[job.priority]} />
+      <RecordHeader eyebrow="Service job" title={job.service_type || 'Service job'} meta={[job.scheduled_at && formatDateTime(job.scheduled_at), job.location, job.status].filter(Boolean).join(' · ')} tags={[job.priority]} />
       <div className="mt-5 grid gap-4 2xl:grid-cols-2">
         <Panel title="Job details">
           <InfoGrid rows={[
@@ -634,6 +651,39 @@ function ActionDrawer({
             <Field label="Channel"><input className="input" value={values.channel ?? 'WhatsApp'} onChange={(event) => set('channel', event.target.value)} /></Field>
           </>
         )}
+        {action === 'new_client' && (
+          <>
+            <Field label="Full name *"><input className="input" value={values.full_name ?? ''} onChange={(event) => set('full_name', event.target.value)} /></Field>
+            <Field label="Company"><input className="input" value={values.company_name ?? ''} onChange={(event) => set('company_name', event.target.value)} /></Field>
+            <Field label="Phone"><input className="input" value={values.phone ?? ''} onChange={(event) => set('phone', event.target.value)} /></Field>
+            <Field label="Secondary phone"><input className="input" value={values.secondary_phone ?? ''} onChange={(event) => set('secondary_phone', event.target.value)} /></Field>
+            <Field label="Email"><input type="email" className="input" value={values.email ?? ''} onChange={(event) => set('email', event.target.value)} /></Field>
+            <Field label="Area / estate"><input className="input" value={values.area_estate ?? ''} onChange={(event) => set('area_estate', event.target.value)} /></Field>
+            <Field label="Physical address"><input className="input" value={values.address ?? ''} onChange={(event) => set('address', event.target.value)} /></Field>
+            <Field label="City"><input className="input" value={values.city ?? 'Nairobi'} onChange={(event) => set('city', event.target.value)} /></Field>
+            <Field label="Client type"><select className="input" value={values.customer_type ?? ''} onChange={(event) => set('customer_type', event.target.value)}><option value="">Choose…</option><option>Individual</option><option>School</option><option>Church</option><option>Institution</option><option>Hotel / venue</option></select></Field>
+            <Field label="Lead source"><input className="input" value={values.lead_source ?? ''} onChange={(event) => set('lead_source', event.target.value)} /></Field>
+            <Field label="Referred by"><input className="input" value={values.referred_by ?? ''} onChange={(event) => set('referred_by', event.target.value)} /></Field>
+            <Field label="Preferred channel"><select className="input" value={values.preferred_communication_channel ?? ''} onChange={(event) => set('preferred_communication_channel', event.target.value)}><option value="">Choose…</option><option>Phone call</option><option>WhatsApp</option><option>Email</option><option>SMS</option></select></Field>
+            <Field label="Preferred technician"><Select value={values.preferred_technician_id ?? ''} onChange={(value) => set('preferred_technician_id', value)} options={data.team.map((member) => ({ id: member.id, label: member.name }))} empty="No preference" /></Field>
+            <Field label="Auto reminders"><select className="input" value={values.send_auto_reminders ?? 'true'} onChange={(event) => set('send_auto_reminders', event.target.value)}><option value="true">On — email reminders</option><option value="false">Off</option></select></Field>
+            <Field label="Notes"><input className="input" value={values.notes ?? ''} onChange={(event) => set('notes', event.target.value)} /></Field>
+          </>
+        )}
+        {action === 'new_piano' && (
+          <>
+            <Field label="Client"><Select value={values.customer_id ?? customer?.id ?? ''} onChange={(value) => set('customer_id', value)} options={data.customers.map((item) => ({ id: item.id, label: item.full_name }))} empty="No client yet" /></Field>
+            <Field label="Make *"><input className="input" value={values.make ?? ''} onChange={(event) => set('make', event.target.value)} placeholder="Yamaha, Kawai…" /></Field>
+            <Field label="Model"><input className="input" value={values.model ?? ''} onChange={(event) => set('model', event.target.value)} /></Field>
+            <Field label="Serial number"><input className="input" value={values.serial_number ?? ''} onChange={(event) => set('serial_number', event.target.value)} /></Field>
+            <Field label="Type"><select className="input" value={values.piano_type ?? ''} onChange={(event) => set('piano_type', event.target.value)}><option value="">Choose…</option><option>Upright</option><option>Grand</option><option>Baby grand</option><option>Digital</option><option>Console</option></select></Field>
+            <Field label="Condition"><select className="input" value={values.condition ?? ''} onChange={(event) => set('condition', event.target.value)}><option value="">Choose…</option><option>Excellent</option><option>Good</option><option>Fair</option><option>Needs work</option></select></Field>
+            <Field label="Location"><input className="input" value={values.location ?? customer?.area_estate ?? ''} onChange={(event) => set('location', event.target.value)} /></Field>
+            <Field label="Last tuned"><input type="date" className="input" value={values.last_tuning_date ?? ''} onChange={(event) => set('last_tuning_date', event.target.value)} /></Field>
+            <Field label="Tuning interval (months)"><input type="number" min="1" className="input" value={values.tuning_interval_months ?? '6'} onChange={(event) => set('tuning_interval_months', event.target.value)} /></Field>
+            <Field label="Notes"><input className="input" value={values.technician_notes ?? ''} onChange={(event) => set('technician_notes', event.target.value)} /></Field>
+          </>
+        )}
       </div>
       {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
       <div className="mt-3 flex justify-end">
@@ -646,6 +696,14 @@ function ActionDrawer({
 function payloadForAction(action: ActionKey, values: Record<string, string>, customer: NptCustomerRow | null, piano: NptPianoRow | null) {
   const customerId = customer?.id ?? piano?.customer_id ?? ''
   const pianoId = piano?.id ?? values.piano_id ?? ''
+  if (action === 'new_client') {
+    if (!values.full_name?.trim()) return { error: 'Enter the client name.' }
+    return { body: { type: 'npt_customer', values: { ...values } } }
+  }
+  if (action === 'new_piano') {
+    if (!values.make?.trim()) return { error: 'Enter the piano make.' }
+    return { body: { type: 'npt_piano', values: { ...values, customer_id: values.customer_id || customerId } } }
+  }
   if (action === 'schedule') {
     return { body: { type: 'npt_appointment', values: { customer_id: customerId, piano_id: pianoId, technician_id: values.technician_id, title: values.title || 'Appointment', start_at: values.start_at, end_at: values.end_at, location: values.location, status: 'Scheduled' } } }
   }
@@ -666,6 +724,46 @@ function payloadForAction(action: ActionKey, values: Record<string, string>, cus
 
 function WorkspaceAction({ action, icon: Icon, label, onClick }: { action: ActionKey; icon: React.ElementType; label: string; onClick: (action: ActionKey) => void }) {
   return <button onClick={() => onClick(action)} className="inline-flex items-center gap-1.5 rounded border border-[#ccd4dc] bg-[#fbfcfd] px-3 py-2 text-sm font-medium text-[#384854] hover:bg-[#eef3f7]"><Icon size={15} /> {label}</button>
+}
+
+/** The selected client's pianos, pinned above the timeline in the right rail —
+ *  one click opens the piano's own profile. */
+function LinkedPianosPanel({ customer, pianos, onOpen }: {
+  customer: NptCustomerRow
+  pianos: NptPianoRow[]
+  onOpen: (pianoId: string) => void
+}) {
+  return (
+    <div className="mb-3 rounded border border-[#dfe5ea] bg-white p-3">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#87929d]">
+        Linked pianos · {customer.full_name}
+      </p>
+      {pianos.length === 0 ? (
+        <p className="mt-2 text-xs text-[#7a8793]">No pianos linked yet — add one with “New piano”.</p>
+      ) : (
+        <ul className="mt-2 space-y-1.5">
+          {pianos.map((piano) => {
+            const due = nextTuningDue(piano)
+            return (
+              <li key={piano.id}>
+                <button
+                  onClick={() => onOpen(piano.id)}
+                  className="w-full rounded border border-[#e3e8ed] px-2.5 py-2 text-left hover:border-[#1c2833]"
+                >
+                  <span className="flex items-center gap-1.5 text-sm font-semibold text-[#263238]">
+                    <Wrench size={12} className="shrink-0 text-[#7a8793]" /> {pianoLabel(piano)}
+                  </span>
+                  <span className="mt-0.5 block text-[11px] text-[#7a8793]">
+                    {[piano.location, due && `Next tuning ${due}`].filter(Boolean).join(' · ') || 'No schedule yet'}
+                  </span>
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </div>
+  )
 }
 
 function TimelineCard({ item }: { item: TimelineItem }) {
@@ -746,7 +844,7 @@ function listItemsForModule(module: ModuleKey, data: NptWorkspaceData): { kind: 
   if (module === 'calendar') {
     return [
       ...data.appointments.map((appointment) => ({ kind: 'appointment' as const, id: appointment.id, title: appointment.title || 'Appointment', meta: [formatRange(appointment.start_at, appointment.end_at), customerName(data, appointment.customer_id), technicianName(data, appointment.technician_id)].filter(Boolean).join(' · '), badge: appointment.status })),
-      ...data.jobs.filter((job) => job.scheduled_at).map((job) => ({ kind: 'job' as const, id: job.id, title: job.service_type || 'Service job', meta: [job.scheduled_at?.slice(0, 16).replace('T', ' '), customerName(data, job.customer_id), technicianName(data, job.technician_id)].filter(Boolean).join(' · '), badge: job.status })),
+      ...data.jobs.filter((job) => job.scheduled_at).map((job) => ({ kind: 'job' as const, id: job.id, title: job.service_type || 'Service job', meta: [job.scheduled_at && formatDateTime(job.scheduled_at), customerName(data, job.customer_id), technicianName(data, job.technician_id)].filter(Boolean).join(' · '), badge: job.status })),
     ]
   }
   return data.customers.map((customer) => ({ kind: 'customer', id: customer.id, title: customer.full_name, meta: [customer.phone || customer.email, customer.area_estate || customer.location, customer.next_follow_up_date && `Follow-up ${customer.next_follow_up_date}`].filter(Boolean).join(' · '), badge: customer.customer_type }))
@@ -809,25 +907,18 @@ function technicianName(data: NptWorkspaceData, id: string | null | undefined) {
   return id ? data.team.find((member) => member.id === id)?.name ?? 'Technician' : ''
 }
 
+// All workspace times render on the Kenyan wall clock (Africa/Nairobi),
+// regardless of the machine's locale/timezone.
 function formatRange(start: string | null, end: string | null) {
-  if (!start) return ''
-  const s = new Date(start)
-  const first = s.toLocaleString('en-KE', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
-  if (!end) return first
-  const e = new Date(end)
-  const mins = Math.max(0, Math.round((e.getTime() - s.getTime()) / 60000))
-  const duration = mins >= 60 ? `${Math.floor(mins / 60)}h${mins % 60 ? ` ${mins % 60}m` : ''}` : `${mins}m`
-  return `${first} - ${e.toLocaleTimeString('en-KE', { hour: 'numeric', minute: '2-digit' })} · ${duration}`
+  return formatEatRange(start, end)
 }
 
 function dateOnly(iso: string) {
-  const d = new Date(iso)
-  return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString('en-KE', { day: 'numeric', month: 'short', year: 'numeric' })
+  return formatEatDate(iso) || iso
 }
 
 function formatDateTime(iso: string) {
-  const d = new Date(iso)
-  return Number.isNaN(d.getTime()) ? iso : d.toLocaleString('en-KE', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' })
+  return formatEatDateTime(iso) || iso
 }
 
 function normalizeEventType(type: string): TimelineType {

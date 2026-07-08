@@ -1,4 +1,5 @@
 import { db, nowIso } from './serverClient'
+import { eatToIso } from './kenyaTime'
 import type { Database, SectionKey } from '@ocg/db'
 
 type TableName = keyof Database['public']['Tables']
@@ -33,6 +34,10 @@ const TYPE_TABLE = {
   rayyan_fee_payment: 'rayyan_fee_payments',
   rayyan_class: 'rayyan_classes',
   rayyan_admin_task: 'rayyan_admin_tasks',
+  rayyan_activity: 'rayyan_activities',
+  rayyan_student_activity: 'rayyan_student_activities',
+  rayyan_assessment: 'rayyan_assessments',
+  rayyan_history: 'rayyan_student_history',
   rhythms_student: 'rhythms_students',
   rhythms_guardian: 'rhythms_guardians',
   rhythms_class: 'rhythms_classes',
@@ -80,7 +85,7 @@ const ALLOWED_FIELDS: Record<MutationType, string[]> = {
   finance_reconciliation_batch: ['account_id', 'brand_id', 'period_start', 'period_end', 'statement_source', 'statement_reference', 'opening_balance_ksh', 'closing_balance_ksh', 'imported_count', 'matched_count', 'exception_count', 'status', 'reviewed_by', 'notes'],
   finance_reconciliation_match: ['batch_id', 'transaction_id', 'statement_date', 'statement_description', 'statement_amount_ksh', 'statement_reference', 'match_status', 'confidence', 'notes'],
   finance_exception: ['brand_id', 'account_id', 'transaction_id', 'transfer_id', 'exception_type', 'severity', 'title', 'description', 'owner_id', 'status', 'due_date', 'resolution_notes'],
-  npt_customer: ['full_name', 'phone', 'email', 'location', 'area_estate', 'customer_type', 'lead_source', 'preferred_communication_channel', 'notes', 'last_contacted_at', 'next_follow_up_date', 'company_name', 'preferred_technician_id', 'referred_by', 'tax_exempt', 'tags'],
+  npt_customer: ['full_name', 'phone', 'email', 'location', 'area_estate', 'customer_type', 'lead_source', 'preferred_communication_channel', 'notes', 'last_contacted_at', 'next_follow_up_date', 'company_name', 'preferred_technician_id', 'referred_by', 'tax_exempt', 'tags', 'secondary_phone', 'address', 'city', 'send_auto_reminders'],
   npt_piano: ['customer_id', 'make', 'model', 'serial_number', 'piano_type', 'location', 'condition', 'last_tuning_date', 'last_repair_date', 'recommended_next_service_date', 'technician_notes', 'sales_status', 'tuning_interval_months', 'tags'],
   npt_contact: ['customer_id', 'name', 'phone', 'email', 'role', 'is_primary', 'is_billing', 'notes'],
   npt_appointment: ['customer_id', 'piano_id', 'technician_id', 'service_job_id', 'title', 'location', 'start_at', 'end_at', 'status', 'notes', 'created_by'],
@@ -97,6 +102,10 @@ const ALLOWED_FIELDS: Record<MutationType, string[]> = {
   rayyan_fee_payment: ['invoice_id', 'student_id', 'schoolpay_snapshot_id', 'amount_ksh', 'method', 'reference', 'paid_on', 'recorded_by', 'notes'],
   rayyan_class: ['name', 'level', 'teacher_id', 'notes', 'is_active'],
   rayyan_admin_task: ['student_id', 'guardian_id', 'ops_task_id', 'task_type', 'title', 'status', 'priority', 'due_date', 'notes'],
+  rayyan_activity: ['name', 'description', 'is_active'],
+  rayyan_student_activity: ['student_id', 'activity_id', 'joined_on', 'notes', 'is_active'],
+  rayyan_assessment: ['student_id', 'academic_year', 'term', 'learning_area', 'assessment_type', 'performance_level', 'score', 'remarks', 'assessed_on', 'teacher'],
+  rayyan_history: ['student_id', 'event_type', 'title', 'details', 'occurred_on', 'recorded_by'],
   rhythms_student: ['full_name', 'admission_number', 'schoolpay_code', 'programme', 'cohort', 'guardian_name', 'guardian_id', 'class_id', 'phone', 'email', 'enrollment_status', 'start_date', 'notes'],
   rhythms_guardian: ['full_name', 'phone', 'email', 'relationship_to_child', 'preferred_communication_channel', 'notes'],
   rhythms_class: ['name', 'level', 'teacher_id', 'notes', 'is_active'],
@@ -132,6 +141,9 @@ const REQUIRED_FIELD: Partial<Record<MutationType, string>> = {
   rayyan_student: 'full_name',
   rayyan_class: 'name',
   rayyan_admin_task: 'title',
+  rayyan_activity: 'name',
+  rayyan_assessment: 'learning_area',
+  rayyan_history: 'title',
   rhythms_student: 'full_name',
   rhythms_guardian: 'full_name',
   rhythms_class: 'name',
@@ -162,6 +174,7 @@ const UUID_FIELDS = new Set([
   'assessor_id',
   'preferred_technician_id',
   'appointment_id',
+  'activity_id',
   'account_id',
   'counterparty_brand_id',
   'from_brand_id',
@@ -176,14 +189,21 @@ const UUID_FIELDS = new Set([
 const NUMBER_FIELDS = new Set([
   'estimated_cost_ksh', 'final_cost_ksh', 'quote_amount_ksh', 'invoice_amount_ksh',
   'amount_expected_ksh', 'amount_paid_ksh', 'amount_ksh', 'hifz_juz_completed', 'juz_number',
-  'temperature_c', 'humidity_pct', 'tuning_interval_months',
+  'temperature_c', 'humidity_pct', 'tuning_interval_months', 'score',
   'opening_balance_ksh', 'current_balance_ksh', 'imported_count', 'matched_count', 'exception_count',
   'closing_balance_ksh', 'statement_amount_ksh', 'confidence',
 ])
 
 const ARRAY_FIELDS = new Set(['attendees', 'required_tools', 'tags'])
 
-const BOOLEAN_FIELDS = new Set(['is_primary', 'is_billing', 'tax_exempt', 'is_active'])
+const BOOLEAN_FIELDS = new Set(['is_primary', 'is_billing', 'tax_exempt', 'is_active', 'send_auto_reminders'])
+
+// timestamptz columns fed by datetime-local inputs. Those inputs produce NAIVE
+// strings which Postgres would read as UTC — shifting every Kenyan appointment
+// by 3 hours. Pin them to Africa/Nairobi (+03:00) before storage.
+const TIMESTAMP_FIELDS = new Set([
+  'start_at', 'end_at', 'due_at', 'measured_at', 'occurred_at', 'scheduled_at', 'last_contacted_at',
+])
 
 const TABLES_WITH_UPDATED_AT = new Set<TableName>([
   'ocg_approvals',
@@ -211,6 +231,7 @@ const TABLES_WITH_UPDATED_AT = new Set<TableName>([
   'rayyan_fee_invoices',
   'rayyan_classes',
   'rayyan_admin_tasks',
+  'rayyan_assessments',
   'rhythms_students',
   'rhythms_guardians',
   'rhythms_classes',
@@ -262,6 +283,10 @@ export function sanitizeValues(type: MutationType, values: Json): Json {
     }
     if (BOOLEAN_FIELDS.has(key)) {
       out[key] = raw === true || raw === 'true' || raw === 'on' || raw === '1'
+      continue
+    }
+    if (TIMESTAMP_FIELDS.has(key)) {
+      out[key] = typeof raw === 'string' ? eatToIso(raw) : raw
       continue
     }
     out[key] = raw

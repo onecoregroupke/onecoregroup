@@ -1,6 +1,7 @@
 import type { NptAppointmentRow } from '@ocg/db'
 import { getNptServiceData } from '@/lib/management'
 import { safeRows } from '@/lib/management'
+import { formatEatDateTime, formatEatRange } from '@/lib/kenyaTime'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,7 +26,7 @@ export default async function NptSchedulePage() {
         </section>
         <section className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
           <h2 className="mb-4 text-xs font-semibold uppercase tracking-wider text-ocg-gold">Legacy scheduled jobs</h2>
-          {scheduled.length === 0 ? <p className="text-sm text-gray-500">No scheduled service jobs yet.</p> : <ul className="divide-y divide-gray-100">{scheduled.map((j) => <li key={j.id} className="py-3 text-sm"><p className="font-medium text-gray-800">{j.scheduled_at?.slice(0, 16).replace('T', ' ')} · {j.service_type}</p><p className="text-xs text-gray-400">{j.location || 'No location'} · {j.technician_id ? techById.get(j.technician_id) ?? 'Technician' : 'unassigned'}</p></li>)}</ul>}
+          {scheduled.length === 0 ? <p className="text-sm text-gray-500">No scheduled service jobs yet.</p> : <ul className="divide-y divide-gray-100">{scheduled.map((j) => <li key={j.id} className="py-3 text-sm"><p className="font-medium text-gray-800">{formatEatDateTime(j.scheduled_at)} · {j.service_type}</p><p className="text-xs text-gray-400">{j.location || 'No location'} · {j.technician_id ? techById.get(j.technician_id) ?? 'Technician' : 'unassigned'}</p></li>)}</ul>}
         </section>
       </div>
       <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
@@ -42,14 +43,7 @@ export default async function NptSchedulePage() {
   )
 }
 
+// Kenyan wall-clock display (Africa/Nairobi), independent of the server locale.
 function formatRange(start: string | null, end: string | null) {
-  if (!start) return 'Unscheduled'
-  const s = new Date(start)
-  const date = s.toLocaleDateString('en-KE', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
-  const time = s.toLocaleTimeString('en-KE', { hour: 'numeric', minute: '2-digit' })
-  if (!end) return `${date}, ${time}`
-  const e = new Date(end)
-  const mins = Math.max(0, Math.round((e.getTime() - s.getTime()) / 60000))
-  const duration = mins >= 60 ? `${Math.floor(mins / 60)}h${mins % 60 ? ` ${mins % 60}m` : ''}` : `${mins}m`
-  return `${date}, ${time} - ${e.toLocaleTimeString('en-KE', { hour: 'numeric', minute: '2-digit' })} (${duration})`
+  return formatEatRange(start, end) || 'Unscheduled'
 }

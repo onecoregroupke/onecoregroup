@@ -5,7 +5,7 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import type { Database, PermissionsMap, BrandAccessMap, SectionKey, AccessLevel } from '@ocg/db'
 import { db } from './serverClient'
 import { listTeam } from './team'
-import { can as canFn, canSeeAllTasks, allowedBrands } from './permissions'
+import { can as canFn, canSeeAllTasks, allowedBrands, taskScope, type TaskScope } from './permissions'
 
 /**
  * The authenticated caller, resolved from a verified Supabase session, enriched
@@ -27,6 +27,12 @@ export interface Actor {
   isActive: boolean
   /** May see EVERY team member's tasks (founding admin or `all_tasks` grant). */
   isSuperAdmin: boolean
+  /**
+   * Task visibility: 'all' (group super admin), 'brands' (BRAND MANAGER —
+   * all tasks but only within their brands), or 'own' (own assigned tasks).
+   * Task list/dashboard/report queries MUST apply this scope.
+   */
+  taskScope: TaskScope
   can: (section: SectionKey, level?: AccessLevel) => boolean
   /**
    * Brand UUIDs this user may touch within a brand-scoped section (finance /
@@ -87,6 +93,7 @@ export async function loadActor(user: { id: string; email: string | null }): Pro
     brandAccess,
     isActive: row ? row.is_active !== false : true,
     isSuperAdmin: canSeeAllTasks(permissions),
+    taskScope: taskScope(permissions, brandAccess),
     can: (section, level = 'view') => canFn(permissions, section, level),
     allowedBrandIds: (section) => allowedBrands(brandAccess, section),
   }

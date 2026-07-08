@@ -19,12 +19,15 @@ export default async function TasksPage({
   const actor = await requireSection('ops')
   const sp = await searchParams
   const brandId = await brandIdFromParam(sp.brand ?? null)
-  // Non-super-admins are scoped to their own tasks; the assignee filter is only
-  // honoured for those who may see all tasks.
-  const assignedTo = actor.isSuperAdmin ? sp.assignee : actor.name
-  const [tasks, projects, brands, clients, team] = await Promise.all([
+  // Scope: super admins see everything (assignee filter honoured); brand
+  // managers see every task WITHIN their brands; everyone else their own only.
+  const scope = actor.taskScope
+  const assignedTo = scope.kind === 'own' ? actor.name : sp.assignee
+  const brandIds = scope.kind === 'brands' ? scope.brandIds : undefined
+  const [tasks, projects, allBrands, clients, team] = await Promise.all([
     listTasks({
       brandId,
+      brandIds,
       projectId: sp.project,
       status: sp.status,
       assignedTo,
@@ -36,6 +39,8 @@ export default async function TasksPage({
     listClients(),
     listTeam(),
   ])
+  // Brand managers only see their own brands' filter chips + creation targets.
+  const brands = brandIds ? allBrands.filter((b) => brandIds.includes(b.id)) : allBrands
   const activeBrand = sp.brand ? brands.find((b) => b.slug === sp.brand) : null
   const canEdit = actor.can('ops', 'edit')
 
@@ -50,7 +55,8 @@ export default async function TasksPage({
         </div>
         {canEdit && (
           <NewTaskButton
-            projects={projects.map((p) => ({ id: p.project_id, name: p.project_name }))}
+            projects={(brandIds ? projects.filter((p) => p.brand_id && brandIds.includes(p.brand_id)) : projects)
+              .map((p) => ({ id: p.project_id, name: p.project_name }))}
             brands={brands.map((b) => ({ slug: b.slug, name: b.name }))}
             clients={clients.map((c) => ({ id: c.client_id, name: c.client_name }))}
             team={team.map((t) => t.name)}

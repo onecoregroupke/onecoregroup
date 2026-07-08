@@ -1,14 +1,15 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { requireApiSection } from '@/lib/api-auth'
 import { assertBrandInScope } from '@/lib/finance'
-import { createVendor, createPurchase, receivePurchase, type PurchaseLineInput } from '@/lib/procurement'
+import { createVendor, createPurchase, receivePurchase, setVendorBlacklist, type PurchaseLineInput } from '@/lib/procurement'
 import { db } from '@/lib/serverClient'
 
 /**
  * Procurement endpoint (requires `procurement` edit; brand compartments apply):
  *   POST { action: 'vendor',   values: { name, … } }
- *   POST { action: 'purchase', values: { brand_id, vendor_id, items: […], … } }
+ *   POST { action: 'purchase', values: { brand_id, vendor_id, category, items: […], … } }
  *   POST { action: 'receive',  id }   → pushes line items into inventory
+ *   POST { action: 'blacklist', id, blacklisted, reason } → flag/restore a vendor
  */
 export async function POST(req: NextRequest) {
   const gate = await requireApiSection(req, 'procurement', 'edit')
@@ -43,6 +44,7 @@ export async function POST(req: NextRequest) {
         purchase_date: (values.purchase_date as string) || undefined,
         reference: (values.reference as string) ?? '',
         receipt_url: (values.receipt_url as string) ?? '',
+        category: (values.category as string) ?? '',
         payment_status: (values.payment_status as string) || 'unpaid',
         notes: (values.notes as string) ?? '',
         recorded_by: recordedBy,
@@ -62,6 +64,15 @@ export async function POST(req: NextRequest) {
       assertBrandInScope((purchaseRow as { brand_id: string }).brand_id, allowed, 'receive purchases')
       const purchase = await receivePurchase(id, recordedBy)
       return NextResponse.json({ ok: true, purchase })
+    }
+
+    if (action === 'blacklist') {
+      const vendor = await setVendorBlacklist(
+        String(body?.id ?? ''),
+        Boolean(body?.blacklisted),
+        { reason: (body?.reason as string) ?? '', by: recordedBy },
+      )
+      return NextResponse.json({ ok: true, vendor })
     }
 
     return NextResponse.json({ ok: false, error: `Unknown action: ${action}` }, { status: 400 })
