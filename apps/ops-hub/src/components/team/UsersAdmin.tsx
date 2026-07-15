@@ -6,9 +6,9 @@ import {
   Shield, ShieldOff, Trash2, UserCheck, Users, X,
 } from 'lucide-react'
 import { getClient } from '@/lib/supabase'
-import { SECTIONS, USERS_SECTION, ALL_TASKS_SECTION, BRAND_SCOPED_SECTIONS, defaultPermissions } from '@/lib/permissions'
+import { SECTIONS, MARKETING_SECTIONS, USERS_SECTION, ALL_TASKS_SECTION, BRAND_SCOPED_SECTIONS, defaultPermissions } from '@/lib/permissions'
 import { usePermissions } from '@/contexts/PermissionsContext'
-import type { PermissionsMap, BrandAccessMap, AccessLevel, SectionKey } from '@/lib/permissions'
+import type { PermissionsMap, BrandAccessMap, AccessLevel, SectionKey, SectionDef } from '@/lib/permissions'
 
 type BrandOption = { id: string; label: string }
 type TeamOption = { id: string; name: string; email: string; role: string; brand_ids: string[] }
@@ -627,32 +627,47 @@ function PermissionMatrix({ permissions, onChange, includeUsers = false, readonl
   includeUsers?: boolean
   readonly?: boolean
 }) {
-  const sections = includeUsers ? [...SECTIONS, ALL_TASKS_SECTION, USERS_SECTION] : SECTIONS
+  const opsSections = includeUsers ? [...SECTIONS, ALL_TASKS_SECTION, USERS_SECTION] : SECTIONS
+  // Portal Access is one matrix over both hubs: ops modules, then the Marketing
+  // Hub surfaces under their own heading so a role can be scoped across both.
+  const groups: { title: string | null; items: SectionDef[] }[] = [
+    { title: null, items: opsSections },
+    { title: 'Marketing Hub', items: MARKETING_SECTIONS },
+  ]
   return (
     <div className="rounded-xl border border-gray-100 overflow-hidden">
       <div className="grid grid-cols-[1fr_repeat(3,_auto)] bg-gray-50 border-b border-gray-100">
         <div className="px-4 py-2.5 text-[10px] font-bold uppercase tracking-wider text-gray-400">Section</div>
         {ACCESS_OPTIONS.map(opt => <div key={opt.value} className="px-4 py-2.5 text-[10px] font-bold uppercase tracking-wider text-gray-400 text-center min-w-[88px]">{opt.label}</div>)}
       </div>
-      {sections.map((section, i) => {
-        const current = (permissions[section.key as SectionKey] ?? 'none') as AccessLevel
-        return (
-          <div key={section.key} className={`grid grid-cols-[1fr_repeat(3,_auto)] items-center ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'} ${i < sections.length - 1 ? 'border-b border-gray-100' : ''}`}>
-            <div className="px-4 py-3 text-sm font-medium text-gray-800">{section.label}</div>
-            {ACCESS_OPTIONS.map(opt => {
-              const isSel = current === opt.value
-              return (
-                <div key={opt.value} className="flex items-center justify-center px-4 py-3 min-w-[88px]">
-                  <button type="button" disabled={readonly} onClick={() => onChange({ ...permissions, [section.key]: opt.value })}
-                    className={`w-full text-[11px] font-semibold px-2.5 py-1.5 rounded-lg transition-all ${isSel ? opt.colour + ' ring-2 ring-offset-1 ' + (opt.value === 'none' ? 'ring-gray-300' : opt.value === 'view' ? 'ring-blue-300' : 'ring-green-300') : 'bg-white text-gray-300 border border-gray-200 hover:border-gray-300 hover:text-gray-500'} ${readonly ? 'cursor-default opacity-70' : 'cursor-pointer'}`}>
-                    {opt.label}
-                  </button>
-                </div>
-              )
-            })}
-          </div>
-        )
-      })}
+      {groups.map((group) => (
+        <div key={group.title ?? 'ops'}>
+          {group.title && (
+            <div className="px-4 py-2 bg-ocg-navy/5 border-b border-gray-100 text-[10px] font-bold uppercase tracking-wider text-ocg-navy">
+              {group.title}
+            </div>
+          )}
+          {group.items.map((section, i) => {
+            const current = (permissions[section.key as SectionKey] ?? 'none') as AccessLevel
+            return (
+              <div key={section.key} className={`grid grid-cols-[1fr_repeat(3,_auto)] items-center border-b border-gray-100 last:border-b-0 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}>
+                <div className="px-4 py-3 text-sm font-medium text-gray-800">{section.label}</div>
+                {ACCESS_OPTIONS.map(opt => {
+                  const isSel = current === opt.value
+                  return (
+                    <div key={opt.value} className="flex items-center justify-center px-4 py-3 min-w-[88px]">
+                      <button type="button" disabled={readonly} onClick={() => onChange({ ...permissions, [section.key]: opt.value })}
+                        className={`w-full text-[11px] font-semibold px-2.5 py-1.5 rounded-lg transition-all ${isSel ? opt.colour + ' ring-2 ring-offset-1 ' + (opt.value === 'none' ? 'ring-gray-300' : opt.value === 'view' ? 'ring-blue-300' : 'ring-green-300') : 'bg-white text-gray-300 border border-gray-200 hover:border-gray-300 hover:text-gray-500'} ${readonly ? 'cursor-default opacity-70' : 'cursor-pointer'}`}>
+                        {opt.label}
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            )
+          })}
+        </div>
+      ))}
     </div>
   )
 }

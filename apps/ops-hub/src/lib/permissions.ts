@@ -34,6 +34,26 @@ export const SECTIONS: SectionDef[] = [
 ]
 
 /**
+ * Marketing Hub sections. The Marketing Hub is a self-contained workspace that
+ * now lives inside the Ops Hub (mounted at `/mhub`, opens in a new tab). Each
+ * key gates one marketing surface so access can be scoped per-role exactly like
+ * the ops modules. These are surfaced in the Portal Access matrix under a
+ * "Marketing Hub" heading. `users` is intentionally omitted — it is the shared
+ * key already granted via USERS_SECTION and controls user admin in both hubs.
+ */
+export const MARKETING_SECTIONS: SectionDef[] = [
+  { key: 'marketing',  label: 'Marketing board', href: '/mhub/marketing/calendar' },
+  { key: 'dashboard',  label: 'Marketing dashboard', href: '/mhub' },
+  { key: 'input',      label: 'Input portal', href: '/mhub/input' },
+  { key: 'compliance', label: 'Compliance', href: '/mhub/compliance' },
+  { key: 'properties', label: 'Properties', href: '/mhub/properties' },
+  { key: 'glitz',      label: "Glitz N' Glim", href: '/mhub/glitz' },
+  { key: 'npt',        label: 'NPT Catalogue', href: '/mhub/npt' },
+  { key: 'reports',    label: 'Marketing reports', href: '/mhub/reports' },
+  { key: 'brands',     label: 'Brands', href: '/mhub/brands' },
+]
+
+/**
  * Sections whose access can additionally be restricted to specific brands via
  * `user_permissions.brand_access` (section → brand UUID array). An empty /
  * missing list means "all brands". This is how a per-brand accountant or

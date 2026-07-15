@@ -7,7 +7,7 @@ import {
   CheckSquare, Settings, LogOut, X, BriefcaseBusiness, Wrench, GraduationCap,
   UsersRound, BookOpen, BookMarked, UserCog, CalendarCheck, Lock, Landmark,
   CalendarClock, MessagesSquare, Megaphone, Boxes, ShoppingCart, ClipboardCheck,
-  ClipboardList,
+  ClipboardList, ExternalLink,
 } from 'lucide-react'
 import { usePermissions } from '@/contexts/PermissionsContext'
 import type { SectionKey } from '@/lib/permissions'
@@ -61,6 +61,10 @@ export function Sidebar({ open, onClose, onSignOut }: SidebarProps) {
 
   const visibleNav = MAIN_NAV.filter((item) => item.section === null || can(item.section, 'view'))
   const showBrands = can('ops', 'view')
+  // Marketing Hub is a self-contained workspace inside this app; it opens in a
+  // NEW TAB (like the NPT full workspace). Gated on the marketing section so
+  // access is scoped per-role via user_permissions.
+  const showMarketing = can('marketing', 'view')
 
   return (
     <>
@@ -109,6 +113,21 @@ export function Sidebar({ open, onClose, onSignOut }: SidebarProps) {
               </Link>
             )
           })}
+
+          {showMarketing && (
+            <a
+              href="/mhub"
+              target="_blank"
+              rel="noreferrer"
+              onClick={onClose}
+              data-tour="nav-mhub"
+              className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-white/60 hover:text-white hover:bg-white/5 transition-colors"
+            >
+              <Megaphone size={16} />
+              <span className="flex-1">Marketing Hub</span>
+              <ExternalLink size={13} className="text-white/30" />
+            </a>
+          )}
 
           {showBrands && (
             <div className="pt-4 mt-2 border-t border-white/10">
