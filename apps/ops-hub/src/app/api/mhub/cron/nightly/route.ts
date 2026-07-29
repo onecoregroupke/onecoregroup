@@ -2,10 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { runDuePublishes } from '@/lib/marketing/publishers/runner'
 
 export async function GET(req: NextRequest) {
-  const auth = req.headers.get('authorization')
+  // Fail closed: without a configured CRON_SECRET this stays locked rather than
+  // becoming world-callable — it runs the live publish runner.
   const secret = process.env['CRON_SECRET']
-
-  if (secret && auth !== `Bearer ${secret}`) {
+  if (!secret || req.headers.get('authorization') !== `Bearer ${secret}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

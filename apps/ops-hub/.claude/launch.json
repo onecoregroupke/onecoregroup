@@ -2,6 +2,12 @@
   "version": "0.0.1",
   "configurations": [
     {
+      "name": "ops-hub",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 3030
+    },
+    {
       "name": "carousel-preview",
       "runtimeExecutable": "npx",
       "runtimeArgs": ["serve", "-p", "5555", "../../.claude/skills/oc-design/projects/TASK-0004/exports"],

@@ -62,6 +62,16 @@
     }
   }
 
+  /* Wide tables that opt out of the card transform (kept as a real scrolling
+     table on phones) — mark the wrapper .keep-table. */
+  @media (max-width: 767px) {
+    main .keep-table table { display: table; }
+    main .keep-table thead { display: table-header-group; }
+    main .keep-table tbody { display: table-row-group; }
+    main .keep-table tr { display: table-row; border: 0; background: transparent; padding: 0; }
+    main .keep-table td { display: table-cell; width: auto; }
+  }
+
   /* Printing (transcripts, report cards): strip the app chrome so only the
      page content (the printable sheet) is on paper. */
   @media print {
@@ -79,5 +89,23 @@
       padding: 0 !important;
       overflow: visible !important;
     }
+  }
+}
+
+/* ── Mobile ergonomics (outside @layer so these win over utilities) ──────── */
+@media (max-width: 767px) {
+  /* Comfortable tap targets for form controls. */
+  .input,
+  select.input {
+    min-height: 44px;
+  }
+  /* 16px inputs stop iOS Safari auto-zooming on focus — a big "this is just the
+     desktop site" tell. */
+  .input {
+    font-size: 16px;
+  }
+  /* Momentum scrolling for the panels that still scroll sideways. */
+  .overflow-x-auto {
+    -webkit-overflow-scrolling: touch;
   }
 }

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireUser } from '@/lib/api-auth'
+import { requireMarketing } from '@/lib/mhub-auth'
 import {
   listReports,
   getReportById,
@@ -9,10 +9,21 @@ import {
   transitionReport,
 } from '@/lib/marketing/reports'
 
-export async function GET(req: NextRequest) {
-  if (!(await requireUser(req))) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+// Executive reports are GROUP-WIDE aggregates (all brands). A brand-restricted
+// marketer must not see cross-brand performance, so reports are limited to
+// full-marketing users (no brand compartment).
+function groupWideOnly(gate: { brandIds: string[] | null }): NextResponse | null {
+  if (gate.brandIds !== null) {
+    return NextResponse.json({ error: 'Executive reports are limited to group marketing.' }, { status: 403 })
   }
+  return null
+}
+
+export async function GET(req: NextRequest) {
+  const gate = await requireMarketing(req, 'view')
+  if (gate instanceof NextResponse) return gate
+  const denied = groupWideOnly(gate)
+  if (denied) return denied
   const id = req.nextUrl.searchParams.get('id')
   if (id) {
     const report = await getReportById(id)
@@ -24,8 +35,10 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const user = await requireUser(req)
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const gate = await requireMarketing(req, 'edit')
+  if (gate instanceof NextResponse) return gate
+  const denied = groupWideOnly(gate)
+  if (denied) return denied
   const body = (await req.json().catch(() => null)) as
     | { periodStart?: string; periodEnd?: string }
     | null
@@ -35,15 +48,17 @@ export async function POST(req: NextRequest) {
   const result = await generateReport({
     periodStart: body.periodStart,
     periodEnd: body.periodEnd,
-    createdByEmail: user.email ?? 'unknown',
+    createdByEmail: gate.actor.email ?? 'unknown',
   })
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 })
   return NextResponse.json({ report: result.report })
 }
 
 export async function PATCH(req: NextRequest) {
-  const user = await requireUser(req)
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const gate = await requireMarketing(req, 'edit')
+  if (gate instanceof NextResponse) return gate
+  const denied = groupWideOnly(gate)
+  if (denied) return denied
   const body = (await req.json().catch(() => null)) as
     | ({ id?: string; action?: string } & Record<string, unknown>)
     | null
@@ -56,7 +71,7 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ report: result.report })
   }
   if (action === 'transition') {
-    const result = await transitionReport(id, rest.toStatus as string, user.email ?? 'unknown')
+    const result = await transitionReport(id, rest.toStatus as string, gate.actor.email ?? 'unknown')
     if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 })
     return NextResponse.json({ report: result.report })
   }

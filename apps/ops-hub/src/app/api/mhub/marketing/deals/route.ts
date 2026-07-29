@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireUser } from '@/lib/api-auth'
+import { requireMhubSection } from '@/lib/mhub-auth'
 import {
   listDeals,
   getDealById,
@@ -10,10 +10,10 @@ import {
 } from '@/lib/marketing/deals'
 import type { DealStage } from '@/lib/marketing/types'
 
+// Deals are part of the group-wide CRM — gated by the `marketing` grant.
 export async function GET(req: NextRequest) {
-  if (!(await requireUser(req))) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const gate = await requireMhubSection(req, 'marketing', 'view')
+  if (gate instanceof NextResponse) return gate
   const params = req.nextUrl.searchParams
   const id = params.get('id')
   if (id) {
@@ -31,19 +31,18 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const user = await requireUser(req)
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const gate = await requireMhubSection(req, 'marketing', 'edit')
+  if (gate instanceof NextResponse) return gate
   const body = await req.json().catch(() => null)
   if (!body) return NextResponse.json({ error: 'Invalid body' }, { status: 400 })
-  const result = await createDeal({ ...body, createdByEmail: user.email ?? 'unknown' })
+  const result = await createDeal({ ...body, createdByEmail: gate.email ?? 'unknown' })
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 })
   return NextResponse.json({ deal: result.deal })
 }
 
 export async function PATCH(req: NextRequest) {
-  if (!(await requireUser(req))) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const gate = await requireMhubSection(req, 'marketing', 'edit')
+  if (gate instanceof NextResponse) return gate
   const body = (await req.json().catch(() => null)) as
     | ({ id?: string; action?: string } & Record<string, unknown>)
     | null

@@ -276,7 +276,7 @@ export default function UsersPage() {
       {/* Invite modal */}
       {showInvite && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[calc(100dvh-2rem)] overflow-y-auto">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
               <p className="font-semibold text-gray-900">Invite a team member</p>
               <button onClick={() => setShowInvite(false)} className="text-gray-400 hover:text-gray-700"><X size={18} /></button>

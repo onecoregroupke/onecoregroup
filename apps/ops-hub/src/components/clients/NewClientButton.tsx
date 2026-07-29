@@ -41,7 +41,7 @@ export function NewClientButton() {
 
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+          <div className="max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-lg font-semibold text-gray-900">New client</h2>
               <button onClick={() => setOpen(false)} className="text-gray-400 hover:text-gray-700"><X size={18} /></button>

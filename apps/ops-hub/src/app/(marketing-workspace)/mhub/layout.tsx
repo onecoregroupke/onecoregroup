@@ -5,9 +5,20 @@ import { useRouter } from 'next/navigation'
 import { getClient, getSession, signOut } from '@/lib/supabase'
 import { Sidebar } from '@/components/mhub/Sidebar'
 import { Topbar } from '@/components/mhub/Topbar'
+import { MhubBottomNav } from '@/components/mhub/BottomNav'
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
 import { PermissionsContext, makeContextValue } from '@/contexts/PermissionsContext'
-import type { PermissionsMap } from '@/lib/permissions'
+import { can, MARKETING_SECTIONS } from '@/lib/permissions'
+import type { PermissionsMap, SectionKey } from '@/lib/permissions'
+
+// Every section that unlocks some part of the Marketing Hub. A user needs at
+// least one of these (or be a founding admin) to enter the /mhub workspace —
+// otherwise they're bounced back to their own tasks. This is UX + defence in
+// depth; the real boundary is each mhub API route's own section gate.
+const MHUB_SECTIONS: SectionKey[] = [
+  ...MARKETING_SECTIONS.map((s) => s.key),
+  'users',
+]
 
 // Marketing Hub workspace shell. A self-contained, full-screen surface (its own
 // marketing sidebar — NOT the Ops sidebar) that lives inside the Ops Hub app and
@@ -53,6 +64,13 @@ export default function MarketingWorkspaceLayout({ children }: { children: React
           router.push('/login')
           return
         }
+        // A signed-in user with no Marketing Hub section at all doesn't belong
+        // in this workspace — send them to their tasks rather than an empty shell.
+        const hasMhubAccess = MHUB_SECTIONS.some((key) => can(data.permissions, key, 'view'))
+        if (!hasMhubAccess) {
+          router.replace('/my-tasks')
+          return
+        }
         setPermissions(data.permissions)
         setDisplayName(data.display_name ?? null)
       }
@@ -76,7 +94,8 @@ export default function MarketingWorkspaceLayout({ children }: { children: React
         <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} onSignOut={signOut} />
         <div className="flex-1 flex flex-col min-w-0">
           <Topbar onMenuClick={() => setSidebarOpen(true)} />
-          <main className="flex-1 p-4 lg:p-6 overflow-auto">{children}</main>
+          <main className="flex-1 overflow-auto p-4 pb-24 lg:p-6 lg:pb-6">{children}</main>
+          <MhubBottomNav />
         </div>
       </div>
     </PermissionsContext.Provider>

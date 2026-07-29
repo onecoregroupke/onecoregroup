@@ -1,13 +1,7 @@
+import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@ocg/db/client'
 import type { Product, ProductSize } from '@ocg/db'
-
-async function verifyAuth(req: Request) {
-  const token = req.headers.get('Authorization')?.replace('Bearer ', '')
-  if (!token) return null
-  const supabase = createServerClient()
-  const { data: { user } } = await supabase.auth.getUser(token)
-  return user ?? null
-}
+import { requireMhubSection } from '@/lib/mhub-auth'
 
 const HEADERS = [
   'slug', 'name', 'variant', 'category', 'category_display_name', 'category_accent',
@@ -39,9 +33,9 @@ function productToRow(p: Product): string {
 }
 
 // GET /api/mhub/glitz/export — download CSV of all products
-export async function GET(req: Request) {
-  const user = await verifyAuth(req)
-  if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 })
+export async function GET(req: NextRequest) {
+  const gate = await requireMhubSection(req, 'glitz', 'view')
+  if (gate instanceof NextResponse) return gate
 
   const supabase = createServerClient()
   const { data, error } = await supabase
@@ -49,7 +43,7 @@ export async function GET(req: Request) {
     .select('*')
     .order('sort_order', { ascending: true })
 
-  if (error) return Response.json({ error: error.message }, { status: 500 })
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   const rows = [HEADERS.join(','), ...(data as Product[]).map(productToRow)]
   const csv = rows.join('\r\n')

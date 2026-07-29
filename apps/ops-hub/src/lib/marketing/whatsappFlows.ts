@@ -56,7 +56,7 @@ function slugify(value: string): string {
 }
 
 export async function listFlows(
-  options: { brandId?: string; includeArchived?: boolean } = {},
+  options: { brandId?: string; brandIds?: string[]; includeArchived?: boolean } = {},
 ): Promise<WhatsappFlow[]> {
   const supabase = createServerClient()
   let query = supabase
@@ -64,6 +64,7 @@ export async function listFlows(
     .select('*')
     .order('updated_at', { ascending: false })
   if (options.brandId) query = query.eq('brand_id', options.brandId)
+  if (options.brandIds && options.brandIds.length > 0) query = query.in('brand_id', options.brandIds)
   if (!options.includeArchived) query = query.neq('status', 'archived')
   const { data, error } = await query
   if (error || !data) {

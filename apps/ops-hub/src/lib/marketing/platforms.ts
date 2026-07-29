@@ -42,7 +42,7 @@ function isPostingMode(value: string): value is PostingMode {
 }
 
 export async function listPlatforms(
-  options: { brandId?: string; includeInactive?: boolean } = {},
+  options: { brandId?: string; brandIds?: string[]; includeInactive?: boolean } = {},
 ): Promise<MarketingPlatform[]> {
   const supabase = createServerClient()
   let query = supabase
@@ -51,6 +51,7 @@ export async function listPlatforms(
     .order('brand_id', { ascending: true })
     .order('platform', { ascending: true })
   if (options.brandId) query = query.eq('brand_id', options.brandId)
+  if (options.brandIds && options.brandIds.length > 0) query = query.in('brand_id', options.brandIds)
   if (!options.includeInactive) query = query.eq('is_active', true)
   const { data, error } = await query
   if (error || !data) {

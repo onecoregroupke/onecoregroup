@@ -142,7 +142,7 @@ export function NewTaskButton({
               </button>
             </div>
 
-            <div className="space-y-3 overflow-y-auto p-6">
+            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-6">
               <Field label="Task name">
                 <input
                   className="input"

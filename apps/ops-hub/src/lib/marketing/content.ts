@@ -96,6 +96,8 @@ async function syncPillars(contentId: string, pillarIds: string[]): Promise<void
 
 export interface ListContentFilters {
   brandId?: string
+  /** Restrict to these brand UUIDs (per-user brand compartment). */
+  brandIds?: string[]
   platformId?: string
   status?: ContentStatus | 'any'
   contentType?: ContentType
@@ -114,6 +116,7 @@ export async function listContent(
     .order('updated_at', { ascending: false })
     .limit(limit)
   if (filters.brandId) query = query.eq('brand_id', filters.brandId)
+  if (filters.brandIds && filters.brandIds.length > 0) query = query.in('brand_id', filters.brandIds)
   if (filters.platformId) query = query.eq('platform_id', filters.platformId)
   if (filters.status && filters.status !== 'any') query = query.eq('status', filters.status)
   if (!filters.status) query = query.neq('status', 'archived')

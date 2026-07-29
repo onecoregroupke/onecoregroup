@@ -50,7 +50,7 @@ function slugify(value: string): string {
 
 // ── Reads ───────────────────────────────────────────────────────────────
 export async function listEpisodes(
-  filters: { brandId?: string; status?: EpisodeStatus | 'any' } = {},
+  filters: { brandId?: string; brandIds?: string[]; status?: EpisodeStatus | 'any' } = {},
   limit = 100,
 ): Promise<MarketingEpisode[]> {
   const supabase = createServerClient()
@@ -61,6 +61,7 @@ export async function listEpisodes(
     .order('created_at', { ascending: false })
     .limit(limit)
   if (filters.brandId) query = query.eq('brand_id', filters.brandId)
+  if (filters.brandIds && filters.brandIds.length > 0) query = query.in('brand_id', filters.brandIds)
   if (filters.status && filters.status !== 'any') query = query.eq('status', filters.status)
   const { data, error } = await query
   if (error || !data) {

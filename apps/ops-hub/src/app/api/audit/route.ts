@@ -16,6 +16,12 @@ const UNDO_TABLES = new Set([
 export async function GET(req: NextRequest) {
   const actor = await getApiActor(req)
   if (!actor) return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 })
+  // Audit events carry full before/after row snapshots (finance, tasks, team,
+  // …). Reading them is a management-level action — never open to every user
+  // who happens to know a table name + id.
+  if (!actor.isSuperAdmin && !actor.can('management', 'view')) {
+    return NextResponse.json({ ok: false, error: 'forbidden' }, { status: 403 })
+  }
   const url = new URL(req.url)
   const table = url.searchParams.get('table') ?? ''
   const id = url.searchParams.get('id') ?? ''

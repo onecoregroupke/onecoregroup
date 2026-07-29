@@ -59,6 +59,8 @@ function slugify(value: string): string {
 
 export interface ListCampaignsFilters {
   brandId?: string
+  /** Restrict to these brand UUIDs (per-user brand compartment). */
+  brandIds?: string[]
   status?: CampaignStatus | 'any' | 'open'
   query?: string
 }
@@ -75,6 +77,7 @@ export async function listCampaigns(
     .order('created_at', { ascending: false })
     .limit(limit)
   if (filters.brandId) query = query.eq('brand_id', filters.brandId)
+  if (filters.brandIds && filters.brandIds.length > 0) query = query.in('brand_id', filters.brandIds)
   if (filters.status === 'open') {
     query = query.in('status', ['planning', 'live', 'paused'])
   } else if (filters.status && filters.status !== 'any') {

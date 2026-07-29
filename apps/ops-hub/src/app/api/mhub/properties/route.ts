@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import { createServerClient } from '@ocg/db'
-import type { Database, Property } from '@ocg/db'
+import type { Property } from '@ocg/db'
+import { requireMhubSection } from '@/lib/mhub-auth'
 
 type PropertyPayload = Pick<Property, 'slug' | 'name' | 'location' | 'neighbourhood'> &
   Partial<
@@ -30,20 +30,6 @@ type PropertyPayload = Pick<Property, 'slug' | 'name' | 'location' | 'neighbourh
       | 'sort_order'
     >
   >
-
-async function requireUser(req: NextRequest) {
-  const token = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '')
-  const url = process.env['NEXT_PUBLIC_SUPABASE_URL']
-  const anon = process.env['NEXT_PUBLIC_SUPABASE_ANON_KEY']
-
-  if (!token || !url || !anon) return false
-
-  const supabase = createClient<Database>(url, anon, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  })
-  const { data, error } = await supabase.auth.getUser(token)
-  return !error && Boolean(data.user)
-}
 
 function normalizePayload(body: Partial<PropertyPayload>) {
   const slug = body.slug?.trim()
@@ -85,9 +71,8 @@ function normalizePayload(body: Partial<PropertyPayload>) {
 }
 
 export async function GET(req: NextRequest) {
-  if (!(await requireUser(req))) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const gate = await requireMhubSection(req, 'properties', 'view')
+  if (gate instanceof NextResponse) return gate
 
   const supabase = createServerClient()
   const { data, error } = await supabase
@@ -101,9 +86,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  if (!(await requireUser(req))) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const gate = await requireMhubSection(req, 'properties', 'edit')
+  if (gate instanceof NextResponse) return gate
 
   try {
     const payload = normalizePayload((await req.json()) as Partial<PropertyPayload>)
@@ -121,9 +105,8 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
-  if (!(await requireUser(req))) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const gate = await requireMhubSection(req, 'properties', 'edit')
+  if (gate instanceof NextResponse) return gate
 
   try {
     const body = (await req.json()) as Partial<PropertyPayload> & { id?: string }

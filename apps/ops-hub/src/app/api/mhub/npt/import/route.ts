@@ -1,12 +1,6 @@
+import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@ocg/db/client'
-
-async function verifyAuth(req: Request) {
-  const token = req.headers.get('Authorization')?.replace('Bearer ', '')
-  if (!token) return null
-  const supabase = createServerClient()
-  const { data: { user } } = await supabase.auth.getUser(token)
-  return user ?? null
-}
+import { requireMhubSection } from '@/lib/mhub-auth'
 
 function parseCSV(text: string): string[][] {
   const rows: string[][] = []
@@ -49,9 +43,9 @@ function parsePipeList(raw: string): string[] {
 }
 
 // POST /api/mhub/npt/import — upsert pianos from CSV body
-export async function POST(req: Request) {
-  const user = await verifyAuth(req)
-  if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 })
+export async function POST(req: NextRequest) {
+  const gate = await requireMhubSection(req, 'npt', 'edit')
+  if (gate instanceof NextResponse) return gate
 
   const text = await req.text()
   const rows = parseCSV(text)

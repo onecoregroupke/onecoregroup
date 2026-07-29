@@ -1,21 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireUser } from '@/lib/api-auth'
+import { requireMarketing, effectiveBrandIds } from '@/lib/mhub-auth'
 import { listCalendarContentInRange } from '@/lib/marketing/content'
 
 export async function GET(req: NextRequest) {
-  if (!(await requireUser(req))) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const gate = await requireMarketing(req, 'view')
+  if (gate instanceof NextResponse) return gate
   const params = req.nextUrl.searchParams
   const start = params.get('start')
   const end = params.get('end')
   if (!start || !end) {
     return NextResponse.json({ error: 'start and end are required.' }, { status: 400 })
   }
-  const brand = params.get('brand')
+  // Scope the calendar to the caller's brand compartment. A brand-restricted
+  // marketer never sees another brand's schedule, even by passing ?brand=.
+  const brand = effectiveBrandIds(params.get('brand'), gate.brandIds)
+  if (brand.empty) return NextResponse.json({ content: [] })
   const platform = params.get('platform')
   const content = await listCalendarContentInRange(start, end, {
-    brandIds: brand ? [brand] : undefined,
+    brandIds: brand.brandIds,
     platformIds: platform ? [platform] : undefined,
   })
   return NextResponse.json({ content })

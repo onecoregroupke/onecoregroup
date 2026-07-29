@@ -89,7 +89,7 @@ export function FinanceAccountEditButton({
               </button>
             </div>
 
-            <div className="grid gap-3 overflow-y-auto p-5 sm:grid-cols-2">
+            <div className="grid min-h-0 flex-1 gap-3 overflow-y-auto p-5 sm:grid-cols-2">
               <Field label="Account name">
                 <input className="input" value={values.account_name} onChange={(e) => set('account_name', e.target.value)} />
               </Field>

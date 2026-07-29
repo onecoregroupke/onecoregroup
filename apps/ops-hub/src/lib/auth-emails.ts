@@ -46,7 +46,7 @@ function getResend(): Resend | null {
 }
 
 function fromAddress(): string {
-  const addr = process.env['OPS_EMAIL_FROM'] ?? 'ops@onecoregroup.com'
+  const addr = process.env['OPS_EMAIL_FROM'] ?? 'masterhub@operations.kenyacorp.com'
   return addr.includes('<') ? addr : `One Core Group Ops Hub <${addr}>`
 }
 

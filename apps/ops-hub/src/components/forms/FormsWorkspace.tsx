@@ -376,7 +376,7 @@ function TemplateEditor({ template, brands, onClose, onSaved }: {
           <p className="font-semibold text-gray-900">{template ? `Edit form — ${template.name}` : 'New form'}</p>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-700"><X size={18} /></button>
         </div>
-        <div className="space-y-4 overflow-y-auto p-5">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5">
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block sm:col-span-2">
               <span className="mb-1 block text-xs font-medium text-gray-500">Form name *</span>

@@ -70,7 +70,7 @@ export function TeamMemberEditButton({ member, brands }: { member: Member; brand
               <p className="font-semibold text-gray-900">Edit team member</p>
               <button onClick={() => setOpen(false)} className="text-gray-400 hover:text-gray-700"><X size={18} /></button>
             </div>
-            <div className="grid gap-3 overflow-y-auto p-5 sm:grid-cols-2">
+            <div className="grid min-h-0 flex-1 gap-3 overflow-y-auto p-5 sm:grid-cols-2">
               <Field label="Name"><input className="input" value={form.name} onChange={(e) => set('name', e.target.value)} /></Field>
               <Field label="Email"><input type="email" className="input" value={form.email} onChange={(e) => set('email', e.target.value)} /></Field>
               <Field label="Role"><input className="input" value={form.role} onChange={(e) => set('role', e.target.value)} /></Field>

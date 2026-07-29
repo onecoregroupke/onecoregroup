@@ -30,6 +30,8 @@ export const SECTIONS: SectionDef[] = [
   { key: 'rayyan_admin', label: 'Rayyan Admin', href: '/rayyan' },
   { key: 'rhythms_admin', label: 'Rhythms Admin', href: '/rhythms' },
   { key: 'darul_admin', label: 'Darul Swafa Admin', href: '/darul' },
+  { key: 'nuuranest_admin', label: 'Nuuranest Admin', href: '/nuuranest' },
+  { key: 'glitz_admin', label: "Glitz N' Glim Admin", href: '/glitz' },
   { key: 'ops_agents', label: 'Agents', href: '/agents' },
 ]
 
@@ -62,12 +64,18 @@ export const MARKETING_SECTIONS: SectionDef[] = [
  * `all_tasks` scoped to brands is the BRAND MANAGER: they see every task in
  * their brand(s) (not just their own), can assign within their team, get the
  * per-brand ops report by email, and their dashboard is scoped to their brand.
+ *
+ * `marketing` scoped to brands is the BRAND MARKETER: they see and edit only
+ * their brand(s)' content, calendar, campaigns, platforms, WhatsApp flows, and
+ * episodes. (CRM contacts/deals are group-wide and gated by the `marketing`
+ * grant alone — they carry no brand tag.)
  */
 export const BRAND_SCOPED_SECTIONS: SectionDef[] = [
   { key: 'finance', label: 'Finance', href: '/finance' },
   { key: 'inventory', label: 'Inventory', href: '/inventory' },
   { key: 'procurement', label: 'Procurement', href: '/procurement' },
   { key: 'all_tasks', label: 'Task oversight (brand manager)', href: '/tasks' },
+  { key: 'marketing', label: 'Marketing (brand marketer)', href: '/mhub/marketing/calendar' },
 ]
 
 /**
@@ -122,6 +130,8 @@ export function can(
     rayyan_admin: ['ops'],
     rhythms_admin: ['ops'],
     darul_admin: ['ops'],
+    nuuranest_admin: ['ops'],
+    glitz_admin: ['ops'],
     meetings: ['management', 'ops'],
   }
   let granted = permissions[section]

@@ -1,14 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireUser } from '@/lib/api-auth'
+import { requireMarketing, brandInScope } from '@/lib/mhub-auth'
 import { getContent, updateContent } from '@/lib/marketing/content'
 import { uploadMedia } from '@/lib/marketing/mediaStorage'
 
 // Upload a media file (image/video) and attach its public URL to the content row.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  if (!(await requireUser(req))) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const gate = await requireMarketing(req, 'edit')
+  if (gate instanceof NextResponse) return gate
   const { id } = await params
   const content = await getContent(id)
   if (!content) return NextResponse.json({ error: 'Content not found.' }, { status: 404 })
+  if (!brandInScope(content.brandId, gate.brandIds)) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  }
 
   let file: File | null = null
   try {
@@ -38,10 +42,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
 // Remove a media URL from the content row (does not delete the stored object).
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  if (!(await requireUser(req))) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const gate = await requireMarketing(req, 'edit')
+  if (gate instanceof NextResponse) return gate
   const { id } = await params
   const content = await getContent(id)
   if (!content) return NextResponse.json({ error: 'Content not found.' }, { status: 404 })
+  if (!brandInScope(content.brandId, gate.brandIds)) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  }
   const body = (await req.json().catch(() => null)) as { url?: string } | null
   if (!body?.url) return NextResponse.json({ error: 'url is required.' }, { status: 400 })
   const assetUrls = content.assetUrls.filter((u) => u !== body.url)

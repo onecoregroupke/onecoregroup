@@ -213,8 +213,66 @@ export default function CalendarPage() {
       {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
       {saving && <p className="text-xs text-gray-400">Saving…</p>}
 
-      {/* Grid: brands (rows) × days (columns) */}
-      <div className="overflow-x-auto rounded-2xl border border-gray-100 bg-white shadow-sm">
+      {/* Mobile agenda: one card per day, posts listed with their brand. The
+          brands×days grid below is desktop-only — it can't shrink to a phone. */}
+      <div className="space-y-3 md:hidden">
+        {loading ? (
+          <p className="rounded-xl border border-gray-100 bg-white p-4 text-sm text-gray-400 shadow-sm">Loading…</p>
+        ) : (
+          days.map((iso) => {
+            const dayItems = rows.flatMap((brand) =>
+              (cellMap[`${brand.id}|${iso}`] ?? []).map((row) => ({ row, brand })),
+            )
+            const h = dayHeader(iso)
+            const isToday = iso === todayIso
+            return (
+              <div key={iso} className={`rounded-xl border bg-white p-3 shadow-sm ${isToday ? 'border-ocg-gold/50' : 'border-gray-100'}`}>
+                <div className="mb-2 flex items-center justify-between">
+                  <p className={`text-sm font-semibold ${isToday ? 'text-ocg-gold' : 'text-gray-800'}`}>
+                    {h.weekday} · {h.dm}{isToday ? ' · Today' : ''}
+                  </p>
+                  <Link
+                    href={`/mhub/marketing/content/new?date=${encodeURIComponent(iso)}`}
+                    className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-600 active:bg-gray-50"
+                  >
+                    <Plus size={13} /> Add
+                  </Link>
+                </div>
+                {dayItems.length === 0 ? (
+                  <p className="text-xs text-gray-400">No posts scheduled.</p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {dayItems.map(({ row, brand }) => {
+                      const accent = row.primaryPillarColor ?? brand.primaryColor ?? '#1a1a2e'
+                      const time = row.scheduledAt
+                        ? new Date(row.scheduledAt).toLocaleTimeString('en-KE', { timeZone: 'Africa/Nairobi', hour: '2-digit', minute: '2-digit' })
+                        : '—'
+                      const platform = row.platform ? PLATFORM_LABELS[row.platform] : null
+                      return (
+                        <Link
+                          key={row.id}
+                          href={`/mhub/marketing/content/${row.id}/edit`}
+                          className="block rounded-md border border-gray-100 bg-white px-2.5 py-2 shadow-sm active:bg-gray-50"
+                          style={{ borderLeft: `3px solid ${accent}` }}
+                        >
+                          <div className="flex items-center justify-between gap-2 text-[10px] uppercase tracking-wide text-gray-400">
+                            <span className="truncate">{brand.shortName ?? brand.name}</span>
+                            <span className="shrink-0">{time}{platform ? ` · ${platform}` : ''}</span>
+                          </div>
+                          <div className="mt-0.5 truncate text-sm text-gray-800">{row.title || row.hook || 'Untitled'}</div>
+                        </Link>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )
+          })
+        )}
+      </div>
+
+      {/* Grid: brands (rows) × days (columns) — desktop only */}
+      <div className="hidden overflow-x-auto rounded-2xl border border-gray-100 bg-white shadow-sm md:block">
         <table className="w-full min-w-[900px] table-fixed border-collapse">
           <thead>
             <tr>

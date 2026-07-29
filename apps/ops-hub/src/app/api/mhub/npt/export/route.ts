@@ -1,13 +1,7 @@
+import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@ocg/db/client'
 import type { PianoCatalogue } from '@ocg/db'
-
-async function verifyAuth(req: Request) {
-  const token = req.headers.get('Authorization')?.replace('Bearer ', '')
-  if (!token) return null
-  const supabase = createServerClient()
-  const { data: { user } } = await supabase.auth.getUser(token)
-  return user ?? null
-}
+import { requireMhubSection } from '@/lib/mhub-auth'
 
 const HEADERS = [
   'slug', 'name', 'model', 'serial', 'category', 'condition',
@@ -46,9 +40,9 @@ function pianoToRow(p: PianoCatalogue): string {
 }
 
 // GET /api/mhub/npt/export — download CSV of all pianos
-export async function GET(req: Request) {
-  const user = await verifyAuth(req)
-  if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 })
+export async function GET(req: NextRequest) {
+  const gate = await requireMhubSection(req, 'npt', 'view')
+  if (gate instanceof NextResponse) return gate
 
   const supabase = createServerClient()
   const { data, error } = await supabase

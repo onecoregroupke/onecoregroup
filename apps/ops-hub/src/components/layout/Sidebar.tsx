@@ -7,7 +7,7 @@ import {
   CheckSquare, Settings, LogOut, X, BriefcaseBusiness, Wrench, GraduationCap,
   UsersRound, BookOpen, BookMarked, UserCog, CalendarCheck, Lock, Landmark,
   CalendarClock, MessagesSquare, Megaphone, Boxes, ShoppingCart, ClipboardCheck,
-  ClipboardList, ExternalLink,
+  ClipboardList, ExternalLink, Home, Sparkles,
 } from 'lucide-react'
 import { usePermissions } from '@/contexts/PermissionsContext'
 import type { SectionKey } from '@/lib/permissions'
@@ -46,6 +46,8 @@ export const MAIN_NAV: { href: string; label: string; icon: React.ElementType; s
   { href: '/rayyan',     label: 'Rayyan Admin', icon: GraduationCap, section: 'rayyan_admin' },
   { href: '/rhythms',     label: 'Rhythms', icon: BookOpen, section: 'rhythms_admin' },
   { href: '/darul',     label: 'Darul Swafa', icon: BookMarked, section: 'darul_admin' },
+  { href: '/nuuranest', label: 'Nuuranest', icon: Home, section: 'nuuranest_admin' },
+  { href: '/glitz',     label: "Glitz N' Glim", icon: Sparkles, section: 'glitz_admin' },
   { href: '/agents',    label: 'Agents',    icon: Bot,             section: 'ops_agents' },
 ]
 

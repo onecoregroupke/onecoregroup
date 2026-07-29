@@ -285,7 +285,7 @@ export function UsersAdmin({ brands, team }: { brands: BrandOption[]; team: Team
               <p className="font-semibold text-gray-900">Invite a team member to their portal</p>
               <button onClick={() => setShowInvite(false)} className="text-gray-400 hover:text-gray-700"><X size={18} /></button>
             </div>
-            <div className="p-5 space-y-4 overflow-y-auto">
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5">
               {team.length > 0 && (
                 <Label text="Choose from team">
                   <select className="input" value={pickedTeamId} onChange={e => pickTeamMember(e.target.value)}>
@@ -325,13 +325,13 @@ export function UsersAdmin({ brands, team }: { brands: BrandOption[]; team: Team
 
               <BrandScopeEditor permissions={invitePerms} brandAccess={inviteBrandAccess} onChange={setInviteBrandAccess} brands={brands} />
 
-              <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
-                <button onClick={() => setShowInvite(false)} className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900">Cancel</button>
-                <button onClick={sendInvite} disabled={inviting || !inviteEmail.trim()} className="inline-flex items-center gap-2 rounded-lg bg-ocg-navy px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60">
-                  {inviting ? <RefreshCw size={14} className="animate-spin" /> : <Mail size={14} />}
-                  {inviting ? 'Sending…' : 'Send Invite'}
-                </button>
-              </div>
+            </div>
+            <div className="flex shrink-0 justify-end gap-2 border-t border-gray-100 px-5 py-4">
+              <button onClick={() => setShowInvite(false)} className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900">Cancel</button>
+              <button onClick={sendInvite} disabled={inviting || !inviteEmail.trim()} className="inline-flex items-center gap-2 rounded-lg bg-ocg-navy px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60">
+                {inviting ? <RefreshCw size={14} className="animate-spin" /> : <Mail size={14} />}
+                {inviting ? 'Sending…' : 'Send Invite'}
+              </button>
             </div>
           </div>
         </div>
@@ -589,10 +589,11 @@ function BrandScopeEditor({ permissions, brandAccess, onChange, brands, readonly
 
   return (
     <div>
-      <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Brand compartments (finance / stock)</p>
+      <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Brand compartments (finance / stock / marketing)</p>
       <p className="text-xs text-gray-400 mb-3">
         Leave a row empty for the full cross-brand view (managers). Select brands to lock this
-        person to ONLY those brands&apos; records — they will never see the other brands&apos; money or stock.
+        person to ONLY those brands&apos; records — they will never see the other brands&apos; money,
+        stock, or marketing content. (Marketing CRM contacts are shared group-wide.)
       </p>
       <div className="rounded-xl border border-gray-100 overflow-hidden divide-y divide-gray-100">
         {grantedSections.map((section) => {

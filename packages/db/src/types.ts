@@ -3,7 +3,7 @@ export type SectionKey =
   | 'dashboard' | 'input' | 'compliance' | 'properties'
   | 'glitz' | 'npt' | 'reports' | 'brands' | 'users' | 'marketing'
   | 'ops' | 'ops_agents' | 'management' | 'finance' | 'npt_service' | 'rayyan_admin' | 'rhythms_admin'
-  | 'darul_admin' | 'personal' | 'all_tasks'
+  | 'darul_admin' | 'nuuranest_admin' | 'glitz_admin' | 'personal' | 'all_tasks'
   | 'meetings' | 'inventory' | 'procurement'
 
 export type AccessLevel = 'none' | 'view' | 'edit'

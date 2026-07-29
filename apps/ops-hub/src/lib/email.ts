@@ -7,7 +7,7 @@ function client(): Resend | null {
 }
 
 function fromAddress(): string {
-  return process.env['OPS_EMAIL_FROM'] ?? 'ops@onecoregroup.com'
+  return process.env['OPS_EMAIL_FROM'] ?? 'masterhub@operations.kenyacorp.com'
 }
 
 export interface TaskAssignmentParams {
