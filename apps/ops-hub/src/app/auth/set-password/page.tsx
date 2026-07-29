@@ -29,7 +29,13 @@ export default function SetPasswordPage() {
 
     setLoading(true)
     const supabase = getClient()
-    const { error: updateError } = await supabase.auth.updateUser({ password })
+    // Set the password AND clear the activation flag in one call. Without the
+    // metadata update the user stays flagged password_set:false forever, which
+    // bounced them back here from the Marketing Hub on every visit.
+    const { error: updateError } = await supabase.auth.updateUser({
+      password,
+      data: { password_set: true },
+    })
 
     if (updateError) {
       setError(updateError.message)

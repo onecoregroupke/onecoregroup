@@ -40,12 +40,12 @@ export default function MarketingWorkspaceLayout({ children }: { children: React
       }
       setEmail(session.user.email ?? null)
 
-      // Invited users who never completed activation are flagged
-      // password_set:false — force them to finish before reaching the app.
-      if (session.user.user_metadata?.password_set === false) {
-        router.replace('/auth/set-password')
-        return
-      }
+      // NB: activation (choosing a password) is enforced at invite time by the
+      // /auth/callback → /auth/set-password flow, exactly like the Ops portal.
+      // We deliberately do NOT gate on user_metadata.password_set here — that
+      // flag is set at invite and never cleared on the live client session, so
+      // gating on it bounced already-activated users back to "create password"
+      // every time they opened the Marketing Hub.
 
       // Fetch this user's permissions row.
       // If no row exists they are the founding admin → permissions stays null.
