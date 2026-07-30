@@ -2218,6 +2218,328 @@ type DbTable<Row, Insert, Update> = {
 }
 
 // ─── Supabase DB type map (for typed client) ──────────────────────────────────
+// ─── School finance foundation (migration 044) ───────────────────────────────
+export type School = 'rayyan' | 'rhythms' | 'darul'
+
+export interface SchoolChargeCategoryRow {
+  id: string
+  school: School
+  brand_id: string | null
+  section: string
+  programme_id: string | null
+  code: string
+  name: string
+  kind: string
+  billing_cadence: string
+  is_active: boolean
+  sort_order: number
+  notes: string
+  created_at: string
+  updated_at: string
+}
+type SchoolChargeCategoryInsert = Pick<SchoolChargeCategoryRow, 'school' | 'name'> & Partial<SchoolChargeCategoryRow>
+
+export interface SchoolProgrammeRow {
+  id: string
+  school: School
+  brand_id: string | null
+  parent_id: string | null
+  kind: string
+  code: string
+  name: string
+  duration_label: string
+  applies_to: string
+  completion_requirements: string
+  is_active: boolean
+  sort_order: number
+  notes: string
+  created_at: string
+  updated_at: string
+}
+type SchoolProgrammeInsert = Pick<SchoolProgrammeRow, 'school' | 'name'> & Partial<SchoolProgrammeRow>
+
+export interface SchoolFeeStructureRow {
+  id: string
+  school: School
+  brand_id: string | null
+  programme_id: string | null
+  version: number
+  name: string
+  academic_year: string
+  effective_from: string | null
+  effective_to: string | null
+  status: string
+  currency: string
+  notes: string
+  created_at: string
+  updated_at: string
+}
+type SchoolFeeStructureInsert = Pick<SchoolFeeStructureRow, 'school'> & Partial<SchoolFeeStructureRow>
+
+export interface SchoolFeeStructureItemRow {
+  id: string
+  fee_structure_id: string
+  category_id: string | null
+  label: string
+  amount_ksh: number
+  billing_cadence: string
+  is_required: boolean
+  is_completion_req: boolean
+  sort_order: number
+  notes: string
+  created_at: string
+}
+type SchoolFeeStructureItemInsert = Pick<SchoolFeeStructureItemRow, 'fee_structure_id' | 'label'> & Partial<SchoolFeeStructureItemRow>
+
+export interface SchoolEnrollmentRow {
+  id: string
+  school: School
+  brand_id: string | null
+  student_id: string
+  student_admission_no: string
+  programme_id: string | null
+  fee_structure_id: string | null
+  section: string
+  academic_year: string
+  term: string
+  status: string
+  start_date: string | null
+  end_date: string | null
+  notes: string
+  created_at: string
+  updated_at: string
+}
+type SchoolEnrollmentInsert = Pick<SchoolEnrollmentRow, 'school' | 'student_id'> & Partial<SchoolEnrollmentRow>
+
+export type SchoolLedgerEntryType =
+  | 'charge' | 'payment' | 'adjustment' | 'opening_balance' | 'reversal' | 'write_off' | 'refund'
+export type SchoolLedgerState = 'draft' | 'posted' | 'reversed'
+
+export interface SchoolLedgerEntryRow {
+  id: string
+  school: School
+  brand_id: string | null
+  student_id: string
+  student_admission_no: string
+  enrollment_id: string | null
+  category_id: string | null
+  category_label: string
+  section: string
+  entry_type: SchoolLedgerEntryType
+  entry_date: string
+  academic_year: string
+  term: string
+  description: string
+  amount_ksh: number
+  currency: string
+  method: string
+  receipt_no: string
+  mpesa_code: string
+  receiving_account_id: string | null
+  state: SchoolLedgerState
+  reverses_entry_id: string | null
+  source_balance: number | null
+  source_workbook: string
+  source_sheet: string
+  source_row: number | null
+  import_id: string | null
+  notes: string
+  comment: string
+  recorded_by: string
+  posted_by: string
+  posted_at: string | null
+  created_at: string
+  updated_at: string
+}
+type SchoolLedgerEntryInsert = Pick<SchoolLedgerEntryRow, 'school' | 'student_id'> & Partial<SchoolLedgerEntryRow>
+
+export interface SchoolPaymentAllocationRow {
+  id: string
+  payment_entry_id: string
+  charge_entry_id: string
+  amount_ksh: number
+  created_at: string
+}
+type SchoolPaymentAllocationInsert = Pick<SchoolPaymentAllocationRow, 'payment_entry_id' | 'charge_entry_id' | 'amount_ksh'> & Partial<SchoolPaymentAllocationRow>
+
+export interface SchoolStudentRequirementRow {
+  id: string
+  school: School
+  brand_id: string | null
+  student_id: string
+  student_admission_no: string
+  enrollment_id: string | null
+  requirement_code: string
+  requirement_label: string
+  status: string
+  status_date: string | null
+  notes: string
+  source_workbook: string
+  source_sheet: string
+  source_row: number | null
+  import_id: string | null
+  created_at: string
+  updated_at: string
+}
+type SchoolStudentRequirementInsert = Pick<SchoolStudentRequirementRow, 'school' | 'student_id' | 'requirement_label'> & Partial<SchoolStudentRequirementRow>
+
+// ─── Petty cash (migration 045) ──────────────────────────────────────────────
+export interface PettyCashAccountRow {
+  id: string
+  brand_id: string | null
+  operating_unit: string
+  department: string
+  branch: string
+  custodian: string
+  name: string
+  currency: string
+  opening_float_ksh: number
+  current_balance_ksh: number
+  is_active: boolean
+  notes: string
+  created_at: string
+  updated_at: string
+}
+type PettyCashAccountInsert = Pick<PettyCashAccountRow, 'name'> & Partial<PettyCashAccountRow>
+
+export type PettyCashEntryKind = 'opening' | 'income' | 'expense'
+export type PettyCashState = 'draft' | 'submitted' | 'reviewed' | 'approved' | 'rejected' | 'reconciled' | 'closed'
+
+export interface PettyCashTransactionRow {
+  id: string
+  account_id: string | null
+  brand_id: string | null
+  department: string
+  branch: string
+  custodian: string
+  entry_kind: PettyCashEntryKind
+  transaction_date: string
+  opening_float_ksh: number
+  cash_received_ksh: number
+  source_of_funds: string
+  expense_amount_ksh: number
+  expense_category: string
+  payee: string
+  description: string
+  transaction_charge_ksh: number
+  withdrawal_charge_ksh: number
+  secondary_charge_ksh: number
+  secondary_charge_label: string
+  total_cash_out_ksh: number
+  running_balance_ksh: number | null
+  reference: string
+  receipt_url: string
+  state: PettyCashState
+  notes: string
+  source_workbook: string
+  source_sheet: string
+  source_row: number | null
+  import_id: string | null
+  created_by: string
+  modified_by: string
+  approved_by: string
+  approved_at: string | null
+  created_at: string
+  updated_at: string
+}
+type PettyCashTransactionInsert = Pick<PettyCashTransactionRow, 'entry_kind'> & Partial<PettyCashTransactionRow>
+
+export interface PettyCashReconciliationRow {
+  id: string
+  account_id: string | null
+  brand_id: string | null
+  period_start: string | null
+  period_end: string | null
+  opening_float_ksh: number
+  total_received_ksh: number
+  total_expenses_ksh: number
+  total_charges_ksh: number
+  expected_closing_ksh: number
+  physical_count_ksh: number
+  difference_ksh: number
+  status: string
+  reviewed_by: string
+  notes: string
+  created_at: string
+  updated_at: string
+}
+type PettyCashReconciliationInsert = Partial<PettyCashReconciliationRow>
+
+// ─── Import framework + versions (migration 046) ─────────────────────────────
+export type DataImportStatus =
+  | 'uploaded' | 'parsed' | 'validated' | 'committed' | 'partially_committed' | 'failed' | 'rolled_back'
+export type DataImportRowState =
+  | 'pending' | 'valid' | 'warning' | 'error' | 'skipped' | 'committed' | 'rolled_back'
+export type DataImportDupStatus =
+  | 'exact_duplicate' | 'probable_duplicate' | 'possible_duplicate' | 'new' | 'update_candidate' | 'conflict'
+
+export interface DataImportRow {
+  id: string
+  import_type: string
+  brand_id: string | null
+  school: string
+  source_filename: string
+  file_hash: string
+  storage_bucket: string
+  storage_path: string
+  sheets_available: unknown[]
+  sheets_processed: unknown[]
+  field_mappings: Record<string, unknown>
+  dedupe_strategy: Record<string, unknown>
+  rows_scanned: number
+  records_created: number
+  records_updated: number
+  records_skipped: number
+  duplicates_found: number
+  warnings_count: number
+  failed_count: number
+  status: DataImportStatus
+  rollback_status: 'none' | 'partial' | 'complete' | 'blocked'
+  error_report_path: string
+  uploaded_by: string
+  committed_by: string
+  committed_at: string | null
+  notes: string
+  created_at: string
+  updated_at: string
+}
+type DataImportInsert = Partial<DataImportRow>
+
+export interface DataImportStagingRow {
+  id: string
+  import_id: string
+  sheet_name: string
+  source_row: number | null
+  raw_payload: Record<string, unknown>
+  mapped_payload: Record<string, unknown>
+  record_kind: string
+  dup_status: DataImportDupStatus
+  dup_target_id: string | null
+  row_state: DataImportRowState
+  target_table: string
+  target_id: string | null
+  messages: unknown[]
+  created_at: string
+  updated_at: string
+}
+type DataImportStagingInsert = Pick<DataImportStagingRow, 'import_id'> & Partial<DataImportStagingRow>
+
+export interface RecordVersionRow {
+  id: string
+  record_type: string
+  record_id: string
+  version_no: number
+  action: 'create' | 'update' | 'delete' | 'reverse' | 'restore' | 'post'
+  snapshot: Record<string, unknown>
+  previous_snapshot: Record<string, unknown> | null
+  brand_id: string | null
+  changed_by: string
+  reason: string
+  import_id: string | null
+  created_at: string
+}
+type RecordVersionInsert = Pick<RecordVersionRow, 'record_type' | 'record_id'> & Partial<RecordVersionRow>
+
 export interface Database {
   public: {
     Tables: {
@@ -2346,6 +2668,20 @@ export interface Database {
       darul_fee_payments: DbTable<DarulFeePaymentRow, DarulFeePaymentInsert, Partial<DarulFeePaymentRow>>
       darul_fee_followups: DbTable<DarulFeeFollowupRow, DarulFeeFollowupInsert, Partial<DarulFeeFollowupRow>>
       darul_admin_tasks: DbTable<DarulAdminTaskRow, DarulAdminTaskInsert, Partial<DarulAdminTaskRow>>
+      school_charge_categories: DbTable<SchoolChargeCategoryRow, SchoolChargeCategoryInsert, Partial<SchoolChargeCategoryRow>>
+      school_programmes: DbTable<SchoolProgrammeRow, SchoolProgrammeInsert, Partial<SchoolProgrammeRow>>
+      school_fee_structures: DbTable<SchoolFeeStructureRow, SchoolFeeStructureInsert, Partial<SchoolFeeStructureRow>>
+      school_fee_structure_items: DbTable<SchoolFeeStructureItemRow, SchoolFeeStructureItemInsert, Partial<SchoolFeeStructureItemRow>>
+      school_enrollments: DbTable<SchoolEnrollmentRow, SchoolEnrollmentInsert, Partial<SchoolEnrollmentRow>>
+      school_ledger_entries: DbTable<SchoolLedgerEntryRow, SchoolLedgerEntryInsert, Partial<SchoolLedgerEntryRow>>
+      school_payment_allocations: DbTable<SchoolPaymentAllocationRow, SchoolPaymentAllocationInsert, Partial<SchoolPaymentAllocationRow>>
+      school_student_requirements: DbTable<SchoolStudentRequirementRow, SchoolStudentRequirementInsert, Partial<SchoolStudentRequirementRow>>
+      petty_cash_accounts: DbTable<PettyCashAccountRow, PettyCashAccountInsert, Partial<PettyCashAccountRow>>
+      petty_cash_transactions: DbTable<PettyCashTransactionRow, PettyCashTransactionInsert, Partial<PettyCashTransactionRow>>
+      petty_cash_reconciliations: DbTable<PettyCashReconciliationRow, PettyCashReconciliationInsert, Partial<PettyCashReconciliationRow>>
+      data_imports: DbTable<DataImportRow, DataImportInsert, Partial<DataImportRow>>
+      data_import_rows: DbTable<DataImportStagingRow, DataImportStagingInsert, Partial<DataImportStagingRow>>
+      record_versions: DbTable<RecordVersionRow, RecordVersionInsert, Partial<RecordVersionRow>>
     }
     Views: Record<string, never>
     Functions: Record<string, never>

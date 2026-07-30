@@ -130,6 +130,27 @@ export default async function FinancePage() {
         <Stat label="Open exceptions" value={openExceptions.length} tone={openExceptions.length ? 'text-red-600' : 'text-gray-900'} />
       </div>
 
+      <section className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+        <SectionTitle icon={Building2} title="Brand finance" description="Open a brand to work inside its own scoped finance workspace — transactions, petty cash, imports, and export." />
+        {brandSummaries.length === 0 ? (
+          <Empty text="No brands in your finance scope yet." />
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {brandSummaries.map(({ brand, net }) => (
+              <Link key={brand.id} href={`/finance/${brand.slug}`} className="group rounded-xl border border-gray-100 p-4 transition hover:border-ocg-gold/60 hover:shadow-sm">
+                <div className="flex items-center gap-2.5">
+                  <span className="inline-block h-6 w-6 rounded-md" style={{ backgroundColor: brand.color_hex }} />
+                  <p className="font-semibold text-gray-900 group-hover:text-ocg-navy">{brand.short_name || brand.name}</p>
+                  <ArrowUpRight size={15} className="ml-auto text-gray-300 group-hover:text-ocg-gold" />
+                </div>
+                <p className={`mt-3 text-lg font-light ${net >= 0 ? 'text-gray-900' : 'text-red-600'}`}>KSh {net.toLocaleString()}</p>
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Net movement</p>
+              </Link>
+            ))}
+          </div>
+        )}
+      </section>
+
       <MoneyForms brands={brandOptions} accounts={accountOptions} voteheads={voteheadOptions} canEdit={canEdit} />
 
       <FinanceStatementImportPanel brands={brandOptions} accounts={accountOptions} canEdit={canEdit} />
