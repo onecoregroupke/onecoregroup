@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { getRhythmsAdminData } from '@/lib/management'
 import { RhythmsQuickAdd } from '@/components/rhythms/RhythmsQuickAdd'
 
@@ -23,7 +24,7 @@ export default async function RhythmsStudentsPage() {
             </tr></thead>
             <tbody className="divide-y divide-gray-50">{students.map((s) => (
               <tr key={s.id} className="hover:bg-gray-50">
-                <td className="px-4 py-3 font-medium text-gray-800">{s.full_name}<p className="text-xs font-normal text-gray-400">{s.phone || s.email || ''}</p></td>
+                <td className="px-4 py-3 font-medium text-gray-800"><Link href={`/rhythms/students/${s.id}`} className="hover:text-ocg-gold hover:underline">{s.full_name}</Link><p className="text-xs font-normal text-gray-400">{s.phone || s.email || ''}</p></td>
                 <td className="px-4 py-3 text-gray-500">{s.guardian_id ? guardianById.get(s.guardian_id) ?? s.guardian_name ?? '—' : s.guardian_name || '—'}</td>
                 <td className="px-4 py-3 text-gray-500">{s.programme || '—'}{s.cohort ? ` · ${s.cohort}` : ''}</td>
                 <td className="px-4 py-3 text-gray-500">{s.class_id ? classById.get(s.class_id) ?? '—' : '—'}</td>

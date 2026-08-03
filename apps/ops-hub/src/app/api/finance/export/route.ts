@@ -41,7 +41,9 @@ export async function GET(req: NextRequest) {
     // Resolve student identity (dynamic table).
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: student } = await (db() as any).from(SCHOOL_STUDENT_TABLE[school]).select('full_name, admission_number').eq('id', studentId).maybeSingle()
-    const entries = await studentLedger(school, studentId)
+    // Posted only: a reversed original (state 'reversed') must not appear in the
+    // statement or its totals; the reversal marker (state 'posted', 0) is kept.
+    const entries = (await studentLedger(school, studentId)).filter((e) => e.state === 'posted')
     let running = 0
     const rows = entries.map((e) => {
       const s = signedAmount(e)

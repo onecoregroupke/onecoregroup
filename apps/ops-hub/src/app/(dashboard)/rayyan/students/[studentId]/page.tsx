@@ -3,7 +3,9 @@ import { notFound } from 'next/navigation'
 import { ArrowLeft, FileText, GraduationCap, History, Medal } from 'lucide-react'
 import { db } from '@/lib/serverClient'
 import { safeRows } from '@/lib/management'
+import { requireActor } from '@/lib/server-auth'
 import { StudentAcademicActions } from '@/components/rayyan/StudentAcademicActions'
+import { StudentAccount } from '@/components/finance/StudentAccount'
 import type {
   RayyanActivityRow, RayyanAssessmentRow, RayyanFeeInvoiceRow, RayyanGuardianRow,
   RayyanStudentActivityRow, RayyanStudentHistoryRow, RayyanStudentRow,
@@ -19,6 +21,9 @@ export default async function RayyanStudentProfilePage({
   params: Promise<{ studentId: string }>
 }) {
   const { studentId } = await params
+  const actor = await requireActor()
+  const canFinanceView = actor.can('finance', 'view')
+  const canFinanceEdit = actor.can('finance', 'edit')
   const supabase = db()
   const { data: studentRow } = await supabase.from('rayyan_students').select('*').eq('id', studentId).maybeSingle()
   if (!studentRow) notFound()
@@ -74,8 +79,14 @@ export default async function RayyanStudentProfilePage({
         <Stat label="Guardian" value={guardian?.full_name ?? '—'} sub={guardian ? [guardian.phone, guardian.email].filter(Boolean).join(' · ') : ''} />
         <Stat label="Co-curricular" value={activeEnrolments.length ? activeEnrolments.map((e) => activityName.get(e.activity_id) ?? '').filter(Boolean).join(', ') : 'None yet'} />
         <Stat label="Assessments" value={String(assessments.length)} sub={sortedTerms[0]?.[0] ?? ''} />
-        <Stat label="Fee balance" value={`KSh ${feeBalance.toLocaleString()}`} sub={`${invoices.length} invoice${invoices.length === 1 ? '' : 's'}`} />
+        <Stat label="Fee balance (legacy)" value={`KSh ${feeBalance.toLocaleString()}`} sub={`${invoices.length} invoice${invoices.length === 1 ? '' : 's'}`} />
       </div>
+
+      {canFinanceView ? (
+        <StudentAccount school="rayyan" studentId={student.id} admissionNo={student.admission_number ?? ''} canEdit={canFinanceEdit} />
+      ) : (
+        <p className="rounded-lg bg-gray-50 p-3 text-sm text-gray-500">The student fee account is visible to finance users. Ask an administrator for finance access to this brand.</p>
+      )}
 
       <StudentAcademicActions
         studentId={student.id}

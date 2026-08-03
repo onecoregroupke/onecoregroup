@@ -23,6 +23,13 @@ export async function GET(req: NextRequest) {
   const school = url.searchParams.get('school') as School | null
   const studentId = url.searchParams.get('studentId')
   if (!school || !SCHOOLS.has(school)) return NextResponse.json({ ok: false, error: 'valid school required' }, { status: 400 })
+  // Brand isolation on READS too (the POST already enforces it): a finance user
+  // scoped to other brands cannot read this school's student accounts.
+  const allowed = allowedFor(gate)
+  if (allowed !== null) {
+    const brandId = await resolveSchoolBrandId(school)
+    if (!brandId || !allowed.includes(brandId)) return NextResponse.json({ ok: false, error: 'forbidden' }, { status: 403 })
+  }
   if (studentId) {
     const entries = await studentLedger(school, studentId, { includeDrafts: true })
     return NextResponse.json({ ok: true, entries, summary: summariseStudentAccount(entries) })
