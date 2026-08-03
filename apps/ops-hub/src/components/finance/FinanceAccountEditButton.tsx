@@ -104,11 +104,27 @@ export function FinanceAccountEditButton({
               </Field>
               <Field label="Type">
                 <select className="input" value={values.account_type} onChange={(e) => set('account_type', e.target.value)}>
-                  <option value="mpesa_till">M-Pesa Till</option>
-                  <option value="paybill">Paybill</option>
-                  <option value="mpesa_number">M-Pesa number</option>
-                  <option value="bank_account">Bank account</option>
-                  <option value="cash">Cash</option>
+                  <optgroup label="Cash & channels">
+                    <option value="cash">Cash</option>
+                    <option value="petty_cash">Petty cash</option>
+                    <option value="mpesa_till">M-Pesa Till</option>
+                    <option value="paybill">Paybill</option>
+                    <option value="mpesa_number">M-Pesa number</option>
+                    <option value="bank_account">Bank account</option>
+                    <option value="mobile_money">Mobile money (other)</option>
+                  </optgroup>
+                  <optgroup label="Ledger classes">
+                    <option value="income">Income</option>
+                    <option value="expense">Expense</option>
+                    <option value="asset">Asset</option>
+                    <option value="liability">Liability</option>
+                    <option value="equity">Equity</option>
+                    <option value="receivable">Receivable</option>
+                    <option value="student_fee_receivable">Student fee receivable</option>
+                    <option value="payable">Payable</option>
+                    <option value="inventory">Inventory</option>
+                    <option value="cogs">Cost of goods sold</option>
+                  </optgroup>
                   <option value="other">Other</option>
                 </select>
               </Field>
