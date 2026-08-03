@@ -61,7 +61,7 @@ export default async function RayyanStudentProfilePage({
             <GraduationCap size={22} /> {student.full_name}
           </h1>
           <p className="mt-1 text-sm text-gray-500">
-            {[student.class_level, student.enrollment_status, student.admission_number && `Adm ${student.admission_number}`, student.schoolpay_code && `SchoolPay ${student.schoolpay_code}`].filter(Boolean).join(' · ')}
+            {[student.class_level, student.enrollment_status, student.admission_number && `Adm ${student.admission_number}`, student.schoolpay_code && `Fee code ${student.schoolpay_code}`].filter(Boolean).join(' · ')}
           </p>
         </div>
         <Link href={`/rayyan/students/${student.id}/transcript`}

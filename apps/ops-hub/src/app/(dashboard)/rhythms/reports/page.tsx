@@ -17,7 +17,7 @@ export default async function RhythmsReportsPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold text-gray-900">Rhythms reports</h1>
-        <p className="text-sm text-gray-500">A snapshot of enrolment, programmes, admissions, and SchoolPay reconciliation.</p>
+        <p className="text-sm text-gray-500">A snapshot of enrolment, programmes, admissions, and fees.</p>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -31,7 +31,7 @@ export default async function RhythmsReportsPage() {
         <Panel title="Enrolment by status"><Breakdown rows={byStatus} /></Panel>
         <Panel title="Students by programme"><Breakdown rows={byProgramme} /></Panel>
         <Panel title="Admissions pipeline"><Breakdown rows={byPipeline} /></Panel>
-        <Panel title="SchoolPay & admin">
+        <Panel title="Fees & admin">
           <Row label="Expected (KSh)" value={expected.toLocaleString()} />
           <Row label="Outstanding (KSh)" value={outstanding.toLocaleString()} />
           <Row label="Open fee follow-ups" value={feeFollowups.filter((f) => f.follow_up_status !== 'resolved').length} />

@@ -96,7 +96,7 @@ export function RayyanActionPanel({
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-xs font-semibold uppercase tracking-wider text-ocg-gold">Rayyan admin actions</h2>
-          <p className="mt-1 text-sm text-gray-500">Track admissions, parents, fee follow-ups, classes, and admin ownership around SchoolPay.</p>
+          <p className="mt-1 text-sm text-gray-500">Track admissions, parents, fee follow-ups, classes, and admin ownership.</p>
         </div>
         <select className="input sm:w-52" value={mode} onChange={(event) => setMode(event.target.value as Mode)}>
           {(Object.keys(MODE_LABEL) as Mode[]).map((key) => <option key={key} value={key}>{MODE_LABEL[key]}</option>)}
@@ -119,7 +119,7 @@ export function RayyanActionPanel({
           <Field label="Class level"><input className="input" value={values.class_level ?? ''} onChange={(event) => set('class_level', event.target.value)} /></Field>
           <Field label="Status"><input className="input" value={values.enrollment_status ?? ''} onChange={(event) => set('enrollment_status', event.target.value)} /></Field>
           <Field label="Admission no."><input className="input" value={values.admission_number ?? ''} onChange={(event) => set('admission_number', event.target.value)} /></Field>
-          <Field label="SchoolPay code"><input className="input" value={values.schoolpay_code ?? ''} onChange={(event) => set('schoolpay_code', event.target.value)} /></Field>
+          <Field label="Fee code (legacy)"><input className="input" value={values.schoolpay_code ?? ''} onChange={(event) => set('schoolpay_code', event.target.value)} /></Field>
           <Field label="Start date"><input type="date" className="input" value={values.start_date ?? ''} onChange={(event) => set('start_date', event.target.value)} /></Field>
         </div>
       )}
@@ -132,7 +132,7 @@ export function RayyanActionPanel({
           <Field label="Next follow-up"><input type="date" className="input" value={values.next_follow_up_date ?? ''} onChange={(event) => set('next_follow_up_date', event.target.value)} /></Field>
           <Field label="Source"><input className="input" value={values.source ?? ''} onChange={(event) => set('source', event.target.value)} /></Field>
           <Field label="Documents"><input className="input" value={values.documents_status ?? ''} onChange={(event) => set('documents_status', event.target.value)} /></Field>
-          <Field label="SchoolPay status"><input className="input" value={values.schoolpay_status ?? ''} onChange={(event) => set('schoolpay_status', event.target.value)} /></Field>
+          <Field label="Fee status (legacy)"><input className="input" value={values.schoolpay_status ?? ''} onChange={(event) => set('schoolpay_status', event.target.value)} /></Field>
         </div>
       )}
 
@@ -156,7 +156,7 @@ export function RayyanActionPanel({
       {mode === 'fee_invoice' && (
         <div className="grid gap-3 lg:grid-cols-4">
           <Field label="Student"><Select options={students} value={values.student_id ?? ''} onChange={(value) => set('student_id', value)} empty="No student" /></Field>
-          <Field label="SchoolPay code"><input className="input" value={values.schoolpay_code ?? ''} onChange={(event) => set('schoolpay_code', event.target.value)} /></Field>
+          <Field label="Fee code (legacy)"><input className="input" value={values.schoolpay_code ?? ''} onChange={(event) => set('schoolpay_code', event.target.value)} /></Field>
           <Field label="Fee item"><input className="input" value={values.fee_item ?? ''} onChange={(event) => set('fee_item', event.target.value)} /></Field>
           <Field label="Term"><input className="input" value={values.term ?? ''} onChange={(event) => set('term', event.target.value)} /></Field>
           <Field label="Expected KSh"><input type="number" min="0" className="input" value={values.amount_expected_ksh ?? ''} onChange={(event) => set('amount_expected_ksh', event.target.value)} /></Field>
@@ -181,7 +181,7 @@ export function RayyanActionPanel({
       {mode === 'fee_followup' && (
         <div className="grid gap-3 lg:grid-cols-4">
           <Field label="Student"><Select options={students} value={values.student_id ?? ''} onChange={(value) => set('student_id', value)} empty="No student" /></Field>
-          <Field label="SchoolPay code"><input className="input" value={values.schoolpay_code ?? ''} onChange={(event) => set('schoolpay_code', event.target.value)} /></Field>
+          <Field label="Fee code (legacy)"><input className="input" value={values.schoolpay_code ?? ''} onChange={(event) => set('schoolpay_code', event.target.value)} /></Field>
           <Field label="Fee item"><input className="input" value={values.expected_fee_item ?? ''} onChange={(event) => set('expected_fee_item', event.target.value)} /></Field>
           <Field label="Next follow-up"><input type="date" className="input" value={values.next_follow_up_date ?? ''} onChange={(event) => set('next_follow_up_date', event.target.value)} /></Field>
           <Field label="Last known status"><input className="input" value={values.last_known_fee_status ?? ''} onChange={(event) => set('last_known_fee_status', event.target.value)} /></Field>

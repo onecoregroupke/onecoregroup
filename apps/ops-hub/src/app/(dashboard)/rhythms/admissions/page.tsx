@@ -11,7 +11,7 @@ export default async function RhythmsAdmissionsPage() {
     <div className="space-y-5">
       <div>
         <h1 className="text-2xl font-semibold text-gray-900">Rhythms admissions</h1>
-        <p className="text-sm text-gray-500">Enquiry-to-enrolment pipeline with follow-up dates and SchoolPay status.</p>
+        <p className="text-sm text-gray-500">Enquiry-to-enrolment pipeline with follow-up dates and fee status.</p>
       </div>
       <RhythmsQuickAdd />
       <section className="overflow-x-auto rounded-xl border border-gray-100 bg-white shadow-sm">
@@ -19,7 +19,7 @@ export default async function RhythmsAdmissionsPage() {
           <table className="w-full text-sm">
             <thead><tr className="border-b border-gray-100 text-left text-[11px] uppercase tracking-wider text-gray-400">
               <th className="px-4 py-3">Student / enquiry</th><th className="px-4 py-3">Guardian</th><th className="px-4 py-3">Pipeline</th>
-              <th className="px-4 py-3">Documents</th><th className="px-4 py-3">SchoolPay</th><th className="px-4 py-3">Next follow-up</th>
+              <th className="px-4 py-3">Documents</th><th className="px-4 py-3">Fee status</th><th className="px-4 py-3">Next follow-up</th>
             </tr></thead>
             <tbody className="divide-y divide-gray-50">{admissions.map((a) => (
               <tr key={a.id} className="hover:bg-gray-50">

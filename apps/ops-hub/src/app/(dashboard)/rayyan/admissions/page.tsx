@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic'
 export default async function RayyanAdmissionsPage() {
   const { admissions, students } = await getRayyanAdminData()
   const studentById = new Map(students.map((s) => [s.id, s.full_name]))
-  return <Simple title="Admissions pipeline" description="Enquiries, tours, documents, SchoolPay fee/payment-pending state, and enrollment follow-up." rows={admissions.map((a) => ({ id: a.id, main: a.student_id ? studentById.get(a.student_id) ?? 'Student' : 'Unlinked enquiry', sub: `${a.pipeline_status} · documents ${a.documents_status}`, meta: a.next_follow_up_date || a.schoolpay_status || '—' }))} empty="No admissions records yet." />
+  return <Simple title="Admissions pipeline" description="Enquiries, tours, documents, fee/payment-pending state, and enrollment follow-up." rows={admissions.map((a) => ({ id: a.id, main: a.student_id ? studentById.get(a.student_id) ?? 'Student' : 'Unlinked enquiry', sub: `${a.pipeline_status} · documents ${a.documents_status}`, meta: a.next_follow_up_date || a.schoolpay_status || '—' }))} empty="No admissions records yet." />
 }
 
 function Simple({ title, description, rows, empty }: { title: string; description: string; rows: { id: string; main: string; sub: string; meta: string }[]; empty: string }) {

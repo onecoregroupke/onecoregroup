@@ -11,13 +11,14 @@ const LINKS = [
   ['Classes', '/rhythms/classes'],
   ['Admin tasks', '/rhythms/admin-tasks'],
   ['Fee follow-ups', '/rhythms/fee-follow-ups'],
-  ['SchoolPay reconciliation', '/rhythms/schoolpay'],
+  ['Fees (finance)', '/finance/rhythms-college'],
   ['Reports', '/rhythms/reports'],
 ] as const
 
 export default async function RhythmsAdminPage() {
-  const { students, batches, snapshots, invoices, guardians, admissions, feeFollowups, adminTasks, classes, team } = await getRhythmsAdminData()
+  const { students, snapshots, invoices, guardians, admissions, feeFollowups, adminTasks, classes, team } = await getRhythmsAdminData()
   const enrolled = students.filter((s) => s.enrollment_status === 'enrolled' || s.enrollment_status === 'active')
+  // Legacy fee balances (pre-canonical-ledger). Validated Excel import supersedes these.
   const totalExpected = snapshots.reduce((sum, s) => sum + Number(s.amount_expected_ksh ?? 0), 0)
   const balance = snapshots.reduce((sum, s) => sum + Number(s.balance_ksh ?? 0), 0)
   const pendingAdmissions = admissions.filter((a) => !['Enrolled', 'Lost / inactive'].includes(a.pipeline_status))
@@ -29,7 +30,8 @@ export default async function RhythmsAdminPage() {
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-ocg-gold">Rhythms College</p>
         <h1 className="mt-1 text-2xl font-semibold text-gray-900">Rhythms Admin Layer</h1>
         <p className="mt-1 max-w-3xl text-sm text-gray-500">
-          Student records, manual fees, and SchoolPay reconciliation for Rhythms College.
+          Student records and fees for Rhythms College. Fees are recorded from validated Excel imports
+          (the canonical source) and appear in the brand finance workspace.
         </p>
       </div>
 
@@ -64,12 +66,14 @@ export default async function RhythmsAdminPage() {
             <Mini label="Parents" value={guardians.length} />
             <Mini label="Admissions in pipeline" value={pendingAdmissions.length} />
             <Mini label="Open admin tasks" value={adminTasks.filter((t) => t.status !== 'done').length} />
-            <Mini label="SchoolPay snapshots" value={snapshots.length} />
-            <Mini label="Expected" value={totalExpected} money />
-            <Mini label="Outstanding" value={balance} money tone="text-amber-600" />
+            <Mini label="Legacy fee snapshots" value={snapshots.length} />
+            <Mini label="Expected (legacy)" value={totalExpected} money />
+            <Mini label="Outstanding (legacy)" value={balance} money tone="text-amber-600" />
           </div>
           <p className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-700">
-            Use this area to track admissions, parent follow-ups, classes, manual fees, and SchoolPay reconciliation.
+            Fee balances shown here are from legacy records; validated Excel import is the canonical
+            source going forward and appears in the brand finance workspace. Use this area to track
+            admissions, parent follow-ups, and classes.
           </p>
         </section>
       </div>

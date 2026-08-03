@@ -16,12 +16,8 @@ type MoneyRow = {
   manualExpected: number
   manualPaid: number
   manualBalance: number
-  schoolpayExpected?: number
-  schoolpayPaid?: number
-  schoolpayBalance?: number
   invoiceCount: number
   paymentCount: number
-  unmatchedCount?: number
 }
 
 export default async function FinancePage() {
@@ -57,16 +53,15 @@ export default async function FinancePage() {
   const voteheadById = new Map(voteheads.map((v) => [v.id, v]))
 
   const rows: MoneyRow[] = [
-    ...(slugAllowed('darul-swafa') ? [schoolRow('Darul Swafa', '/darul/fees', data.darul.invoices, data.darul.payments)] : []),
-    ...(slugAllowed('ar-rayyan-playhouse') ? [schoolRow('Ar-Rayyan Playhouse', '/rayyan/schoolpay', data.rayyan.invoices, data.rayyan.payments, data.rayyan.snapshots)] : []),
-    ...(slugAllowed('rhythms-college') ? [schoolRow('Rhythms College', '/rhythms/schoolpay', data.rhythms.invoices, data.rhythms.payments, data.rhythms.snapshots)] : []),
+    ...(slugAllowed('darul-swafa') ? [schoolRow('Darul Swafa', '/finance/darul-swafa', data.darul.invoices, data.darul.payments)] : []),
+    ...(slugAllowed('ar-rayyan-playhouse') ? [schoolRow('Ar-Rayyan Playhouse', '/finance/ar-rayyan-playhouse', data.rayyan.invoices, data.rayyan.payments)] : []),
+    ...(slugAllowed('rhythms-college') ? [schoolRow('Rhythms College', '/finance/rhythms-college', data.rhythms.invoices, data.rhythms.payments)] : []),
   ]
   const totals = rows.reduce((acc, row) => ({
     expected: acc.expected + row.manualExpected,
     paid: acc.paid + row.manualPaid,
     balance: acc.balance + row.manualBalance,
-    schoolpayBalance: acc.schoolpayBalance + Number(row.schoolpayBalance ?? 0),
-  }), { expected: 0, paid: 0, balance: 0, schoolpayBalance: 0 })
+  }), { expected: 0, paid: 0, balance: 0 })
   const showNpt = slugAllowed('nairobi-piano-technicians')
   const nptInvoiceTotal = showNpt ? data.npt.invoices.reduce((sum, invoice) => sum + Number(invoice.invoice_amount_ksh ?? 0), 0) : 0
   const nptOpen = showNpt ? data.npt.invoices.filter((invoice) => invoice.record_type === 'invoice' && invoice.payment_status !== 'paid') : []
@@ -115,8 +110,6 @@ export default async function FinancePage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {slugAllowed('ar-rayyan-playhouse') && <QuickLink href="/rayyan/schoolpay" label="Rayyan fees" />}
-          {slugAllowed('rhythms-college') && <QuickLink href="/rhythms/schoolpay" label="Rhythms fees" />}
           <QuickLink href="/tasks?category=Finance" label="Finance tasks" />
         </div>
       </div>
@@ -125,7 +118,7 @@ export default async function FinancePage() {
         <Stat label="Recorded income" value={inflow} money tone="text-emerald-600" />
         <Stat label="Recorded expense" value={outflow} money tone="text-red-600" />
         <Stat label="Net movement" value={inflow - outflow} money tone={inflow - outflow >= 0 ? 'text-gray-900' : 'text-red-600'} />
-        <Stat label="School outstanding" value={totals.schoolpayBalance || totals.balance} money tone="text-amber-600" />
+        <Stat label="School outstanding" value={totals.balance} money tone="text-amber-600" />
         <Stat label="Pending transfers" value={pendingTransfers.length} tone={pendingTransfers.length ? 'text-amber-600' : 'text-gray-900'} />
         <Stat label="Open exceptions" value={openExceptions.length} tone={openExceptions.length ? 'text-red-600' : 'text-gray-900'} />
       </div>
@@ -326,15 +319,15 @@ export default async function FinancePage() {
         <div className="grid gap-6 xl:grid-cols-[1.3fr_0.7fr]">
           {rows.length > 0 && (
             <section className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
-              <SectionTitle icon={ReceiptText} title="School fee ledgers" description="Manual records against imported SchoolPay snapshots." />
+              <SectionTitle icon={ReceiptText} title="School fee balances" description="Outstanding student fees by school (Excel-import is the canonical source). Open a school to work inside its brand finance workspace." />
               <div className="overflow-hidden rounded-lg border border-gray-100">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-gray-100 text-left text-[11px] uppercase tracking-wider text-gray-400">
-                      <th className="px-3 py-2">Brand</th>
-                      <th className="px-3 py-2 text-right">Manual due</th>
-                      <th className="px-3 py-2 text-right">SchoolPay due</th>
-                      <th className="px-3 py-2 text-right">Unmatched</th>
+                      <th className="px-3 py-2">School</th>
+                      <th className="px-3 py-2 text-right">Expected</th>
+                      <th className="px-3 py-2 text-right">Paid</th>
+                      <th className="px-3 py-2 text-right">Outstanding</th>
                       <th className="px-3 py-2"></th>
                     </tr>
                   </thead>
@@ -345,9 +338,9 @@ export default async function FinancePage() {
                           <p className="font-medium text-gray-800">{row.label}</p>
                           <p className="text-xs text-gray-400">{row.invoiceCount} invoices · {row.paymentCount} payments</p>
                         </td>
-                        <td className="px-3 py-3 text-right text-gray-700">KSh {row.manualBalance.toLocaleString()}</td>
-                        <td className="px-3 py-3 text-right text-gray-700">{row.schoolpayBalance == null ? '—' : `KSh ${row.schoolpayBalance.toLocaleString()}`}</td>
-                        <td className="px-3 py-3 text-right text-gray-700">{row.unmatchedCount ?? '—'}</td>
+                        <td className="px-3 py-3 text-right text-gray-600">KSh {row.manualExpected.toLocaleString()}</td>
+                        <td className="px-3 py-3 text-right text-emerald-700">KSh {row.manualPaid.toLocaleString()}</td>
+                        <td className="px-3 py-3 text-right text-amber-700">KSh {row.manualBalance.toLocaleString()}</td>
                         <td className="px-3 py-3 text-right"><Link href={row.href} className="inline-flex items-center gap-1 text-xs font-semibold text-ocg-gold hover:text-ocg-navy">Open <ArrowUpRight size={13} /></Link></td>
                       </tr>
                     ))}
@@ -377,7 +370,7 @@ export default async function FinancePage() {
       )}
 
       <section className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
-        <SectionTitle icon={ListTodo} title="Finance tasks" description="Ops tasks tagged by finance, invoice, payment, fee, receipt, SchoolPay, or reconciliation language." />
+        <SectionTitle icon={ListTodo} title="Finance tasks" description="Ops tasks tagged by finance, invoice, payment, fee, receipt, or reconciliation language." />
         {financeTasks.length === 0 ? (
           <p className="text-sm text-gray-500">No finance-related tasks found yet.</p>
         ) : (
@@ -407,23 +400,17 @@ export default async function FinancePage() {
 function schoolRow(
   label: string,
   href: string,
-  invoices: { id: string; amount_expected_ksh: number; amount_paid_ksh: number; balance_ksh: number | null; schoolpay_snapshot_id?: string | null }[],
+  invoices: { id: string; amount_expected_ksh: number; amount_paid_ksh: number; balance_ksh: number | null }[],
   payments: { id: string }[],
-  snapshots: { id: string; amount_expected_ksh: number | null; amount_paid_ksh: number | null; balance_ksh: number | null }[] = [],
 ): MoneyRow {
-  const linkedSnapshotIds = new Set(invoices.map((invoice) => invoice.schoolpay_snapshot_id).filter(Boolean))
   return {
     label,
     href,
     manualExpected: invoices.reduce((sum, invoice) => sum + Number(invoice.amount_expected_ksh ?? 0), 0),
     manualPaid: invoices.reduce((sum, invoice) => sum + Number(invoice.amount_paid_ksh ?? 0), 0),
     manualBalance: invoices.reduce((sum, invoice) => sum + Number(invoice.balance_ksh ?? 0), 0),
-    schoolpayExpected: snapshots.reduce((sum, snapshot) => sum + Number(snapshot.amount_expected_ksh ?? 0), 0),
-    schoolpayPaid: snapshots.reduce((sum, snapshot) => sum + Number(snapshot.amount_paid_ksh ?? 0), 0),
-    schoolpayBalance: snapshots.length ? snapshots.reduce((sum, snapshot) => sum + Number(snapshot.balance_ksh ?? 0), 0) : undefined,
     invoiceCount: invoices.length,
     paymentCount: payments.length,
-    unmatchedCount: snapshots.length ? snapshots.filter((snapshot) => !linkedSnapshotIds.has(snapshot.id)).length : undefined,
   }
 }
 

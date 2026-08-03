@@ -122,7 +122,7 @@ export function RhythmsActionPanel({
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-xs font-semibold uppercase tracking-wider text-ocg-gold">Rhythms admin actions</h2>
-          <p className="mt-1 text-sm text-gray-500">Students, parents, admissions, classes, and fee follow-ups around SchoolPay.</p>
+          <p className="mt-1 text-sm text-gray-500">Students, parents, admissions, classes, and fee follow-ups.</p>
         </div>
         <select className="input sm:w-52" value={mode} onChange={(event) => setMode(event.target.value as Mode)}>
           {(Object.keys(MODE_LABEL) as Mode[]).map((key) => <option key={key} value={key}>{MODE_LABEL[key]}</option>)}
@@ -138,7 +138,7 @@ export function RhythmsActionPanel({
           <Field label="Cohort"><input className="input" value={values.cohort ?? ''} onChange={(e) => set('cohort', e.target.value)} /></Field>
           <Field label="Status"><input className="input" value={values.enrollment_status ?? ''} onChange={(e) => set('enrollment_status', e.target.value)} /></Field>
           <Field label="Admission no."><input className="input" value={values.admission_number ?? ''} onChange={(e) => set('admission_number', e.target.value)} /></Field>
-          <Field label="SchoolPay code"><input className="input" value={values.schoolpay_code ?? ''} onChange={(e) => set('schoolpay_code', e.target.value)} /></Field>
+          <Field label="Fee code (legacy)"><input className="input" value={values.schoolpay_code ?? ''} onChange={(e) => set('schoolpay_code', e.target.value)} /></Field>
           <Field label="Phone"><input className="input" value={values.phone ?? ''} onChange={(e) => set('phone', e.target.value)} /></Field>
           <Field label="Email"><input className="input" value={values.email ?? ''} onChange={(e) => set('email', e.target.value)} /></Field>
         </div>
@@ -161,7 +161,7 @@ export function RhythmsActionPanel({
           <Field label="Next follow-up"><input type="date" className="input" value={values.next_follow_up_date ?? ''} onChange={(e) => set('next_follow_up_date', e.target.value)} /></Field>
           <Field label="Source"><input className="input" value={values.source ?? ''} onChange={(e) => set('source', e.target.value)} /></Field>
           <Field label="Documents"><input className="input" value={values.documents_status ?? ''} onChange={(e) => set('documents_status', e.target.value)} /></Field>
-          <Field label="SchoolPay status"><input className="input" value={values.schoolpay_status ?? ''} onChange={(e) => set('schoolpay_status', e.target.value)} /></Field>
+          <Field label="Fee status (legacy)"><input className="input" value={values.schoolpay_status ?? ''} onChange={(e) => set('schoolpay_status', e.target.value)} /></Field>
         </div>
       )}
 
@@ -176,7 +176,7 @@ export function RhythmsActionPanel({
       {mode === 'fee_followup' && (
         <div className="grid gap-3 lg:grid-cols-4">
           <Field label="Student"><Select options={students} value={values.student_id ?? ''} onChange={(v) => set('student_id', v)} empty="No student" /></Field>
-          <Field label="SchoolPay code"><input className="input" value={values.schoolpay_code ?? ''} onChange={(e) => set('schoolpay_code', e.target.value)} /></Field>
+          <Field label="Fee code (legacy)"><input className="input" value={values.schoolpay_code ?? ''} onChange={(e) => set('schoolpay_code', e.target.value)} /></Field>
           <Field label="Fee item"><input className="input" value={values.expected_fee_item ?? ''} onChange={(e) => set('expected_fee_item', e.target.value)} /></Field>
           <Field label="Next follow-up"><input type="date" className="input" value={values.next_follow_up_date ?? ''} onChange={(e) => set('next_follow_up_date', e.target.value)} /></Field>
           <Field label="Last known status"><input className="input" value={values.last_known_fee_status ?? ''} onChange={(e) => set('last_known_fee_status', e.target.value)} /></Field>
@@ -186,7 +186,7 @@ export function RhythmsActionPanel({
       {mode === 'fee_invoice' && (
         <div className="grid gap-3 lg:grid-cols-4">
           <Field label="Student"><Select options={students} value={values.student_id ?? ''} onChange={(v) => set('student_id', v)} empty="No student" /></Field>
-          <Field label="SchoolPay code"><input className="input" value={values.schoolpay_code ?? ''} onChange={(e) => set('schoolpay_code', e.target.value)} /></Field>
+          <Field label="Fee code (legacy)"><input className="input" value={values.schoolpay_code ?? ''} onChange={(e) => set('schoolpay_code', e.target.value)} /></Field>
           <Field label="Fee item"><input className="input" value={values.fee_item ?? ''} onChange={(e) => set('fee_item', e.target.value)} /></Field>
           <Field label="Term"><input className="input" value={values.term ?? ''} onChange={(e) => set('term', e.target.value)} /></Field>
           <Field label="Expected KSh"><input type="number" min="0" className="input" value={values.amount_expected_ksh ?? ''} onChange={(e) => set('amount_expected_ksh', e.target.value)} /></Field>

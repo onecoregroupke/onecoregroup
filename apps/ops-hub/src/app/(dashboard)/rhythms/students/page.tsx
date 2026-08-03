@@ -11,7 +11,7 @@ export default async function RhythmsStudentsPage() {
     <div className="space-y-5">
       <div>
         <h1 className="text-2xl font-semibold text-gray-900">Rhythms students</h1>
-        <p className="text-sm text-gray-500">College student records, programme, cohort, class, enrollment state, and SchoolPay references.</p>
+        <p className="text-sm text-gray-500">College student records, programme, cohort, class, enrollment state, and admission references.</p>
       </div>
       <RhythmsQuickAdd />
       <section className="overflow-x-auto rounded-xl border border-gray-100 bg-white shadow-sm">
@@ -19,7 +19,7 @@ export default async function RhythmsStudentsPage() {
           <table className="w-full text-sm">
             <thead><tr className="border-b border-gray-100 text-left text-[11px] uppercase tracking-wider text-gray-400">
               <th className="px-4 py-3">Student</th><th className="px-4 py-3">Guardian</th><th className="px-4 py-3">Programme</th>
-              <th className="px-4 py-3">Class</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">SchoolPay</th>
+              <th className="px-4 py-3">Class</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Fee code</th>
             </tr></thead>
             <tbody className="divide-y divide-gray-50">{students.map((s) => (
               <tr key={s.id} className="hover:bg-gray-50">

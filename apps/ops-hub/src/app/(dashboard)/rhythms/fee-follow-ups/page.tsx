@@ -10,14 +10,14 @@ export default async function RhythmsFeeFollowupsPage() {
     <div className="space-y-5">
       <div>
         <h1 className="text-2xl font-semibold text-gray-900">Rhythms fee follow-ups</h1>
-        <p className="text-sm text-gray-500">Internal follow-up around SchoolPay fee balances. Payments stay in SchoolPay.</p>
+        <p className="text-sm text-gray-500">Internal follow-up on outstanding fee balances.</p>
       </div>
       <RhythmsQuickAdd />
       <section className="overflow-x-auto rounded-xl border border-gray-100 bg-white shadow-sm">
         {feeFollowups.length === 0 ? <p className="p-6 text-sm text-gray-500">No fee follow-ups yet.</p> : (
           <table className="w-full text-sm">
             <thead><tr className="border-b border-gray-100 text-left text-[11px] uppercase tracking-wider text-gray-400">
-              <th className="px-4 py-3">Student</th><th className="px-4 py-3">SchoolPay</th><th className="px-4 py-3">Fee item</th>
+              <th className="px-4 py-3">Student</th><th className="px-4 py-3">Fee code</th><th className="px-4 py-3">Fee item</th>
               <th className="px-4 py-3">Status</th><th className="px-4 py-3">Next follow-up</th>
             </tr></thead>
             <tbody className="divide-y divide-gray-50">{feeFollowups.map((f) => (

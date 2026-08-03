@@ -272,7 +272,7 @@ export function SchoolAdminCard({
         <Stat label="Fee follow-ups" value={pendingFees.length} tone="text-amber-600" />
       </div>
       <p className="mt-4 text-sm text-gray-500">
-        Payments remain in SchoolPay. This layer tracks admissions, follow-up, admin tasks, and {snapshots.length} reconciliation snapshot{snapshots.length === 1 ? '' : 's'}.
+        Student fees come from validated Excel imports (canonical) in the brand finance workspace. This layer tracks admissions, follow-up, admin tasks, and {snapshots.length} legacy fee record{snapshots.length === 1 ? '' : 's'}.
       </p>
       {dueAdmin.length > 0 && <p className="mt-2 text-xs text-amber-600">{dueAdmin.length} admin task{dueAdmin.length === 1 ? '' : 's'} still open.</p>}
     </Panel>

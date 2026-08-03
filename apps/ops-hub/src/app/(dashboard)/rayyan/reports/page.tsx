@@ -12,7 +12,7 @@ export default async function RayyanReportsPage() {
   const balance = snapshots.reduce((sum, s) => sum + Number(s.balance_ksh ?? 0), 0)
   return (
     <div className="space-y-5">
-      <div><h1 className="text-2xl font-semibold text-gray-900">Rayyan reports</h1><p className="text-sm text-gray-500">Admissions, enrollment, fee follow-up, and admin workload summary. SchoolPay remains the payment source of truth.</p></div>
+      <div><h1 className="text-2xl font-semibold text-gray-900">Rayyan reports</h1><p className="text-sm text-gray-500">Admissions, enrollment, fee follow-up, and admin workload summary.</p></div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Stat label="Students" value={students.length} />
         <Stat label="Enrolled" value={enrolled.length} />

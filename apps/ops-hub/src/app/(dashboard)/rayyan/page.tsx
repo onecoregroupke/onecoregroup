@@ -11,7 +11,7 @@ const LINKS = [
   ['Classes', '/rayyan/classes'],
   ['Admin tasks', '/rayyan/admin-tasks'],
   ['Fee follow-ups', '/rayyan/fee-follow-ups'],
-  ['SchoolPay reconciliation', '/rayyan/schoolpay'],
+  ['Fees (finance)', '/finance/ar-rayyan-playhouse'],
   ['Reports', '/rayyan/reports'],
   ['Daily report books & forms', '/forms?brand=ar-rayyan-playhouse'],
 ] as const
@@ -28,8 +28,8 @@ export default async function RayyanAdminPage() {
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-ocg-gold">Ar Rayyan Nursery & Daycare</p>
         <h1 className="mt-1 text-2xl font-semibold text-gray-900">Rayyan Admin Layer</h1>
         <p className="mt-1 max-w-3xl text-sm text-gray-500">
-          Admissions, parent follow-up, admin tasks, classes, and SchoolPay reconciliation support.
-          Manual fees can be tracked here and reconciled against SchoolPay snapshots.
+          Admissions, parent follow-up, admin tasks, classes, and student fees. Fees are recorded from
+          validated Excel imports (the canonical source) and appear in the brand finance workspace.
         </p>
       </div>
 
@@ -63,11 +63,12 @@ export default async function RayyanAdminPage() {
           <div className="grid gap-3 sm:grid-cols-3">
             <Mini label="Admissions in pipeline" value={pendingAdmissions.length} />
             <Mini label="Open admin tasks" value={adminTasks.filter((t) => t.status !== 'done').length} />
-            <Mini label="SchoolPay snapshots" value={snapshots.length} />
+            <Mini label="Legacy fee snapshots" value={snapshots.length} />
           </div>
           <p className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-700">
-            Payments stay in SchoolPay. Use this area to reconcile exports, track parent follow-ups,
-            and connect fee/admin items back to Ops tasks.
+            Student fees are recorded from validated Excel imports (the canonical source) and appear in
+            the brand finance workspace. Use this area to track parent follow-ups and connect fee/admin
+            items back to Ops tasks.
           </p>
         </section>
       </div>
