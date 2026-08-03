@@ -1980,6 +1980,7 @@ export interface InventoryItemRow {
   location: string
   notes: string
   is_active: boolean
+  item_type: string
   created_at: string
   updated_at: string
 }
@@ -2039,6 +2040,9 @@ export interface ProcurementPurchaseRow {
   received_at: string | null
   recorded_by: string
   notes: string
+  scope: string
+  cost_centre: string
+  beneficiary_brand_ids: string[]
   created_at: string
   updated_at: string
 }
@@ -2052,6 +2056,8 @@ export interface ProcurementPurchaseItemRow {
   quantity: number
   unit: string
   unit_cost_ksh: number
+  item_type: string
+  disposition: string
   created_at: string
 }
 type ProcurementPurchaseItemInsert = Pick<ProcurementPurchaseItemRow, 'purchase_id' | 'description'> &

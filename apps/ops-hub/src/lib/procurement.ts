@@ -1,5 +1,6 @@
 import { db, nowIso } from './serverClient'
 import { recordStockMovement } from './inventory'
+import { defaultDisposition, shouldStock } from './procurementModel'
 import type {
   ProcurementVendorRow,
   ProcurementPurchaseRow,
@@ -120,6 +121,8 @@ export interface PurchaseLineInput {
   unit?: string
   unit_cost_ksh?: number
   inventory_item_id?: string | null
+  item_type?: string
+  disposition?: string  // 'stock' | 'consume' — defaults from item_type
 }
 
 export async function createPurchase(input: {
@@ -130,6 +133,9 @@ export async function createPurchase(input: {
   receipt_url?: string
   category?: string
   payment_status?: string
+  scope?: string
+  cost_centre?: string
+  beneficiary_brand_ids?: string[]
   notes?: string
   recorded_by: string
   items: PurchaseLineInput[]
@@ -169,6 +175,9 @@ export async function createPurchase(input: {
       receipt_url: input.receipt_url ?? '',
       category: input.category ?? '',
       payment_status: input.payment_status || 'unpaid',
+      scope: input.scope || 'brand',
+      cost_centre: input.cost_centre ?? '',
+      beneficiary_brand_ids: input.beneficiary_brand_ids ?? [],
       total_cost_ksh: total,
       recorded_by: input.recorded_by,
       notes: input.notes ?? '',
@@ -181,14 +190,19 @@ export async function createPurchase(input: {
   const { data: itemRows, error: itemsError } = await supabase
     .from('procurement_purchase_items')
     .insert(
-      lines.map((l) => ({
-        purchase_id: purchase.id,
-        inventory_item_id: l.inventory_item_id || null,
-        description: l.description.trim(),
-        quantity: Number(l.quantity ?? 1),
-        unit: l.unit || 'pcs',
-        unit_cost_ksh: Number(l.unit_cost_ksh ?? 0),
-      })),
+      lines.map((l) => {
+        const itemType = l.item_type || 'stocked_inventory'
+        return {
+          purchase_id: purchase.id,
+          inventory_item_id: l.inventory_item_id || null,
+          description: l.description.trim(),
+          quantity: Number(l.quantity ?? 1),
+          unit: l.unit || 'pcs',
+          unit_cost_ksh: Number(l.unit_cost_ksh ?? 0),
+          item_type: itemType,
+          disposition: l.disposition || defaultDisposition(itemType),
+        }
+      }),
     )
     .select('*')
   if (itemsError) throw new Error(itemsError.message)
@@ -224,6 +238,10 @@ export async function receivePurchase(
   const lines = (lineRows as ProcurementPurchaseItemRow[] | null) ?? []
 
   for (const line of lines) {
+    // Only lines that will be STORED create inventory. Immediate-consumption
+    // lines (tea, meals, services…) are expensed via the purchase total and are
+    // never forced into a stock balance — the §20 fix.
+    if (!shouldStock(line.disposition)) continue
     let itemId = line.inventory_item_id
     if (!itemId) {
       const { data: newItem, error: itemError } = await supabase
@@ -235,6 +253,7 @@ export async function receivePurchase(
           quantity: 0,
           unit_value_ksh: Number(line.unit_cost_ksh ?? 0),
           category: purchase.category || 'Procured',
+          item_type: line.item_type || 'stocked_inventory',
         })
         .select('*')
         .single()

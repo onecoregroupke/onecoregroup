@@ -49,6 +49,8 @@ PostgREST schema cache was reloaded (`NOTIFY pgrst, 'reload schema'`) after appl
   (verified). Chat files live in a private `chat-attachments` Storage bucket (no public URLs).
 - **Migration `048_recurring_duties.sql` applied** — 13 recurrence/schedule columns on
   `ocg_daily_duties` (verified). Recurrence is derived; completion stays one row per (duty, date).
+- **Migration `049_procurement_classification.sql` applied** — item type + disposition on purchase
+  lines, scope + cost-centre + beneficiary brands on purchases, item_type on inventory (verified).
 
 ---
 
@@ -77,7 +79,7 @@ Legend: ✅ complete · 🟡 partial · 🔴 not started · ⏭ deferred (docume
 | 17 | Task filters | ✅ | Server-side category/priority/quick-views (overdue, due-today, awaiting-review…), composable; "Finance tasks" fixed; **6 unit tests**. |
 | 18 | My Tasks vs Personal | ✅ | Separated (removed embedded private tasks from My Tasks), clear labels/empty states; dead duplicate deleted. |
 | 19 | Analytics & reports | 🔴 | Existing Groq daily/weekly/monthly reports remain; consolidated filterable/exportable analytics 🔴 ⏭. |
-| 20 | Procurement/inventory model | 🔴 | Not started (still a single `category` text column). ⏭ |
+| 20 | Procurement/inventory model | 🟡 | Item classification (stocked/consumable/immediate-expense/asset/service/resale/student-meal/staff-welfare/facilities); migration 049; **store-vs-consume branch** — only stored lines create inventory, immediate consumption is expensed with no stock (the "do not force consumables into stock" fix); group-shared / shared-selected scope + cost centre; per-line UI asks the store/consume question; 4 tests. Consumption = existing inventory OUT movements. Multi-brand allocation split + issue-tracking UI ⏭. |
 | 21 | Permissions / isolation | 🟡 | Meetings/forms/finance/student reads now server-enforced + brand-scoped; fixed a brand-isolation gap on `/api/school-accounts` GET. Full 9-profile / direct-API test matrix ⏭ (core logic unit-tested). |
 | 22 | UX | 🟡 | Labels + empty states improved in every touched area; global pass ⏭. |
 | 23 | Non-destructive rules | ✅ | No valid data deleted; SchoolPay data preserved; additive migrations; no name-merges. |
@@ -86,7 +88,7 @@ Legend: ✅ complete · 🟡 partial · 🔴 not started · ⏭ deferred (docume
 | 26 | Definition of done | 🟡 | Met for §4,5,7,9,10,12,15,16,17,18; partial/deferred elsewhere (see above). |
 
 **Completed this session:** §1, 4, 5, 6, 7, 8, 9, 10, 12, 15, 16, 17, 18, 23, 25 (15 sections) + partials on
-§2, 3, 11, 13, 21, 22, 24. **Not started:** §14 (metrics), §19 (analytics), §20 (procurement).
+§2, 3, 11, 13, 20, 21, 22, 24. **Not started:** §14 (metrics), §19 (analytics).
 
 ---
 
@@ -106,8 +108,7 @@ Legend: ✅ complete · 🟡 partial · 🔴 not started · ⏭ deferred (docume
 
 ## E. Remaining risks & deferred work
 
-1. **Deferred sections** (not started): student metrics dashboard (§14), analytics/exports (§19),
-   procurement/inventory classification (§20).
+1. **Deferred sections** (not started): student metrics dashboard (§14), analytics/exports (§19).
 2. **Imports (§3):** the brand-scoped import **matrix** is built + enforced (NPT can no longer import
    student/fee data; schools get the fee ledger + petty cash). Rayyan per-category fees
    (uniform/stationery/transport/meals) are charge categories inside the fee-ledger adapter — no

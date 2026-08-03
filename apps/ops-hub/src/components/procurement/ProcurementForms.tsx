@@ -5,13 +5,14 @@ import { useRouter } from 'next/navigation'
 import { Ban, CheckCircle2, Contact, Plus, ShoppingCart, Trash2 } from 'lucide-react'
 import { api } from '@/lib/apiClient'
 import { procurementCategories } from '@/lib/brandCategories'
+import { PROCUREMENT_ITEM_TYPES, PROCUREMENT_SCOPES, COST_CENTRES, defaultDisposition } from '@/lib/procurementModel'
 
 type BrandOption = { id: string; label: string; slug: string }
 type VendorOption = { id: string; label: string; blacklisted: boolean; blacklistReason?: string }
 type ItemOption = { id: string; brandId: string; label: string }
-type Line = { description: string; quantity: string; unit: string; unit_cost_ksh: string; inventory_item_id: string }
+type Line = { description: string; quantity: string; unit: string; unit_cost_ksh: string; inventory_item_id: string; item_type: string; disposition: string }
 
-const EMPTY_LINE: Line = { description: '', quantity: '1', unit: 'pcs', unit_cost_ksh: '', inventory_item_id: '' }
+const EMPTY_LINE: Line = { description: '', quantity: '1', unit: 'pcs', unit_cost_ksh: '', inventory_item_id: '', item_type: 'stocked_inventory', disposition: 'stock' }
 
 /**
  * Purchase and vendor capture. A purchase records how goods were acquired
@@ -140,6 +141,17 @@ export function ProcurementForms({
                 <option value="paid">Paid</option>
               </select>
             </Field>
+            <Field label="Scope">
+              <select className="input" value={purchase.scope ?? 'brand'} onChange={(e) => setP('scope', e.target.value)}>
+                {PROCUREMENT_SCOPES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+              </select>
+            </Field>
+            <Field label="Cost centre">
+              <select className="input" value={purchase.cost_centre ?? ''} onChange={(e) => setP('cost_centre', e.target.value)}>
+                <option value="">—</option>
+                {COST_CENTRES.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </Field>
             <Field label="Notes" className="lg:col-span-2"><input className="input" value={purchase.notes ?? ''} onChange={(e) => setP('notes', e.target.value)} /></Field>
           </div>
 
@@ -154,26 +166,38 @@ export function ProcurementForms({
             </p>
           )}
 
-          <p className="mb-2 mt-4 text-xs font-semibold uppercase tracking-wide text-gray-500">Line items</p>
+          <p className="mb-1 mt-4 text-xs font-semibold uppercase tracking-wide text-gray-500">Line items</p>
+          <p className="mb-2 text-xs text-gray-400">For each item choose whether it will be <b>stored &amp; issued later</b> (enters inventory) or was <b>consumed now</b> (expensed, no stock).</p>
           <div className="space-y-2">
-            {lines.map((line, i) => (
-              <div key={i} className="grid gap-2 rounded-lg bg-gray-50 p-2.5 lg:grid-cols-[2fr_1fr_1fr_1fr_2fr_auto]">
+            {lines.map((line, i) => {
+              const stocked = line.disposition === 'stock'
+              return (
+              <div key={i} className="grid gap-2 rounded-lg bg-gray-50 p-2.5 lg:grid-cols-[minmax(0,1.6fr)_0.7fr_0.8fr_0.9fr_minmax(0,1.4fr)_minmax(0,1.1fr)_auto]">
                 <input className="input" placeholder="Description *" value={line.description} onChange={(e) => setLine(i, { description: e.target.value })} />
                 <input type="number" min="0" step="0.01" className="input" placeholder="Qty" value={line.quantity} onChange={(e) => setLine(i, { quantity: e.target.value })} />
                 <select className="input" value={line.unit} onChange={(e) => setLine(i, { unit: e.target.value })}>
                   {['pcs', 'sets', 'boxes', 'kg', 'litres', 'reams', 'packets'].map((u) => <option key={u} value={u}>{u}</option>)}
                 </select>
                 <input type="number" min="0" step="0.01" className="input" placeholder="Unit cost" value={line.unit_cost_ksh} onChange={(e) => setLine(i, { unit_cost_ksh: e.target.value })} />
-                <select className="input" value={line.inventory_item_id} onChange={(e) => setLine(i, { inventory_item_id: e.target.value })}>
-                  <option value="">New inventory item on receive</option>
-                  {brandItems.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+                <select className="input" value={line.item_type} onChange={(e) => setLine(i, { item_type: e.target.value, disposition: defaultDisposition(e.target.value) })}>
+                  {PROCUREMENT_ITEM_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+                </select>
+                <select className="input" value={line.disposition} onChange={(e) => setLine(i, { disposition: e.target.value })}>
+                  <option value="stock">Store (inventory)</option>
+                  <option value="consume">Consumed now</option>
                 </select>
                 <button type="button" onClick={() => setLines((c) => c.filter((_, idx) => idx !== i))} disabled={lines.length === 1}
                   className="flex items-center justify-center rounded-lg border border-gray-200 px-2 text-gray-400 hover:text-red-500 disabled:opacity-30">
                   <Trash2 size={14} />
                 </button>
+                {stocked && (
+                  <select className="input lg:col-span-6" value={line.inventory_item_id} onChange={(e) => setLine(i, { inventory_item_id: e.target.value })}>
+                    <option value="">New inventory item on receive</option>
+                    {brandItems.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+                  </select>
+                )}
               </div>
-            ))}
+            )})}
           </div>
           <div className="mt-2 flex items-center justify-between">
             <button type="button" onClick={() => setLines((c) => [...c, { ...EMPTY_LINE }])}
