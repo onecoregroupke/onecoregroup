@@ -1,8 +1,10 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
-import { ArrowLeft, Banknote, Download, Wallet } from 'lucide-react'
+import { ArrowLeft, Banknote, Download, GraduationCap, Wallet } from 'lucide-react'
 import { requireSection } from '@/lib/server-auth'
 import { resolveBrand } from '@/lib/brands'
+import { schoolForBrandSlug } from '@/lib/imports/brandScope'
+import { schoolFeeTotals, schoolFeeByCategory, schoolFeeTopDebtors } from '@/lib/schoolFinanceSummary'
 import { listLedger, listVoteheads } from '@/lib/finance'
 import { listPettyCashAccounts, listPettyCashTransactions, summarisePettyCash } from '@/lib/pettyCash'
 import { formatKsh, sumMoney } from '@/lib/money'
@@ -36,6 +38,13 @@ export default async function BrandFinancePage({ params }: { params: Promise<{ b
   const accounts = (accountsRes.data as FinanceAccountRow[] | null) ?? []
   const imports = (importsRes.data as DataImportRow[] | null) ?? []
 
+  // School brands surface their canonical fee ledger inside finance, and fees
+  // roll into the brand's income + analytics.
+  const school = schoolForBrandSlug(brand.slug)
+  const feeTotals = school ? await schoolFeeTotals(school) : null
+  const feeCategories = school ? await schoolFeeByCategory(school) : []
+  const feeDebtors = school ? await schoolFeeTopDebtors(school, 12) : []
+
   const inflow = sumMoney(ledger.filter((t) => t.direction === 'inflow' || t.direction === 'transfer_in').map((t) => t.amount_ksh))
   const outflow = sumMoney(ledger.filter((t) => t.direction === 'outflow' || t.direction === 'transfer_out').map((t) => t.amount_ksh))
   const pettySummary = summarisePettyCash(pettyTx)
@@ -65,12 +74,57 @@ export default async function BrandFinancePage({ params }: { params: Promise<{ b
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-        <Stat label="Income" value={inflow} tone="text-emerald-600" />
+        <Stat label={school ? 'Income (incl. fees)' : 'Income'} value={inflow + (feeTotals?.paid ?? 0)} tone="text-emerald-600" />
         <Stat label="Expense" value={outflow} tone="text-red-600" />
-        <Stat label="Net" value={inflow - outflow} tone={inflow - outflow >= 0 ? 'text-gray-900' : 'text-red-600'} />
+        <Stat label="Net" value={inflow + (feeTotals?.paid ?? 0) - outflow} tone={inflow + (feeTotals?.paid ?? 0) - outflow >= 0 ? 'text-gray-900' : 'text-red-600'} />
         <Stat label="Petty cash on hand" value={pettySummary.expectedClosing} tone="text-gray-900" icon={Wallet} />
-        <Stat label="Recorded movements" plain value={ledger.length} />
+        {school
+          ? <Stat label="Fees outstanding" value={feeTotals?.outstanding ?? 0} tone="text-amber-600" />
+          : <Stat label="Recorded movements" plain value={ledger.length} />}
       </div>
+
+      {school && feeTotals && (
+        <section className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-ocg-gold"><GraduationCap size={15} /> Student fees</h2>
+            <p className="text-xs text-gray-400">{feeTotals.students} students · charged {formatKsh(feeTotals.charged)} · paid {formatKsh(feeTotals.paid)} · outstanding {formatKsh(feeTotals.outstanding)}</p>
+          </div>
+          <div className="grid gap-5 lg:grid-cols-2">
+            <div>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-400">By fee category (from the workbook)</p>
+              <div className="max-h-72 overflow-auto rounded-lg border border-gray-100">
+                <table className="w-full text-sm">
+                  <thead className="sticky top-0 bg-white"><tr className="border-b border-gray-100 text-left text-[11px] uppercase tracking-wider text-gray-400"><th className="px-3 py-2">Category</th><th className="px-3 py-2 text-right">Charged</th><th className="px-3 py-2 text-right">Paid</th><th className="px-3 py-2 text-right">Balance</th></tr></thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {feeCategories.map((c) => (
+                      <tr key={c.category_label}><td className="px-3 py-2 text-gray-700">{c.category_label}</td><td className="px-3 py-2 text-right text-gray-600">{formatKsh(c.charged)}</td><td className="px-3 py-2 text-right text-emerald-700">{formatKsh(c.paid)}</td><td className={`px-3 py-2 text-right font-medium ${c.balance > 0 ? 'text-amber-700' : 'text-gray-600'}`}>{formatKsh(c.balance)}</td></tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-400">Top outstanding balances</p>
+              <div className="max-h-72 overflow-auto rounded-lg border border-gray-100">
+                {feeDebtors.length === 0 ? <p className="p-3 text-sm text-gray-500">No outstanding balances.</p> : (
+                  <ul className="divide-y divide-gray-50">
+                    {feeDebtors.map((d) => {
+                      const href = studentHref(school, d.student_id)
+                      return (
+                        <li key={d.student_id} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
+                          {href ? <Link href={href} className="text-gray-700 hover:text-ocg-gold hover:underline">{d.admission_no || d.student_id.slice(0, 8)}</Link> : <span className="text-gray-700">{d.admission_no || d.student_id.slice(0, 8)}</span>}
+                          <span className="font-medium text-amber-700">{formatKsh(d.outstanding)}</span>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                )}
+              </div>
+            </div>
+          </div>
+          <p className="mt-3 text-xs text-gray-400">Fees are the canonical imported ledger; each student&apos;s full statement is on their profile. These figures are included in this brand&apos;s income and analytics.</p>
+        </section>
+      )}
 
       <MoneyForms brands={brandOptions} accounts={accountOptions} voteheads={voteheadOptions} canEdit={canEdit} />
 
@@ -132,4 +186,10 @@ function Stat({ label, value, tone = 'text-gray-900', plain = false, icon: Icon 
       <p className="mt-1 text-[11px] font-semibold uppercase tracking-wider text-gray-400">{label}</p>
     </div>
   )
+}
+
+function studentHref(school: string | null, studentId: string): string | null {
+  if (school === 'rayyan') return `/rayyan/students/${studentId}`
+  if (school === 'rhythms') return `/rhythms/students/${studentId}`
+  return null // Darul has no student profile page yet
 }
