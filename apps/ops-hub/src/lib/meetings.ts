@@ -13,6 +13,10 @@ import type {
   OpsTeamMemberRow,
 } from '@ocg/db'
 import type { Actor } from './server-auth'
+import { canAccessMeeting, canEditMeetingNotes, cleanEmail, cleanEmailList } from './meetingAccess'
+
+// Re-export so existing importers (`@/lib/meetings`) keep working.
+export { canAccessMeeting, canEditMeetingNotes }
 
 // =============================================================================
 // Meetings — scheduling, minutes, action items, and the context-aware prep
@@ -35,7 +39,8 @@ export async function listMeetings(limit = 200): Promise<OcgMeetingRow[]> {
 
 export async function listMeetingsForActor(actor: Actor, limit = 200): Promise<OcgMeetingRow[]> {
   const meetings = await listMeetings(limit)
-  if (actor.can('meetings', 'view')) return meetings
+  // Participant-scoped by default; canAccessMeeting also honours a "view all"
+  // grant (optionally brand-scoped) — no management/ops inheritance any more.
   return meetings.filter((meeting) => canAccessMeeting(actor, meeting))
 }
 
@@ -46,12 +51,15 @@ export async function listMeetingTemplatesForActor(actor: Actor): Promise<OcgMee
     .order('updated_at', { ascending: false })
     .limit(200)
   const templates = (data as OcgMeetingTemplateRow[] | null) ?? []
-  if (actor.can('meetings', 'view')) return templates
   const email = cleanEmail(actor.email ?? '')
-  return templates.filter((template) =>
-    cleanEmail(template.created_by_email) === email ||
-    template.attendee_emails.map(cleanEmail).includes(email),
-  )
+  const ownTemplate = (t: OcgMeetingTemplateRow) =>
+    cleanEmail(t.created_by_email) === email || t.attendee_emails.map(cleanEmail).includes(email)
+  if (actor.can('meetings', 'view')) {
+    const brandIds = actor.allowedBrandIds('meetings')
+    if (brandIds === null) return templates
+    return templates.filter((t) => (t.brand_id && brandIds.includes(t.brand_id)) || ownTemplate(t))
+  }
+  return templates.filter(ownTemplate)
 }
 
 export async function getMeeting(id: string): Promise<OcgMeetingRow | null> {
@@ -190,23 +198,6 @@ export async function updateMeetingNotes(
   const { data, error } = await db().from('ocg_meetings').update(patch).eq('id', id).select('*').single()
   if (error) throw new Error(error.message)
   return data as OcgMeetingRow
-}
-
-export function canAccessMeeting(actor: Pick<Actor, 'email' | 'name' | 'can'>, meeting: OcgMeetingRow): boolean {
-  if (actor.can('meetings', 'view')) return true
-  const email = cleanEmail(actor.email ?? '')
-  const name = actor.name.trim().toLowerCase()
-  const creator = meeting.created_by.trim().toLowerCase()
-  return (
-    (!!email && meeting.attendee_emails.map(cleanEmail).includes(email)) ||
-    (!!name && meeting.attendees.map((a) => a.trim().toLowerCase()).includes(name)) ||
-    (!!name && creator === name) ||
-    (!!email && creator === email)
-  )
-}
-
-export function canEditMeetingNotes(actor: Pick<Actor, 'email' | 'name' | 'can'>, meeting: OcgMeetingRow): boolean {
-  return actor.can('meetings', 'edit') || canAccessMeeting(actor, meeting)
 }
 
 export async function saveMeetingTemplateFromMeeting(
@@ -494,14 +485,6 @@ async function updateMeetingPrep(id: string, brief: string): Promise<OcgMeetingR
     .single()
   if (error) throw new Error(error.message)
   return data as OcgMeetingRow
-}
-
-function cleanEmail(email: string): string {
-  return email.trim().toLowerCase()
-}
-
-function cleanEmailList(emails: string[]): string[] {
-  return [...new Set(emails.map(cleanEmail).filter(Boolean))]
 }
 
 async function teamByEmail(): Promise<Map<string, OpsTeamMemberRow>> {

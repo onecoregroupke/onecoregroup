@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { getApiActor } from '@/lib/api-auth'
 import { listTasks, createTask, brandIdFromParam } from '@/lib/tasks'
+import { taskViewToFilter } from '@/lib/taskFilters'
+import { todayInEat } from '@/lib/serverClient'
 import { getProject } from '@/lib/projects'
 import { listTeam, lookupAssigneeEmail } from '@/lib/team'
 import { resolveBrand } from '@/lib/brands'
@@ -21,13 +23,20 @@ export async function GET(req: NextRequest) {
   const assignedTo = scope.kind === 'own'
     ? actor.name
     : (url.searchParams.get('assignee') ?? undefined)
+  // A friendly "view" (overdue / due-today / awaiting-review / …) expands to
+  // concrete filters server-side, so category & view actually constrain the
+  // result set instead of the page fetching everything and filtering in-browser.
+  const viewFilter = taskViewToFilter(url.searchParams.get('view'), todayInEat())
   const tasks = await listTasks({
     brandId,
     brandIds: scope.kind === 'brands' ? scope.brandIds : undefined,
     projectId: url.searchParams.get('project') ?? undefined,
     status: url.searchParams.get('status') ?? undefined,
+    category: url.searchParams.get('category') ?? undefined,
+    priority: url.searchParams.get('priority') ?? undefined,
     assignedTo,
     activeOnly: url.searchParams.get('active') === '1',
+    ...viewFilter,
     limit: url.searchParams.get('limit') ? Number(url.searchParams.get('limit')) : undefined,
   })
   return NextResponse.json({ ok: true, tasks })

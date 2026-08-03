@@ -36,7 +36,7 @@ export const MAIN_NAV: { href: string; label: string; icon: React.ElementType; s
   // Personal is every user's PRIVATE task space — always visible, own rows only.
   { href: '/personal',  label: 'Personal',  icon: Lock,            section: null },
   { href: '/my-tasks',  label: 'My Tasks',  icon: CheckSquare,     section: null },
-  { href: '/forms',     label: 'Forms',     icon: ClipboardList,   section: null },
+  { href: '/forms',     label: 'Forms',     icon: ClipboardList,   section: 'forms' },
   { href: '/chat',      label: 'Chat',      icon: MessagesSquare,  section: null },
   { href: '/forum',     label: 'Forum',     icon: Megaphone,       section: null },
   { href: '/tasks',     label: 'Tasks',     icon: ListTodo,        section: 'ops' },

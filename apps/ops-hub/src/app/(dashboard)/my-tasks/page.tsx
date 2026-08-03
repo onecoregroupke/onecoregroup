@@ -7,7 +7,6 @@ import { api } from '@/lib/apiClient'
 import { statusTone, priorityTone, TASK_STATUSES } from '@/lib/taskStatuses'
 import { formatEatRange } from '@/lib/kenyaTime'
 import { MyDuties } from '@/components/duties/MyDuties'
-import { PrivateTasks } from '@/components/personal/PrivateTasks'
 import type { OpsTaskRow } from '@ocg/db'
 import type { MyAppointment } from '@/app/api/my-tasks/route'
 
@@ -38,7 +37,13 @@ export default function MyTasksPage() {
     <div className="space-y-5">
       <div>
         <h1 className="text-2xl font-semibold text-gray-900">My tasks</h1>
-        <p className="text-sm text-gray-500">{name ? `Assigned to ${name}` : 'Your assigned work'}</p>
+        <p className="text-sm text-gray-500">
+          {name ? `Work assigned to ${name}` : 'Work assigned to you'} — update status and log progress. You can’t create assigned tasks here.
+        </p>
+        <p className="mt-1 text-xs text-gray-400">
+          Your own private to-dos live in{' '}
+          <Link href="/personal" className="font-medium text-ocg-gold hover:underline">Personal</Link>.
+        </p>
       </div>
 
       <MyDuties />
@@ -68,7 +73,7 @@ export default function MyTasksPage() {
           )}
           <Section title={`Open (${open.length})`}>
             {open.length === 0 ? (
-              <Empty>Nothing open. Nice.</Empty>
+              <Empty>No open tasks assigned to you right now.</Empty>
             ) : (
               open.map((t) => <Row key={t.task_id} t={t} onChanged={load} />)
             )}
@@ -80,8 +85,6 @@ export default function MyTasksPage() {
           )}
         </>
       )}
-
-      <PrivateTasks />
     </div>
   )
 }

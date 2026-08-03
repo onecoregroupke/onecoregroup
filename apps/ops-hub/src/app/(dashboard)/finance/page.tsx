@@ -117,7 +117,7 @@ export default async function FinancePage() {
         <div className="flex flex-wrap gap-2">
           {slugAllowed('ar-rayyan-playhouse') && <QuickLink href="/rayyan/schoolpay" label="Rayyan fees" />}
           {slugAllowed('rhythms-college') && <QuickLink href="/rhythms/schoolpay" label="Rhythms fees" />}
-          <QuickLink href="/tasks" label="Finance tasks" />
+          <QuickLink href="/tasks?category=Finance" label="Finance tasks" />
         </div>
       </div>
 

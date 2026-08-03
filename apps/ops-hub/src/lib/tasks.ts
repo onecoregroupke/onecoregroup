@@ -5,18 +5,8 @@ import { completionToken } from './completion'
 import { isActiveStatus } from './taskStatuses'
 import type { OpsTaskRow, OpsTaskCommentRow } from '@ocg/db'
 
-export interface TaskFilter {
-  brandId?: string
-  /** Restrict to these brand ids (brand-manager scope). Applied on top of brandId. */
-  brandIds?: string[]
-  projectId?: string
-  clientId?: string
-  status?: string
-  assignedTo?: string
-  agentEligibleOnly?: boolean
-  activeOnly?: boolean
-  limit?: number
-}
+import type { TaskFilter } from './taskFilters'
+export type { TaskFilter }
 
 export async function listTasks(filter: TaskFilter = {}): Promise<OpsTaskRow[]> {
   let q = db().from('ops_tasks').select('*').order('created_at', { ascending: false })
@@ -25,7 +15,15 @@ export async function listTasks(filter: TaskFilter = {}): Promise<OpsTaskRow[]> 
   if (filter.projectId) q = q.eq('project_id', filter.projectId)
   if (filter.clientId) q = q.eq('client_id', filter.clientId)
   if (filter.status) q = q.eq('current_status', filter.status)
+  if (filter.statusIn?.length) q = q.in('current_status', filter.statusIn)
+  if (filter.category) q = q.eq('category', filter.category)
+  if (filter.priority) q = q.eq('priority', filter.priority)
+  if (filter.priorityIn?.length) q = q.in('priority', filter.priorityIn)
   if (filter.assignedTo) q = q.eq('assigned_to', filter.assignedTo)
+  if (filter.hasDueDate) q = q.neq('target_date', '')
+  if (filter.dueBefore) q = q.lt('target_date', filter.dueBefore)
+  if (filter.dueOnOrAfter) q = q.gte('target_date', filter.dueOnOrAfter)
+  if (filter.dueOnOrBefore) q = q.lte('target_date', filter.dueOnOrBefore)
   if (filter.agentEligibleOnly) q = q.eq('agent_eligible', 'Yes')
   if (filter.activeOnly) q = q.eq('active', 'Yes')
   if (filter.limit) q = q.limit(filter.limit)

@@ -1,10 +1,12 @@
 import Link from 'next/link'
 import { listTasks, brandIdFromParam } from '@/lib/tasks'
+import { taskViewToFilter, TASK_VIEWS } from '@/lib/taskFilters'
 import { listProjects } from '@/lib/projects'
 import { listBrands } from '@/lib/brands'
 import { listClients } from '@/lib/clients'
 import { listTeam } from '@/lib/team'
-import { TASK_STATUSES } from '@/lib/taskStatuses'
+import { TASK_STATUSES, TASK_CATEGORIES, TASK_PRIORITIES } from '@/lib/taskStatuses'
+import { todayInEat } from '@/lib/serverClient'
 import { requireSection } from '@/lib/server-auth'
 import { NewTaskButton } from '@/components/tasks/NewTaskButton'
 import { TaskBulkList } from '@/components/tasks/TaskBulkList'
@@ -24,14 +26,20 @@ export default async function TasksPage({
   const scope = actor.taskScope
   const assignedTo = scope.kind === 'own' ? actor.name : sp.assignee
   const brandIds = scope.kind === 'brands' ? scope.brandIds : undefined
+  // Category / quick-view / priority filters are applied server-side (the fix
+  // for "Finance tasks" showing everything) and compose with brand + status.
+  const viewFilter = taskViewToFilter(sp.view, todayInEat())
   const [tasks, projects, allBrands, clients, team] = await Promise.all([
     listTasks({
       brandId,
       brandIds,
       projectId: sp.project,
       status: sp.status,
+      category: sp.category,
+      priority: sp.priority,
       assignedTo,
       activeOnly: sp.active === '1',
+      ...viewFilter,
       limit: 500,
     }),
     listProjects(),
@@ -43,13 +51,16 @@ export default async function TasksPage({
   const brands = brandIds ? allBrands.filter((b) => brandIds.includes(b.id)) : allBrands
   const activeBrand = sp.brand ? brands.find((b) => b.slug === sp.brand) : null
   const canEdit = actor.can('ops', 'edit')
+  const activeCategory = sp.category && TASK_CATEGORIES.includes(sp.category as never) ? sp.category : undefined
+  const activeView = TASK_VIEWS.find((v) => v.value === sp.view)
 
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold text-gray-900">
-            Tasks{activeBrand ? ` · ${activeBrand.name}` : ''}
+            Tasks{activeBrand ? ` · ${activeBrand.name}` : ''}{activeCategory ? ` · ${activeCategory}` : ''}
+            {activeView ? ` · ${activeView.label}` : ''}
           </h1>
           <p className="text-sm text-gray-500">{tasks.length} shown</p>
         </div>
@@ -64,11 +75,37 @@ export default async function TasksPage({
         )}
       </div>
 
+      {/* Quick views (composable with every other filter) */}
+      <div className="flex flex-wrap gap-2">
+        <Chip href={hrefWith(sp, { view: undefined })} active={!sp.view}>All tasks</Chip>
+        {TASK_VIEWS.map((v) => (
+          <Chip key={v.value} href={hrefWith(sp, { view: v.value })} active={sp.view === v.value}>
+            {v.label}
+          </Chip>
+        ))}
+      </div>
+
+      {/* Category filter */}
+      <div className="flex flex-wrap gap-2">
+        <Chip href={hrefWith(sp, { category: undefined })} active={!sp.category}>All categories</Chip>
+        {TASK_CATEGORIES.map((c) => (
+          <Chip key={c} href={hrefWith(sp, { category: c })} active={sp.category === c}>{c}</Chip>
+        ))}
+      </div>
+
+      {/* Priority filter */}
+      <div className="flex flex-wrap gap-2">
+        <Chip href={hrefWith(sp, { priority: undefined })} active={!sp.priority}>Any priority</Chip>
+        {TASK_PRIORITIES.map((p) => (
+          <Chip key={p} href={hrefWith(sp, { priority: p })} active={sp.priority === p}>{p}</Chip>
+        ))}
+      </div>
+
       {/* Brand filter chips */}
       <div className="flex flex-wrap gap-2">
-        <Chip href="/tasks" active={!sp.brand}>All brands</Chip>
+        <Chip href={hrefWith(sp, { brand: undefined })} active={!sp.brand}>All brands</Chip>
         {brands.map((b) => (
-          <Chip key={b.id} href={`/tasks?brand=${b.slug}`} active={sp.brand === b.slug}>
+          <Chip key={b.id} href={hrefWith(sp, { brand: b.slug })} active={sp.brand === b.slug}>
             {b.short_name || b.name}
           </Chip>
         ))}
@@ -76,9 +113,9 @@ export default async function TasksPage({
 
       {/* Status filter chips */}
       <div className="flex flex-wrap gap-2">
-        <Chip href={brandQuery(sp.brand)} active={!sp.status}>Any status</Chip>
+        <Chip href={hrefWith(sp, { status: undefined })} active={!sp.status}>Any status</Chip>
         {TASK_STATUSES.map((s) => (
-          <Chip key={s} href={brandQuery(sp.brand, s)} active={sp.status === s}>
+          <Chip key={s} href={hrefWith(sp, { status: s })} active={sp.status === s}>
             {s}
           </Chip>
         ))}
@@ -89,10 +126,18 @@ export default async function TasksPage({
   )
 }
 
-function brandQuery(brand?: string, status?: string): string {
+/** Merge the current query with a patch (undefined clears a key) so every filter
+ *  chip preserves the others — the filters are composable, not exclusive. */
+function hrefWith(
+  sp: Record<string, string | undefined>,
+  patch: Record<string, string | undefined>,
+): string {
   const p = new URLSearchParams()
-  if (brand) p.set('brand', brand)
-  if (status) p.set('status', status)
+  const merged = { ...sp, ...patch }
+  for (const key of ['brand', 'status', 'category', 'priority', 'view', 'assignee', 'project', 'active'] as const) {
+    const v = merged[key]
+    if (v) p.set(key, v)
+  }
   const qs = p.toString()
   return qs ? `/tasks?${qs}` : '/tasks'
 }

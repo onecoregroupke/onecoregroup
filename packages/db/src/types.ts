@@ -4,7 +4,7 @@ export type SectionKey =
   | 'glitz' | 'npt' | 'reports' | 'brands' | 'users' | 'marketing'
   | 'ops' | 'ops_agents' | 'management' | 'finance' | 'npt_service' | 'rayyan_admin' | 'rhythms_admin'
   | 'darul_admin' | 'nuuranest_admin' | 'glitz_admin' | 'personal' | 'all_tasks'
-  | 'meetings' | 'inventory' | 'procurement'
+  | 'meetings' | 'inventory' | 'procurement' | 'forms' | 'forms_responses'
 
 export type AccessLevel = 'none' | 'view' | 'edit'
 

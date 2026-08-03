@@ -37,11 +37,33 @@ export function sanitizeFields(raw: unknown): OcgFormFieldDef[] {
   return out
 }
 
-export async function listFormTemplates(opts: { includeInactive?: boolean } = {}): Promise<OcgFormTemplateRow[]> {
+/**
+ * Is a template within a viewer's brand scope? `brandIds === null` means
+ * unrestricted; a group-wide form (no brand_id) is visible to every scope.
+ * Pure — unit-tested in forms.test.ts and reused for read + write enforcement.
+ */
+export function templateInScope(brandId: string | null, brandIds: string[] | null): boolean {
+  if (brandIds === null) return true
+  if (!brandId) return true
+  return brandIds.includes(brandId)
+}
+
+export async function getFormTemplate(id: string): Promise<OcgFormTemplateRow | null> {
+  if (!id) return null
+  const { data } = await db().from('ocg_form_templates').select('*').eq('id', id).maybeSingle()
+  return (data as OcgFormTemplateRow | null) ?? null
+}
+
+export async function listFormTemplates(
+  opts: { includeInactive?: boolean; brandIds?: string[] | null } = {},
+): Promise<OcgFormTemplateRow[]> {
   let q = db().from('ocg_form_templates').select('*').order('sort_order', { ascending: true }).order('name', { ascending: true })
   if (!opts.includeInactive) q = q.eq('is_active', true)
   const { data } = await q
-  return (data as OcgFormTemplateRow[] | null) ?? []
+  const templates = (data as OcgFormTemplateRow[] | null) ?? []
+  const brandIds = opts.brandIds ?? null
+  // Brand compartment: a scoped user only sees their brands' forms + group-wide.
+  return templates.filter((t) => templateInScope(t.brand_id, brandIds))
 }
 
 export async function createFormTemplate(input: {

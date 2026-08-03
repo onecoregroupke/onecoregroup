@@ -72,7 +72,7 @@ export default function PersonalPage() {
           <Lock size={18} className="text-ocg-navy" />
           <h1 className="text-2xl font-semibold text-gray-900">Personal</h1>
         </div>
-        <p className="text-sm text-gray-500">Your private home &amp; personal tasks — only you can see these. One hub for every context.</p>
+        <p className="text-sm text-gray-500">Your private home &amp; personal tasks — only you can see these; managers and admins can&apos;t. These never appear in management reports.</p>
       </div>
 
       {error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}

@@ -14,7 +14,9 @@ export interface SectionDef {
  *   ops_agents — the agent run/config surface
  *   management / finance / npt_service / rayyan_admin / rhythms_admin — narrower operational modules.
  *     If unset for an existing user, they inherit the broader `ops` grant.
- *   meetings — meeting notes + prep (inherits `management`, then `ops`).
+ *   meetings — GRANT means "view EVERY meeting" (optionally brand-scoped). No
+ *     inheritance: without this grant a user is participant-scoped (sees only
+ *     the meetings they created or are an attendee of).
  *   inventory / procurement — stock + purchasing. NO inheritance: like money,
  *     these require an explicit grant.
  * "My Tasks", Chat, and the Forum are always visible to any signed-in user.
@@ -22,10 +24,12 @@ export interface SectionDef {
 export const SECTIONS: SectionDef[] = [
   { key: 'ops',        label: 'Ops',    href: '/' },
   { key: 'management', label: 'Management', href: '/management' },
-  { key: 'meetings', label: 'Meetings', href: '/meetings' },
+  { key: 'meetings', label: 'Meetings (view all)', href: '/meetings' },
   { key: 'finance', label: 'Finance', href: '/finance' },
   { key: 'inventory', label: 'Inventory', href: '/inventory' },
   { key: 'procurement', label: 'Procurement', href: '/procurement' },
+  { key: 'forms', label: 'Forms (fill · edit = build)', href: '/forms' },
+  { key: 'forms_responses', label: 'Form responses (view · edit = export)', href: '/forms' },
   { key: 'npt_service', label: 'NPT Service', href: '/npt' },
   { key: 'rayyan_admin', label: 'Rayyan Admin', href: '/rayyan' },
   { key: 'rhythms_admin', label: 'Rhythms Admin', href: '/rhythms' },
@@ -76,6 +80,8 @@ export const BRAND_SCOPED_SECTIONS: SectionDef[] = [
   { key: 'procurement', label: 'Procurement', href: '/procurement' },
   { key: 'all_tasks', label: 'Task oversight (brand manager)', href: '/tasks' },
   { key: 'marketing', label: 'Marketing (brand marketer)', href: '/mhub/marketing/calendar' },
+  { key: 'meetings', label: 'Meetings (view all)', href: '/meetings' },
+  { key: 'forms', label: 'Forms (by brand)', href: '/forms' },
 ]
 
 /**
@@ -132,7 +138,13 @@ export function can(
     darul_admin: ['ops'],
     nuuranest_admin: ['ops'],
     glitz_admin: ['ops'],
-    meetings: ['management', 'ops'],
+    // meetings intentionally has NO fallback: a manager must be granted
+    // `meetings` explicitly to see meetings they are not a participant of.
+    // forms fall back to an EXPLICIT `management` grant only (single-level, so
+    // ops-only users get nothing) — managers keep forms; everyone else needs an
+    // explicit `forms` grant. This is what closes the "all forms to all users" leak.
+    forms: ['management'],
+    forms_responses: ['management'],
   }
   let granted = permissions[section]
   if (granted === undefined) {

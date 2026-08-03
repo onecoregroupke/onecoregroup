@@ -2,10 +2,11 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import {
-  ArrowDown, ArrowUp, CheckCircle2, ClipboardList, FilePlus2, Pencil,
+  ArrowDown, ArrowUp, CheckCircle2, ClipboardList, Download, FilePlus2, Pencil,
   Plus, Send, Trash2, X,
 } from 'lucide-react'
 import { api } from '@/lib/apiClient'
+import { getClient } from '@/lib/supabase'
 import type { OcgFormTemplateRow, OcgFormSubmissionRow, OcgFormFieldDef } from '@ocg/db'
 
 type BrandOption = { id: string; label: string; slug: string }
@@ -16,6 +17,7 @@ interface FormsData {
   brands: BrandOption[]
   canManage: boolean
   canReviewAll: boolean
+  canExport: boolean
 }
 
 const FREQUENCIES = ['daily', 'weekly', 'monthly', 'termly', 'per_event'] as const
@@ -43,6 +45,25 @@ export function FormsWorkspace({ initialBrandSlug = '' }: { initialBrandSlug?: s
     setData(json)
   }
   useEffect(() => { void load() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // CSV export needs the Bearer token, so we fetch → blob → download rather than
+  // a plain link (which wouldn't authenticate against the Bearer-gated route).
+  async function exportCsv(templateId: string, name: string) {
+    setError('')
+    const { data: { session } } = await getClient().auth.getSession()
+    if (!session) { setError('Session expired — sign in again.'); return }
+    const res = await fetch(`/api/forms?export=csv&template=${templateId}`, {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    })
+    if (!res.ok) { setError('Export failed.'); return }
+    const blob = await res.blob()
+    const objectUrl = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = objectUrl
+    a.download = `${(name || 'form').replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '')}-responses.csv`
+    document.body.appendChild(a); a.click(); a.remove()
+    URL.revokeObjectURL(objectUrl)
+  }
 
   const brandBySlug = useMemo(() => new Map((data?.brands ?? []).map((b) => [b.slug, b])), [data])
   const brandById = useMemo(() => new Map((data?.brands ?? []).map((b) => [b.id, b])), [data])
@@ -129,6 +150,8 @@ export function FormsWorkspace({ initialBrandSlug = '' }: { initialBrandSlug?: s
                 template={selected}
                 submissions={data.submissions.filter((s) => s.template_id === selected.id)}
                 canReviewAll={data.canReviewAll}
+                canExport={data.canExport}
+                onExport={() => exportCsv(selected.id, selected.name)}
               />
             </>
           )}
@@ -255,17 +278,27 @@ function FieldInput({ field, value, onChange }: {
 }
 
 // ─── Recent entries ───────────────────────────────────────────────────────────
-function SubmissionsList({ template, submissions, canReviewAll }: {
+function SubmissionsList({ template, submissions, canReviewAll, canExport, onExport }: {
   template: OcgFormTemplateRow
   submissions: OcgFormSubmissionRow[]
   canReviewAll: boolean
+  canExport: boolean
+  onExport: () => void
 }) {
   const fieldLabel = new Map(template.fields.map((f) => [f.key, f.label]))
   return (
     <section className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
-      <h2 className="mb-1 text-xs font-semibold uppercase tracking-wider text-ocg-gold">
-        Recent entries ({submissions.length})
-      </h2>
+      <div className="mb-1 flex items-center justify-between gap-3">
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-ocg-gold">
+          Recent entries ({submissions.length})
+        </h2>
+        {canExport && submissions.length > 0 && (
+          <button onClick={onExport}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:border-ocg-gold hover:text-ocg-gold">
+            <Download size={13} /> Export CSV
+          </button>
+        )}
+      </div>
       <p className="mb-4 text-xs text-gray-400">
         {canReviewAll ? 'Showing all submissions for this form.' : 'Showing your own submissions.'}
       </p>
