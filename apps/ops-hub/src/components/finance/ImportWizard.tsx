@@ -4,21 +4,18 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { UploadCloud, FileSpreadsheet, AlertTriangle, CheckCircle2, RotateCcw } from 'lucide-react'
 import { getClient } from '@/lib/supabase'
+import { importTypesForBrand, schoolForBrandSlug } from '@/lib/imports/brandScope'
 
 interface Brand { id: string; label: string }
 interface StagedRow { id: string; sheet_name: string; source_row: number | null; record_kind: string; dup_status: string; row_state: string; mapped_payload: Record<string, unknown>; messages: unknown[] }
 interface ImportRec { id: string; source_filename: string; rows_scanned: number; duplicates_found: number; records_skipped: number; status: string }
 
-const IMPORT_TYPES = [
-  { value: 'petty-cash', label: 'Petty cash (income + expenses)' },
-  { value: 'school-ledger', label: 'Student fee ledger (Rayyan / Rhythms)' },
-]
-const SCHOOLS = [{ value: 'rayyan', label: 'Ar-Rayyan' }, { value: 'rhythms', label: 'Rhythms College' }, { value: 'darul', label: 'Darul Swafa' }]
-
-export function ImportWizard({ brandId, brands, canEdit }: { brandId?: string | null; brands: Brand[]; canEdit: boolean }) {
+export function ImportWizard({ brandId, brandSlug, brands, canEdit }: { brandId?: string | null; brandSlug?: string; brands: Brand[]; canEdit: boolean }) {
   const router = useRouter()
-  const [importType, setImportType] = useState('petty-cash')
-  const [school, setSchool] = useState('rayyan')
+  // Brand-scoped type list; the school is derived from the brand (no picker).
+  const types = importTypesForBrand(brandSlug)
+  const school = schoolForBrandSlug(brandSlug) ?? ''
+  const [importType, setImportType] = useState(types[0]?.value ?? 'petty-cash')
   const [brand, setBrand] = useState(brandId ?? brands[0]?.id ?? '')
   const [file, setFile] = useState<File | null>(null)
   const [busy, setBusy] = useState(false)
@@ -92,13 +89,8 @@ export function ImportWizard({ brandId, brands, canEdit }: { brandId?: string | 
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <label className="text-xs text-gray-500">Import type
-          <select value={importType} onChange={(e) => setImportType(e.target.value)} className={inputCls}>{IMPORT_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}</select>
+          <select value={importType} onChange={(e) => setImportType(e.target.value)} className={inputCls}>{types.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}</select>
         </label>
-        {importType === 'school-ledger' && (
-          <label className="text-xs text-gray-500">School
-            <select value={school} onChange={(e) => setSchool(e.target.value)} className={inputCls}>{SCHOOLS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}</select>
-          </label>
-        )}
         {!brandId && (
           <label className="text-xs text-gray-500">Brand
             <select value={brand} onChange={(e) => setBrand(e.target.value)} className={inputCls}><option value="">Select…</option>{brands.map((b) => <option key={b.id} value={b.id}>{b.label}</option>)}</select>

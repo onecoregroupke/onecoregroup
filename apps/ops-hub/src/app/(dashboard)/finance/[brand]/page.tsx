@@ -106,7 +106,7 @@ export default async function BrandFinancePage({ params }: { params: Promise<{ b
         )}
       </section>
 
-      <ImportWizard brandId={brand.id} brands={brandOptions} canEdit={canEdit} />
+      <ImportWizard brandId={brand.id} brandSlug={brand.slug} brands={brandOptions} canEdit={canEdit} />
 
       {imports.length > 0 && (
         <section className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">

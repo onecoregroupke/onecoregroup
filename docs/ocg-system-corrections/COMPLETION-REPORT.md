@@ -55,7 +55,7 @@ Legend: ✅ complete · 🟡 partial · 🔴 not started · ⏭ deferred (docume
 |---|------|--------|-------|
 | 1 | Mandatory audit | ✅ | Delivered + this report. |
 | 2 | Autosave | 🟡 | `useAutosave` exists (petty cash). Student-ledger entries intentionally **not** autosaved (explicit Post — §2 forbids autosave on approval actions). Broader rollout ⏭. |
-| 3 | Brand-scoped uploads | 🟡 | Import framework + petty-cash/school-ledger adapters exist. Per-brand import **matrix** + new NPT/Rayyan/Rhythms adapters ⏭ (workbooks now provided). |
+| 3 | Brand-scoped uploads | 🟡 | **Brand-scoped import matrix built + enforced** (client + server): NPT no longer exposes student/school-fee imports; schools get fee-ledger + petty cash; school derived from brand; type rejected server-side if not allowed; **4 tests**. Rayyan per-category fees (uniform/stationery/transport/meals) are charge categories inside the fee-ledger adapter. Additional non-school adapters (NPT sales/inventory, bank statements) ⏭. |
 | 4 | Meeting visibility | ✅ | Inheritance leak removed; participant-scoped default; explicit, brand-scopable "view all"; enforced at list/detail/DOCX/POST; **8 unit tests**. |
 | 5 | Forms access | ✅ | New `forms`/`forms_responses` perms, brand-scoped reads+writes, CSV export, submitter≠editor. Per-individual-form selection ⏭ (brand+role scoping done). |
 | 6 | Chat attachments | 🔴 | Not started. ⏭ |
@@ -104,9 +104,11 @@ Legend: ✅ complete · 🟡 partial · 🔴 not started · ⏭ deferred (docume
 
 1. **Deferred sections** (not started): chat attachments (§6), recurring-task engine (§8), student
    metrics dashboard (§14), analytics/exports (§19), procurement/inventory classification (§20).
-2. **Imports (§3):** the Rayyan + Rhythms workbooks were provided; the brand-scoped import matrix and
-   the additional adapters (NPT finance/sales/expenses/inventory; Rayyan uniform/stationery/transport;
-   Rhythms course data) still need building against them.
+2. **Imports (§3):** the brand-scoped import **matrix** is built + enforced (NPT can no longer import
+   student/fee data; schools get the fee ledger + petty cash). Rayyan per-category fees
+   (uniform/stationery/transport/meals) are charge categories inside the fee-ledger adapter — no
+   separate adapters needed. Still ⏭: additional non-school adapters (NPT sales/inventory/procurement,
+   bank statements), and actually running the provided workbooks through the wizard to populate the ledger.
 3. **Rhythms/Darul academics + transcripts (§13):** only Rayyan academics/transcript exist.
 4. **Forms lockdown is a behaviour change:** after this deploy, users without an explicit `forms`
    grant (and non-managers) lose forms access. **Admins must grant `forms` (optionally brand-scoped)

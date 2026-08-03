@@ -8,6 +8,8 @@ import {
 } from '@/lib/imports/framework'
 import { getAdapter } from '@/lib/imports/registry'
 import { retainImportFile } from '@/lib/imports/storage'
+import { importTypeAllowedForBrand, schoolForBrandSlug } from '@/lib/imports/brandScope'
+import { resolveBrand } from '@/lib/brands'
 import { db } from '@/lib/serverClient'
 import type { DataImportRow } from '@ocg/db'
 
@@ -61,16 +63,26 @@ export async function POST(req: NextRequest) {
 
       assertBrandInScope(brandId, allowed, 'import data')
 
+      // Brand-scoped import matrix: reject a type not allowed for this brand
+      // (e.g. student / school-fee imports for NPT) and DERIVE the school from
+      // the brand for school-ledger so client + brand can never mismatch.
+      const brandRow = brandId ? await resolveBrand(brandId) : null
+      const brandSlug = brandRow?.slug
+      if (!importTypeAllowedForBrand(brandSlug, importType)) {
+        return NextResponse.json({ ok: false, error: `The "${importType}" import is not available for this brand.` }, { status: 400 })
+      }
+      const effSchool = importType === 'school-ledger' ? (schoolForBrandSlug(brandSlug) ?? school) : school
+
       const buffer = Buffer.from(await file.arrayBuffer())
       const hash = sha256(buffer)
       const prior = await findPriorImportByHash(hash)
       const sheetsMeta = await listSheets(buffer)
-      const retained = await retainImportFile(buffer, file.name, school || brandId || 'imports')
+      const retained = await retainImportFile(buffer, file.name, effSchool || brandId || 'imports')
 
       const importRecord = await createImport({
         import_type: importType,
         brand_id: brandId,
-        school,
+        school: effSchool,
         source_filename: file.name,
         file_hash: hash,
         storage_bucket: retained.bucket,
@@ -80,7 +92,7 @@ export async function POST(req: NextRequest) {
       })
 
       const wb = await readWorkbook(buffer, { maxRowsPerSheet: 40000 })
-      const adapter = getAdapter(importType, school)
+      const adapter = getAdapter(importType, effSchool)
       const staged = await parseAndStage(importRecord, adapter, wb, { selectedSheets })
       const receipt = await importReceipt(importRecord.id)
       return NextResponse.json({
