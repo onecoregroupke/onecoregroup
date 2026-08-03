@@ -1695,6 +1695,19 @@ export interface OcgDailyDutyRow {
   department: string
   sort_order: number
   active: boolean
+  frequency: string
+  weekdays: number[]
+  day_of_month: number | null
+  interval_days: number
+  time_of_day: string
+  timezone: string
+  start_date: string | null
+  end_date: string | null
+  priority: string
+  category: string
+  requires_proof: boolean
+  reminder_minutes: number
+  paused: boolean
   created_at: string
   updated_at: string
 }

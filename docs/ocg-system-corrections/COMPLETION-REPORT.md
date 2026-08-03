@@ -47,6 +47,8 @@ PostgREST schema cache was reloaded (`NOTIFY pgrst, 'reload schema'`) after appl
 
 - **Migration `047_chat_attachments.sql` applied** — 4 attachment columns on `ocg_messages`
   (verified). Chat files live in a private `chat-attachments` Storage bucket (no public URLs).
+- **Migration `048_recurring_duties.sql` applied** — 13 recurrence/schedule columns on
+  `ocg_daily_duties` (verified). Recurrence is derived; completion stays one row per (duty, date).
 
 ---
 
@@ -63,7 +65,7 @@ Legend: ✅ complete · 🟡 partial · 🔴 not started · ⏭ deferred (docume
 | 5 | Forms access | ✅ | New `forms`/`forms_responses` perms, brand-scoped reads+writes, CSV export, submitter≠editor. Per-individual-form selection ⏭ (brand+role scoping done). |
 | 6 | Chat attachments | ✅ | Private `chat-attachments` bucket + short-lived signed URLs; migration 047 (attachment cols); extension + MIME + **magic-byte** validation (rejects executables/scripts, SVG/HTML); membership-gated upload **and** download; image/video inline + file download with size; 25 MB limit; 6 tests. |
 | 7 | User account editing | ✅ | Self-service display name + password (Supabase re-auth→updateUser); email read-only/admin-controlled. Admin controls (perms/brands/activate) exist in UsersAdmin; session-revocation ⏭. |
-| 8 | Recurring tasks | 🔴 | Not started (still daily-only `ocg_daily_duties`). ⏭ |
+| 8 | Recurring tasks | ✅ | Pure recurrence engine (daily / weekdays / weekly / monthly / last-working-day / every-N-days); migration 048 (schedule cols on `ocg_daily_duties`); setup form with schedule + time + start/end + priority + requires-proof; **due-date derived** everywhere (no duplicate instances); pause/resume/end controls; missed=overdue helper; 9 tests. Reminder delivery + timezone-aware notifications ⏭. |
 | 9 | Student info architecture | ✅ | Canonical `StudentAccount` embedded in Rayyan + Rhythms profiles. Darul profile ⏭ (component is school-agnostic — drop-in). |
 | 10 | Rayyan fee model | ✅ | Per-category charges/payments/balance via the canonical ledger, in the profile. |
 | 11 | Rhythms fee model | 🟡 | Same canonical ledger + new Rhythms profile page (distinct categories, no forced model). Course-billing config UI (enrol→charge schedule) ⏭. |
@@ -83,9 +85,8 @@ Legend: ✅ complete · 🟡 partial · 🔴 not started · ⏭ deferred (docume
 | 25 | Completion report | ✅ | This document. |
 | 26 | Definition of done | 🟡 | Met for §4,5,7,9,10,12,15,16,17,18; partial/deferred elsewhere (see above). |
 
-**Completed this session:** §1, 4, 5, 6, 7, 9, 10, 12, 15, 16, 17, 18, 23, 25 (14 sections) + partials on
-§2, 3, 11, 13, 21, 22, 24. **Not started:** §8 (recurring), §14 (metrics), §19 (analytics),
-§20 (procurement).
+**Completed this session:** §1, 4, 5, 6, 7, 8, 9, 10, 12, 15, 16, 17, 18, 23, 25 (15 sections) + partials on
+§2, 3, 11, 13, 21, 22, 24. **Not started:** §14 (metrics), §19 (analytics), §20 (procurement).
 
 ---
 
@@ -105,8 +106,8 @@ Legend: ✅ complete · 🟡 partial · 🔴 not started · ⏭ deferred (docume
 
 ## E. Remaining risks & deferred work
 
-1. **Deferred sections** (not started): recurring-task engine (§8), student metrics dashboard (§14),
-   analytics/exports (§19), procurement/inventory classification (§20).
+1. **Deferred sections** (not started): student metrics dashboard (§14), analytics/exports (§19),
+   procurement/inventory classification (§20).
 2. **Imports (§3):** the brand-scoped import **matrix** is built + enforced (NPT can no longer import
    student/fee data; schools get the fee ledger + petty cash). Rayyan per-category fees
    (uniform/stationery/transport/meals) are charge categories inside the fee-ledger adapter — no

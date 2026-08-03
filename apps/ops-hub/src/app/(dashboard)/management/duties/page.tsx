@@ -1,7 +1,9 @@
 import { listTeam } from '@/lib/team'
 import { listDuties, listDutyLogsForDate } from '@/lib/duties'
+import { describeRecurrence, isDutyDueOn } from '@/lib/recurrence'
 import { todayInEat } from '@/lib/serverClient'
 import { DutySetupForm } from '@/components/duties/DutySetupForm'
+import { DutyRowControls } from '@/components/duties/DutyRowControls'
 import { requireSection } from '@/lib/server-auth'
 
 export const dynamic = 'force-dynamic'
@@ -20,7 +22,8 @@ export default async function DailyDutiesPage() {
     groups.set(key, [...(groups.get(key) ?? []), d])
   }
 
-  const totalDone = duties.filter((d) => statusByDuty.get(d.id) === 'done').length
+  const dueToday = duties.filter((d) => isDutyDueOn(d, today))
+  const totalDone = dueToday.filter((d) => statusByDuty.get(d.id) === 'done').length
 
   return (
     <div className="space-y-6">
@@ -37,7 +40,7 @@ export default async function DailyDutiesPage() {
       <div className="grid gap-3 sm:grid-cols-3">
         <Stat label="Active duties" value={duties.length} />
         <Stat label="Done today" value={totalDone} tone="text-emerald-600" />
-        <Stat label="Outstanding" value={duties.length - totalDone} tone="text-amber-600" />
+        <Stat label="Due today, outstanding" value={dueToday.length - totalDone} tone="text-amber-600" />
       </div>
 
       {duties.length === 0 ? (
@@ -46,13 +49,14 @@ export default async function DailyDutiesPage() {
         <div className="grid gap-4 lg:grid-cols-2">
           {[...groups.entries()].map(([key, list]) => {
             const member = key === 'unassigned' ? null : memberById.get(key)
-            const done = list.filter((d) => statusByDuty.get(d.id) === 'done').length
+            const dueList = list.filter((d) => isDutyDueOn(d, today))
+            const done = dueList.filter((d) => statusByDuty.get(d.id) === 'done').length
             return (
               <section key={key} className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
                 <div className="mb-3 flex items-center justify-between">
                   <h2 className="text-sm font-semibold text-gray-900">{member?.name ?? 'Unassigned'}</h2>
                   <span className={`rounded px-2 py-0.5 text-[10px] font-medium ${done === list.length ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
-                    {done}/{list.length} done today
+                    {done}/{dueList.length} due today
                   </span>
                 </div>
                 <ul className="space-y-2">
@@ -61,11 +65,16 @@ export default async function DailyDutiesPage() {
                     return (
                       <li key={d.id} className="flex items-center justify-between gap-3 rounded-lg border border-gray-100 px-3 py-2 text-sm">
                         <span className="min-w-0">
-                          <span className="block truncate font-medium text-gray-800">{d.title}</span>
-                          {d.description && <span className="block truncate text-xs text-gray-400">{d.description}</span>}
+                          <span className="block truncate font-medium text-gray-800">{d.title}{d.paused ? ' · paused' : ''}</span>
+                          <span className="block truncate text-xs text-gray-400">{describeRecurrence(d)}{d.time_of_day ? ` · ${d.time_of_day}` : ''}{d.description ? ` · ${d.description}` : ''}</span>
                         </span>
-                        <span className={`shrink-0 rounded px-2 py-0.5 text-[10px] font-medium ${status === 'done' ? 'bg-emerald-50 text-emerald-700' : status === 'skipped' ? 'bg-red-50 text-red-600' : 'bg-gray-100 text-gray-500'}`}>
-                          {status}
+                        <span className="flex shrink-0 items-center gap-2">
+                          {isDutyDueOn(d, today) ? (
+                            <span className={`rounded px-2 py-0.5 text-[10px] font-medium ${status === 'done' ? 'bg-emerald-50 text-emerald-700' : status === 'skipped' ? 'bg-red-50 text-red-600' : 'bg-gray-100 text-gray-500'}`}>{status}</span>
+                          ) : (
+                            <span className="rounded px-2 py-0.5 text-[10px] font-medium text-gray-400">not due today</span>
+                          )}
+                          <DutyRowControls id={d.id} paused={d.paused} />
                         </span>
                       </li>
                     )

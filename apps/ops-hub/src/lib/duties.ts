@@ -1,4 +1,5 @@
 import { db, nowIso, todayInEat } from './serverClient'
+import { isDutyDueOn } from './recurrence'
 import type { OcgDailyDutyRow, OcgDailyDutyLogRow } from '@ocg/db'
 
 export async function listDuties(opts: { activeOnly?: boolean } = {}): Promise<OcgDailyDutyRow[]> {
@@ -23,14 +24,28 @@ export async function listDutyLogsForDate(date = todayInEat()): Promise<OcgDaily
   return (data as OcgDailyDutyLogRow[] | null) ?? []
 }
 
-export async function createDuty(input: {
+export interface CreateDutyInput {
   assignee_id?: string | null
   brand_id?: string | null
   title: string
   description?: string
   department?: string
   sort_order?: number
-}): Promise<OcgDailyDutyRow> {
+  frequency?: string
+  weekdays?: number[]
+  day_of_month?: number | null
+  interval_days?: number
+  time_of_day?: string
+  timezone?: string
+  start_date?: string | null
+  end_date?: string | null
+  priority?: string
+  category?: string
+  requires_proof?: boolean
+  reminder_minutes?: number
+}
+
+export async function createDuty(input: CreateDutyInput): Promise<OcgDailyDutyRow> {
   if (!input.title.trim()) throw new Error('Duty title is required')
   const { data, error } = await db()
     .from('ocg_daily_duties')
@@ -42,11 +57,34 @@ export async function createDuty(input: {
       department: input.department ?? 'Operations',
       sort_order: input.sort_order ?? 0,
       active: true,
+      frequency: input.frequency ?? 'daily',
+      weekdays: input.weekdays ?? [],
+      day_of_month: input.day_of_month ?? null,
+      interval_days: input.interval_days ?? 0,
+      time_of_day: input.time_of_day ?? '',
+      timezone: input.timezone ?? 'Africa/Nairobi',
+      start_date: input.start_date ?? null,
+      end_date: input.end_date ?? null,
+      priority: input.priority ?? 'Medium',
+      category: input.category ?? '',
+      requires_proof: input.requires_proof ?? false,
+      reminder_minutes: input.reminder_minutes ?? 0,
     })
     .select('*')
     .single()
   if (error) throw new Error(error.message)
   return data as OcgDailyDutyRow
+}
+
+/** Active duties whose recurrence makes them DUE on `date` (default: today EAT). */
+export async function listDueDuties(date = todayInEat()): Promise<OcgDailyDutyRow[]> {
+  const duties = await listDuties({ activeOnly: true })
+  return duties.filter((d) => isDutyDueOn(d, date))
+}
+
+export async function listDueDutiesForAssignee(assigneeId: string, date = todayInEat()): Promise<OcgDailyDutyRow[]> {
+  const duties = await listDutiesForAssignee(assigneeId)
+  return duties.filter((d) => isDutyDueOn(d, date))
 }
 
 export async function updateDuty(id: string, fields: Partial<OcgDailyDutyRow>): Promise<OcgDailyDutyRow> {
@@ -111,7 +149,7 @@ export interface DutyProgress {
 }
 
 export async function dutyProgressByPerson(date = todayInEat()): Promise<DutyProgress[]> {
-  const [duties, logs] = await Promise.all([listDuties({ activeOnly: true }), listDutyLogsForDate(date)])
+  const [duties, logs] = await Promise.all([listDueDuties(date), listDutyLogsForDate(date)])
   const doneByDuty = new Map(logs.map((l) => [l.duty_id, l.status]))
   const byPerson = new Map<string, DutyProgress>()
   for (const d of duties) {
