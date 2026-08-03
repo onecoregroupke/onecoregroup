@@ -1,4 +1,5 @@
 import { db, nowIso } from './serverClient'
+import { signChatAttachment } from './chatStorage'
 import type {
   OcgConversationRow,
   OcgConversationMemberRow,
@@ -80,11 +81,13 @@ export async function getMembership(
 }
 
 /** Messages for a conversation the user is a member of; marks them read. */
+export type ChatMessage = OcgMessageRow & { attachment_url?: string | null }
+
 export async function listMessages(
   conversationId: string,
   email: string,
   limit = 200,
-): Promise<OcgMessageRow[]> {
+): Promise<ChatMessage[]> {
   const membership = await getMembership(conversationId, email)
   if (!membership) throw new Error('You are not a member of this conversation.')
   const supabase = db()
@@ -98,7 +101,11 @@ export async function listMessages(
     .from('ocg_conversation_members')
     .update({ last_read_at: nowIso() })
     .eq('id', membership.id)
-  return (data as OcgMessageRow[] | null) ?? []
+  const rows = (data as OcgMessageRow[] | null) ?? []
+  // Sign short-lived attachment URLs only for messages that carry one.
+  return Promise.all(rows.map(async (m) =>
+    m.attachment_path ? { ...m, attachment_url: await signChatAttachment(m.attachment_path) } : m,
+  ))
 }
 
 export async function sendMessage(input: {
@@ -106,8 +113,10 @@ export async function sendMessage(input: {
   sender_email: string
   sender_name: string
   body: string
+  attachment?: { path: string; name: string; type: string; size: number }
 }): Promise<OcgMessageRow> {
-  if (!input.body?.trim()) throw new Error('Message cannot be empty.')
+  const hasAttachment = !!input.attachment?.path
+  if (!input.body?.trim() && !hasAttachment) throw new Error('Message cannot be empty.')
   const membership = await getMembership(input.conversation_id, input.sender_email)
   if (!membership) throw new Error('You are not a member of this conversation.')
   const supabase = db()
@@ -118,6 +127,10 @@ export async function sendMessage(input: {
       sender_email: normEmail(input.sender_email),
       sender_name: input.sender_name,
       body: input.body.trim(),
+      attachment_path: input.attachment?.path ?? '',
+      attachment_name: input.attachment?.name ?? '',
+      attachment_type: input.attachment?.type ?? '',
+      attachment_size: input.attachment?.size ?? 0,
     })
     .select('*')
     .single()

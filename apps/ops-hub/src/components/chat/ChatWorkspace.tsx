@@ -1,8 +1,10 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Laugh, MessageSquarePlus, MessagesSquare, Send, Users2, X } from 'lucide-react'
+import { Laugh, MessageSquarePlus, MessagesSquare, Paperclip, Send, Users2, X } from 'lucide-react'
 import { api } from '@/lib/apiClient'
+import { getClient } from '@/lib/supabase'
+import { humanSize, isImageAttachment, isVideoAttachment, MAX_ATTACHMENT_BYTES } from '@/lib/chatAttachments'
 
 type Contact = { email: string; name: string }
 type Member = { member_email: string; member_name: string }
@@ -21,6 +23,10 @@ type Message = {
   sender_email: string
   sender_name: string
   body: string
+  attachment_name?: string
+  attachment_type?: string
+  attachment_size?: number
+  attachment_url?: string | null
   created_at: string
 }
 
@@ -49,6 +55,7 @@ export function ChatWorkspace({
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const [showEmoji, setShowEmoji] = useState(false)
+  const [uploading, setUploading] = useState(false)
 
   // New conversation modal
   const [showNew, setShowNew] = useState(false)
@@ -57,6 +64,7 @@ export function ChatWorkspace({
   const [starting, setStarting] = useState(false)
 
   const bottomRef = useRef<HTMLDivElement>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
   const activeIdRef = useRef<string | null>(null)
   activeIdRef.current = activeId
 
@@ -105,6 +113,27 @@ export function ChatWorkspace({
     setDraft('')
     setShowEmoji(false)
     if (data.message) setMessages((prev) => [...prev, data.message!])
+    setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50)
+    void loadConversations()
+  }
+
+  async function sendFile(file: File | null) {
+    if (!file || !activeId) return
+    if (file.size > MAX_ATTACHMENT_BYTES) { setError(`File is larger than ${Math.round(MAX_ATTACHMENT_BYTES / 1024 / 1024)} MB.`); return }
+    setUploading(true); setError('')
+    const { data } = await getClient().auth.getSession()
+    const token = data.session?.access_token
+    const fd = new FormData()
+    fd.set('file', file)
+    fd.set('conversation_id', activeId)
+    fd.set('body', draft)
+    const res = await fetch('/api/chat', { method: 'POST', headers: token ? { Authorization: `Bearer ${token}` } : {}, body: fd })
+    const json = await res.json()
+    setUploading(false)
+    if (fileRef.current) fileRef.current.value = ''
+    if (!res.ok) { setError(json?.error ?? 'Upload failed.'); return }
+    setDraft('')
+    if (json.message) setMessages((prev) => [...prev, json.message])
     setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50)
     void loadConversations()
   }
@@ -206,7 +235,8 @@ export function ChatWorkspace({
                         {!mine && active.type === 'group' && (
                           <p className="mb-0.5 text-[11px] font-semibold text-ocg-gold">{m.sender_name}</p>
                         )}
-                        <p className="whitespace-pre-wrap text-sm">{m.body}</p>
+                        {m.body && <p className="whitespace-pre-wrap text-sm">{m.body}</p>}
+                        {m.attachment_name && <Attachment m={m} mine={mine} />}
                         <p className={`mt-1 text-right text-[10px] ${mine ? 'text-white/50' : 'text-gray-400'}`}>
                           {new Date(m.created_at).toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Nairobi' })}
                         </p>
@@ -238,6 +268,16 @@ export function ChatWorkspace({
                   className="rounded-lg border border-gray-200 p-2.5 text-gray-500 hover:border-ocg-gold hover:text-ocg-gold"
                 >
                   <Laugh size={17} />
+                </button>
+                <input ref={fileRef} type="file" className="hidden" onChange={(e) => sendFile(e.target.files?.[0] ?? null)} />
+                <button
+                  type="button"
+                  title="Attach a file"
+                  onClick={() => fileRef.current?.click()}
+                  disabled={uploading}
+                  className="rounded-lg border border-gray-200 p-2.5 text-gray-500 hover:border-ocg-gold hover:text-ocg-gold disabled:opacity-50"
+                >
+                  <Paperclip size={17} />
                 </button>
                 <textarea
                   className="input min-h-[42px] max-h-32 flex-1 resize-none"
@@ -295,5 +335,24 @@ export function ChatWorkspace({
         </div>
       )}
     </div>
+  )
+}
+
+function Attachment({ m, mine }: { m: Message; mine: boolean }) {
+  const url = m.attachment_url ?? undefined
+  const name = m.attachment_name ?? 'file'
+  const type = m.attachment_type ?? ''
+  if (url && isImageAttachment(type, name)) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <a href={url} target="_blank" rel="noreferrer" className="mt-1.5 block"><img src={url} alt={name} className="max-h-56 max-w-full rounded-lg" /></a>
+  }
+  if (url && isVideoAttachment(type, name)) {
+    return <video src={url} controls className="mt-1.5 max-h-56 max-w-full rounded-lg" />
+  }
+  return (
+    <a href={url} target="_blank" rel="noreferrer" download={name}
+      className={`mt-1.5 flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs ${mine ? 'border-white/30 text-white/90 hover:bg-white/10' : 'border-gray-200 text-gray-700 hover:bg-gray-50'}`}>
+      <Paperclip size={13} className="shrink-0" /> <span className="truncate">{name}</span>{m.attachment_size ? <span className="opacity-60">· {humanSize(m.attachment_size)}</span> : null}
+    </a>
   )
 }

@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { getApiActor } from '@/lib/api-auth'
-import { listConversationsFor, listMessages, sendMessage, startConversation } from '@/lib/chat'
+import { getMembership, listConversationsFor, listMessages, sendMessage, startConversation } from '@/lib/chat'
+import { uploadChatAttachment, signChatAttachment } from '@/lib/chatStorage'
+import { validateAttachment, looksExecutable } from '@/lib/chatAttachments'
 
 /**
  * Internal chat. Available to every signed-in portal user; conversation
@@ -31,6 +33,37 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const actor = await getApiActor(req)
   if (!actor || !actor.email) return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 })
+
+  // ── Attachment upload (multipart) ─────────────────────────────────────────
+  if ((req.headers.get('content-type') ?? '').includes('multipart/form-data')) {
+    try {
+      const form = await req.formData()
+      const file = form.get('file')
+      if (!(file instanceof File)) return NextResponse.json({ ok: false, error: 'No file uploaded' }, { status: 400 })
+      const conversationId = String(form.get('conversation_id') ?? '')
+      const text = String(form.get('body') ?? '')
+      // Membership is verified BEFORE anything is stored.
+      const membership = await getMembership(conversationId, actor.email)
+      if (!membership) return NextResponse.json({ ok: false, error: 'You are not a member of this conversation.' }, { status: 403 })
+      const check = validateAttachment(file.name, file.type, file.size)
+      if (!check.ok) return NextResponse.json({ ok: false, error: check.error }, { status: 400 })
+      const buffer = Buffer.from(await file.arrayBuffer())
+      if (looksExecutable(buffer.subarray(0, 8))) {
+        return NextResponse.json({ ok: false, error: 'Executable content is not allowed.' }, { status: 400 })
+      }
+      const stored = await uploadChatAttachment(conversationId, buffer, file.name, file.type)
+      if (!stored) return NextResponse.json({ ok: false, error: 'Attachments are not available (storage not configured).' }, { status: 400 })
+      const message = await sendMessage({
+        conversation_id: conversationId, sender_email: actor.email, sender_name: actor.name, body: text,
+        attachment: { path: stored.path, name: file.name, type: file.type, size: file.size },
+      })
+      const attachment_url = await signChatAttachment(stored.path)
+      return NextResponse.json({ ok: true, message: { ...message, attachment_url } }, { status: 201 })
+    } catch (e) {
+      return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 400 })
+    }
+  }
+
   try {
     const body = await req.json()
     const action = body?.action as string

@@ -45,6 +45,9 @@ students, meetings, forms, chat, tasks, duties, procurement, SchoolPay, analytic
 
 PostgREST schema cache was reloaded (`NOTIFY pgrst, 'reload schema'`) after applying.
 
+- **Migration `047_chat_attachments.sql` applied** — 4 attachment columns on `ocg_messages`
+  (verified). Chat files live in a private `chat-attachments` Storage bucket (no public URLs).
+
 ---
 
 ## C. Feature status (all 26 sections)
@@ -58,7 +61,7 @@ Legend: ✅ complete · 🟡 partial · 🔴 not started · ⏭ deferred (docume
 | 3 | Brand-scoped uploads | 🟡 | **Brand-scoped import matrix built + enforced** (client + server): NPT no longer exposes student/school-fee imports; schools get fee-ledger + petty cash; school derived from brand; type rejected server-side if not allowed; **4 tests**. Rayyan per-category fees (uniform/stationery/transport/meals) are charge categories inside the fee-ledger adapter. Additional non-school adapters (NPT sales/inventory, bank statements) ⏭. |
 | 4 | Meeting visibility | ✅ | Inheritance leak removed; participant-scoped default; explicit, brand-scopable "view all"; enforced at list/detail/DOCX/POST; **8 unit tests**. |
 | 5 | Forms access | ✅ | New `forms`/`forms_responses` perms, brand-scoped reads+writes, CSV export, submitter≠editor. Per-individual-form selection ⏭ (brand+role scoping done). |
-| 6 | Chat attachments | 🔴 | Not started. ⏭ |
+| 6 | Chat attachments | ✅ | Private `chat-attachments` bucket + short-lived signed URLs; migration 047 (attachment cols); extension + MIME + **magic-byte** validation (rejects executables/scripts, SVG/HTML); membership-gated upload **and** download; image/video inline + file download with size; 25 MB limit; 6 tests. |
 | 7 | User account editing | ✅ | Self-service display name + password (Supabase re-auth→updateUser); email read-only/admin-controlled. Admin controls (perms/brands/activate) exist in UsersAdmin; session-revocation ⏭. |
 | 8 | Recurring tasks | 🔴 | Not started (still daily-only `ocg_daily_duties`). ⏭ |
 | 9 | Student info architecture | ✅ | Canonical `StudentAccount` embedded in Rayyan + Rhythms profiles. Darul profile ⏭ (component is school-agnostic — drop-in). |
@@ -80,8 +83,8 @@ Legend: ✅ complete · 🟡 partial · 🔴 not started · ⏭ deferred (docume
 | 25 | Completion report | ✅ | This document. |
 | 26 | Definition of done | 🟡 | Met for §4,5,7,9,10,12,15,16,17,18; partial/deferred elsewhere (see above). |
 
-**Completed this session:** §1, 4, 5, 7, 9, 10, 12, 15, 16, 17, 18, 23, 25 (13 sections) + partials on
-§2, 3, 11, 13, 21, 22, 24. **Not started:** §6 (chat), §8 (recurring), §14 (metrics), §19 (analytics),
+**Completed this session:** §1, 4, 5, 6, 7, 9, 10, 12, 15, 16, 17, 18, 23, 25 (14 sections) + partials on
+§2, 3, 11, 13, 21, 22, 24. **Not started:** §8 (recurring), §14 (metrics), §19 (analytics),
 §20 (procurement).
 
 ---
@@ -102,8 +105,8 @@ Legend: ✅ complete · 🟡 partial · 🔴 not started · ⏭ deferred (docume
 
 ## E. Remaining risks & deferred work
 
-1. **Deferred sections** (not started): chat attachments (§6), recurring-task engine (§8), student
-   metrics dashboard (§14), analytics/exports (§19), procurement/inventory classification (§20).
+1. **Deferred sections** (not started): recurring-task engine (§8), student metrics dashboard (§14),
+   analytics/exports (§19), procurement/inventory classification (§20).
 2. **Imports (§3):** the brand-scoped import **matrix** is built + enforced (NPT can no longer import
    student/fee data; schools get the fee ledger + petty cash). Rayyan per-category fees
    (uniform/stationery/transport/meals) are charge categories inside the fee-ledger adapter — no

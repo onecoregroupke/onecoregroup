@@ -2073,6 +2073,10 @@ export interface OcgMessageRow {
   sender_email: string
   sender_name: string
   body: string
+  attachment_path: string
+  attachment_name: string
+  attachment_type: string
+  attachment_size: number
   created_at: string
 }
 type OcgMessageInsert = Pick<OcgMessageRow, 'conversation_id' | 'sender_email' | 'body'> &
