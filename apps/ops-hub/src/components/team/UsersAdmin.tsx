@@ -76,6 +76,19 @@ export function UsersAdmin({ brands, team }: { brands: BrandOption[]; team: Team
     return { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` }
   }
 
+  // Enter (view as) this user's portal. Founding-admin only; enforced server-side.
+  async function enterPortal() {
+    if (!selected) return
+    setSaving(true); setError('')
+    const res = await fetch('/api/impersonate', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: selected.id }),
+    })
+    if (res.ok) { window.location.href = '/'; return }
+    setSaving(false)
+    const j = await res.json().catch(() => ({})) as { error?: string }
+    setError(j.error ?? 'Could not enter that portal.')
+  }
+
   async function loadUsers() {
     setLoading(true); setError('')
     try {
@@ -393,6 +406,9 @@ export function UsersAdmin({ brands, team }: { brands: BrandOption[]; team: Team
                     </button>
                     <button onClick={toggleActive} disabled={saving} className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-60 ${selected.is_active ? 'border border-orange-200 text-orange-600 hover:bg-orange-50' : 'border border-green-200 text-green-600 hover:bg-green-50'}`}>
                       {selected.is_active ? <ShieldOff size={13} /> : <Shield size={13} />}{selected.is_active ? 'Revoke' : 'Restore'}
+                    </button>
+                    <button onClick={enterPortal} disabled={saving} title="Open this user's portal (view as them)" className="inline-flex items-center gap-1.5 rounded-lg border border-ocg-navy/30 px-3 py-1.5 text-xs font-semibold text-ocg-navy hover:bg-ocg-navy/5 disabled:opacity-60">
+                      Enter portal
                     </button>
                     <button onClick={deleteUser} disabled={saving} className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-60">
                       <Trash2 size={13} /> Remove

@@ -40,6 +40,9 @@ export interface Actor {
    * to every read AND write in those modules.
    */
   allowedBrandIds: (section: SectionKey) => string[] | null
+  /** Set to the founding admin's email when this actor is being viewed via
+   *  impersonation ("enter portal"); null otherwise. */
+  impersonatedBy?: string | null
 }
 
 /**
@@ -123,15 +126,45 @@ export async function getSsrClient() {
   })
 }
 
-/** The verified actor for the current request, or null if not signed in.
- *  Revoked users (is_active = false) are treated as signed out — the revoke
- *  takes effect server-side immediately, not just at next client load. */
-export const getActor = cache(async function getActor(): Promise<Actor | null> {
+/** The genuinely signed-in actor, IGNORING impersonation. Revoked users
+ *  (is_active = false) are treated as signed out — the revoke takes effect
+ *  server-side immediately, not just at next client load. */
+export const getRealActor = cache(async function getRealActor(): Promise<Actor | null> {
   const supabase = await getSsrClient()
   const { data, error } = await supabase.auth.getUser()
   if (error || !data.user) return null
   const actor = await loadActor({ id: data.user.id, email: data.user.email ?? null })
   return actor.isActive ? actor : null
+})
+
+/** Load an actor by user id (impersonation target). Resolves the email via the
+ *  service-role admin API so name + brand scoping resolve correctly. */
+export async function loadActorById(userId: string): Promise<Actor | null> {
+  let email: string | null = null
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data } = await (db() as any).auth.admin.getUserById(userId)
+    email = data?.user?.email ?? null
+  } catch { /* ignore — fall back to id-only */ }
+  return loadActor({ id: userId, email })
+}
+
+/** The EFFECTIVE actor for the request. A founding admin may be "viewing as"
+ *  another user via the `ocg_impersonate` cookie (set by /api/impersonate). The
+ *  real user is re-verified as a founding admin on every request, so a forged
+ *  cookie is inert for anyone who is not one. */
+export const getActor = cache(async function getActor(): Promise<Actor | null> {
+  const real = await getRealActor()
+  if (!real) return null
+  if (real.permissions === null) {
+    const cookieStore = await cookies()
+    const targetId = cookieStore.get('ocg_impersonate')?.value
+    if (targetId && targetId !== real.userId) {
+      const target = await loadActorById(targetId)
+      if (target?.isActive) return { ...target, impersonatedBy: real.email ?? real.userId }
+    }
+  }
+  return { ...real, impersonatedBy: null }
 })
 
 /** Require a signed-in actor; redirect to /login otherwise. */

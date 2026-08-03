@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import type { Database, SectionKey, AccessLevel } from '@ocg/db'
-import { loadActor, type Actor } from './server-auth'
+import { loadActor, loadActorById, type Actor } from './server-auth'
 
 export interface AuthedUser {
   id: string
@@ -39,8 +39,18 @@ export async function getApiActor(req: NextRequest): Promise<Actor | null> {
   const user = await requireUser(req)
   if (!user) return null
   const actor = await loadActor(user)
-  // Revoked portal users lose API access immediately, even with a live token.
-  return actor.isActive ? actor : null
+  if (!actor.isActive) return null
+  // Founding-admin impersonation (mirrors server-component getActor) so client
+  // data calls match the portal being viewed. The impersonation cookie rides
+  // along with the same-origin fetch; the real user is re-verified as admin here.
+  if (actor.permissions === null) {
+    const targetId = req.cookies.get('ocg_impersonate')?.value
+    if (targetId && targetId !== actor.userId) {
+      const target = await loadActorById(targetId)
+      if (target?.isActive) return { ...target, impersonatedBy: actor.email ?? actor.userId }
+    }
+  }
+  return actor
 }
 
 /**
