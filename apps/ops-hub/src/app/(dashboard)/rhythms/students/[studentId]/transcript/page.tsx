@@ -5,6 +5,8 @@ import { db } from '@/lib/serverClient'
 import { requireActor } from '@/lib/server-auth'
 import { studentLedger } from '@/lib/schoolFinance'
 import { summariseStudentAccount } from '@/lib/schoolBalance'
+import { listAssessments } from '@/lib/schoolAssessments'
+import { groupAssessmentsByTerm } from '@/lib/transcript'
 import { formatKsh } from '@/lib/money'
 import { PrintButton } from '@/components/rayyan/PrintButton'
 import type { RhythmsStudentRow } from '@ocg/db'
@@ -13,7 +15,7 @@ export const dynamic = 'force-dynamic'
 
 // Rhythms transcript / programme record. Rhythms fee categories ARE the
 // courses/modules a student takes, so the transcript is their course record with
-// enrolment + completion; marks-based assessment is a future academic module.
+// enrolment + completion, plus the marks-based academic record (assessments).
 export default async function RhythmsTranscriptPage({ params }: { params: Promise<{ studentId: string }> }) {
   const { studentId } = await params
   await requireActor()
@@ -22,6 +24,7 @@ export default async function RhythmsTranscriptPage({ params }: { params: Promis
   const s = data as RhythmsStudentRow
   const entries = await studentLedger('rhythms', studentId)
   const summary = summariseStudentAccount(entries)
+  const assessmentTerms = groupAssessmentsByTerm(await listAssessments('rhythms', studentId))
   const issued = new Date().toLocaleDateString('en-KE', { timeZone: 'Africa/Nairobi', day: 'numeric', month: 'long', year: 'numeric' })
   const ref = `RHY-TR-${(s.admission_number || s.id.slice(0, 8)).toUpperCase().replace(/[^A-Z0-9]/g, '')}-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}`
   const cleared = summary.postedBalance <= 0
@@ -76,6 +79,37 @@ export default async function RhythmsTranscriptPage({ params }: { params: Promis
               ))}
             </tbody>
           </table>
+        )}
+
+        {assessmentTerms.length > 0 && (
+          <>
+            <h2 className="mt-7 border-b border-gray-200 pb-1 text-sm font-bold uppercase tracking-wide text-gray-700">Academic assessment</h2>
+            {assessmentTerms.map((t) => (
+              <div key={t.key} className="mt-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-[#9a2a2a]">{t.label}</p>
+                <table className="mt-1 w-full border-collapse text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-300 text-left text-[11px] uppercase tracking-wide text-gray-500">
+                      <th className="py-1.5 pr-2">Course / module</th>
+                      <th className="py-1.5 pr-2">Type</th>
+                      <th className="py-1.5 pr-2 text-right">Mark</th>
+                      <th className="py-1.5 text-right">Grade</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {t.rows.map((a) => (
+                      <tr key={a.id} className="border-b border-gray-100">
+                        <td className="py-1.5 pr-2 font-medium text-gray-800">{a.subject}{a.status !== 'recorded' && <span className="ml-1.5 text-xs font-normal uppercase text-amber-600">{a.status}</span>}</td>
+                        <td className="py-1.5 pr-2 text-gray-600">{a.assessment_type}</td>
+                        <td className="py-1.5 pr-2 text-right text-gray-700">{a.score != null ? `${a.score}/${a.max_score}` : '—'}</td>
+                        <td className="py-1.5 text-right text-gray-700">{a.grade || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ))}
+          </>
         )}
 
         <div className="mt-10 grid grid-cols-2 gap-10 text-sm">

@@ -4,6 +4,7 @@ import { ArrowLeft, Award, FileText, GraduationCap } from 'lucide-react'
 import { db } from '@/lib/serverClient'
 import { requireActor } from '@/lib/server-auth'
 import { StudentAccount } from '@/components/finance/StudentAccount'
+import { StudentAssessments } from '@/components/school/StudentAssessments'
 import type { RhythmsStudentRow, RhythmsGuardianRow } from '@ocg/db'
 
 export const dynamic = 'force-dynamic'
@@ -26,6 +27,8 @@ export default async function RhythmsStudentProfilePage({
     : null
   const canFinanceView = actor.can('finance', 'view')
   const canFinanceEdit = actor.can('finance', 'edit')
+  const canAcademicView = actor.can('rhythms_admin', 'view')
+  const canAcademicEdit = actor.can('rhythms_admin', 'edit')
   const meta = [student.programme, student.cohort, student.enrollment_status, student.admission_number && `Adm ${student.admission_number}`]
     .filter(Boolean).join(' · ')
 
@@ -51,6 +54,10 @@ export default async function RhythmsStudentProfilePage({
         <StudentAccount school="rhythms" studentId={student.id} admissionNo={student.admission_number ?? ''} canEdit={canFinanceEdit} />
       ) : (
         <p className="rounded-lg bg-gray-50 p-3 text-sm text-gray-500">The student fee account is visible to finance users. Ask an administrator for finance access to this brand.</p>
+      )}
+
+      {canAcademicView && (
+        <StudentAssessments school="rhythms" studentId={student.id} admissionNo={student.admission_number ?? ''} canEdit={canAcademicEdit} subjectLabel="Course / module" />
       )}
     </div>
   )

@@ -2376,6 +2376,29 @@ export interface SchoolLedgerEntryRow {
 }
 type SchoolLedgerEntryInsert = Pick<SchoolLedgerEntryRow, 'school' | 'student_id'> & Partial<SchoolLedgerEntryRow>
 
+export interface SchoolAssessmentRow {
+  id: string
+  school: School
+  brand_id: string | null
+  student_id: string
+  student_admission_no: string
+  subject: string
+  academic_year: string
+  term: string
+  assessment_type: string
+  score: number | null
+  max_score: number
+  grade: string
+  status: string
+  remarks: string
+  teacher: string
+  assessed_on: string | null
+  recorded_by: string
+  created_at: string
+  updated_at: string
+}
+type SchoolAssessmentInsert = Pick<SchoolAssessmentRow, 'school' | 'student_id'> & Partial<SchoolAssessmentRow>
+
 export interface SchoolPaymentAllocationRow {
   id: string
   payment_entry_id: string
@@ -2697,6 +2720,7 @@ export interface Database {
       school_fee_structure_items: DbTable<SchoolFeeStructureItemRow, SchoolFeeStructureItemInsert, Partial<SchoolFeeStructureItemRow>>
       school_enrollments: DbTable<SchoolEnrollmentRow, SchoolEnrollmentInsert, Partial<SchoolEnrollmentRow>>
       school_ledger_entries: DbTable<SchoolLedgerEntryRow, SchoolLedgerEntryInsert, Partial<SchoolLedgerEntryRow>>
+      school_assessments: DbTable<SchoolAssessmentRow, SchoolAssessmentInsert, Partial<SchoolAssessmentRow>>
       school_payment_allocations: DbTable<SchoolPaymentAllocationRow, SchoolPaymentAllocationInsert, Partial<SchoolPaymentAllocationRow>>
       school_student_requirements: DbTable<SchoolStudentRequirementRow, SchoolStudentRequirementInsert, Partial<SchoolStudentRequirementRow>>
       petty_cash_accounts: DbTable<PettyCashAccountRow, PettyCashAccountInsert, Partial<PettyCashAccountRow>>

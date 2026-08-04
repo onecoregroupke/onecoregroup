@@ -141,6 +141,7 @@ export type {
   SchoolFeeStructureItemRow,
   SchoolEnrollmentRow,
   SchoolLedgerEntryRow,
+  SchoolAssessmentRow,
   SchoolLedgerEntryType,
   SchoolLedgerState,
   SchoolPaymentAllocationRow,

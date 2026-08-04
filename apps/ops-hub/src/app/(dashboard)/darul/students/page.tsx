@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { getDarulAdminData } from '@/lib/management'
 import { DarulQuickAdd } from '@/components/darul/DarulQuickAdd'
 
@@ -28,7 +29,7 @@ export default async function DarulStudentsPage() {
             <tbody className="divide-y divide-gray-50">
               {students.map((s) => (
                 <tr key={s.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 font-medium text-gray-800">{s.full_name}</td>
+                  <td className="px-4 py-3 font-medium text-gray-800"><Link href={`/darul/students/${s.id}`} className="hover:text-[#2a6a2a] hover:underline">{s.full_name}</Link></td>
                   <td className="px-4 py-3 text-gray-500">{s.guardian_id ? guardianById.get(s.guardian_id) ?? 'Guardian' : '—'}</td>
                   <td className="px-4 py-3 text-gray-500">{s.class_id ? classById.get(s.class_id) ?? '—' : '—'}</td>
                   <td className="px-4 py-3 text-gray-500">{s.halaqa_level || '—'}</td>
