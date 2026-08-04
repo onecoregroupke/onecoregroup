@@ -11,6 +11,7 @@ const LINKS = [
   ['Classes', '/rhythms/classes'],
   ['Admin tasks', '/rhythms/admin-tasks'],
   ['Fee follow-ups', '/rhythms/fee-follow-ups'],
+  ['Course billing', '/rhythms/billing'],
   ['Fees (finance)', '/finance/rhythms-college'],
   ['Reports', '/rhythms/reports'],
 ] as const

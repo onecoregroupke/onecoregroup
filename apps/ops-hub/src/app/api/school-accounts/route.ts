@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { requireApiSection } from '@/lib/api-auth'
-import { studentLedger, postLedgerEntry, reverseLedgerEntry, listChargeCategories, ensureChargeCategory, resolveSchoolBrandId } from '@/lib/schoolFinance'
+import { studentLedger, postLedgerEntry, reverseLedgerEntry, commitLedgerEntry, listChargeCategories, ensureChargeCategory, resolveSchoolBrandId } from '@/lib/schoolFinance'
 import { summariseStudentAccount } from '@/lib/schoolBalance'
 import type { School, SchoolLedgerEntryType } from '@ocg/db'
 
@@ -86,6 +86,11 @@ export async function POST(req: NextRequest) {
 
     if (action === 'reverse') {
       const entry = await reverseLedgerEntry(String(v.id ?? ''), String(v.reason ?? ''), allowed, actor)
+      return NextResponse.json({ ok: true, entry })
+    }
+
+    if (action === 'commit') {
+      const entry = await commitLedgerEntry(String(v.id ?? ''), allowed, actor)
       return NextResponse.json({ ok: true, entry })
     }
 

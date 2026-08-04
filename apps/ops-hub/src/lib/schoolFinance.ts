@@ -270,3 +270,41 @@ export async function reverseLedgerEntry(
   })
   return reversal
 }
+
+/**
+ * Commit a DRAFT ledger entry to posted (the explicit human step after an
+ * enrolment posts a draft charge schedule, or after an autosave draft). Only
+ * drafts can be posted; posted/reversed entries are immutable.
+ */
+export async function commitLedgerEntry(
+  id: string,
+  allowed: string[] | null,
+  actor: Pick<Actor, 'userId' | 'email' | 'name'>,
+): Promise<SchoolLedgerEntryRow> {
+  const supabase = db()
+  const { data: existing } = await supabase.from('school_ledger_entries').select('*').eq('id', id).maybeSingle()
+  if (!existing) throw new Error('Ledger entry not found')
+  const before = existing as SchoolLedgerEntryRow
+  if (before.state !== 'draft') throw new Error('Only draft entries can be posted')
+  assertBrandInScope(before.brand_id ?? null, allowed, 'post student account')
+  const { data, error } = await supabase
+    .from('school_ledger_entries')
+    .update({ state: 'posted', posted_by: actor.name || actor.email || '', posted_at: nowIso(), updated_at: nowIso() })
+    .eq('id', id)
+    .select('*')
+    .single()
+  if (error) throw new Error(error.message)
+  const row = data as SchoolLedgerEntryRow
+  await snapshotVersion({
+    record_type: 'school_ledger_entries', record_id: id, action: 'post',
+    snapshot: row as unknown as Record<string, unknown>,
+    previous_snapshot: before as unknown as Record<string, unknown>,
+    brand_id: row.brand_id, changed_by: actor.name || actor.email || '',
+  })
+  await auditEvent({
+    actor, action: 'school_ledger.post', entity_table: 'school_ledger_entries', entity_id: id,
+    before_data: before as unknown as Record<string, unknown>,
+    after_data: row as unknown as Record<string, unknown>,
+  })
+  return row
+}

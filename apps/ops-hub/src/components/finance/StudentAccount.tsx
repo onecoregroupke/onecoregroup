@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { Banknote, Download, Plus, RotateCcw } from 'lucide-react'
+import { Banknote, CheckCheck, Download, Plus, RotateCcw } from 'lucide-react'
 import { api } from '@/lib/apiClient'
 import type { SchoolChargeCategoryRow, SchoolLedgerEntryRow } from '@ocg/db'
 import type { StudentAccountSummary } from '@/lib/schoolBalance'
@@ -90,6 +90,36 @@ export function StudentAccount({ school, studentId, admissionNo = '', brandId, c
     void load()
   }
 
+  // Commit draft charges (e.g. an enrolment's proposed schedule) to posted. This
+  // is the explicit human step — draft entries never count toward the balance and
+  // are never auto-posted.
+  async function commit(id: string) {
+    if (!window.confirm('Post this draft charge to the ledger? It will count toward the balance.')) return
+    setBusy(true); setError('')
+    const { ok, data } = await api<{ error?: string }>('/api/school-accounts', {
+      method: 'POST', body: JSON.stringify({ action: 'commit', values: { school, id } }),
+    })
+    setBusy(false)
+    if (!ok) { setError(data?.error ?? 'Failed to post the draft.'); return }
+    void load()
+  }
+
+  async function commitAll() {
+    const drafts = entries.filter((e) => e.state === 'draft')
+    if (drafts.length === 0) return
+    if (!window.confirm(`Post ${drafts.length} draft charge(s) to the ledger?`)) return
+    setBusy(true); setError('')
+    for (const d of drafts) {
+      const { ok, data } = await api<{ error?: string }>('/api/school-accounts', {
+        method: 'POST', body: JSON.stringify({ action: 'commit', values: { school, id: d.id } }),
+      })
+      if (!ok) { setError(data?.error ?? 'Failed to post a draft.'); break }
+    }
+    setBusy(false); void load()
+  }
+
+  const draftCount = entries.filter((e) => e.state === 'draft').length
+
   // Running balance over POSTED entries only (reversed originals & drafts carry
   // the balance forward unchanged) — matches the derived summary + the export.
   const rows = useMemo(() => {
@@ -113,6 +143,11 @@ export function StudentAccount({ school, studentId, admissionNo = '', brandId, c
           <a href={statementHref} className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:border-ocg-gold hover:text-ocg-gold">
             <Download size={13} /> Statement
           </a>
+          {canEdit && draftCount > 0 && (
+            <button onClick={commitAll} disabled={busy} className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-60">
+              <CheckCheck size={13} /> Post {draftCount} draft{draftCount > 1 ? 's' : ''}
+            </button>
+          )}
           {canEdit && (
             <button onClick={() => setShowForm((v) => !v)} className="inline-flex items-center gap-1.5 rounded-lg bg-ocg-navy px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-800">
               <Plus size={13} /> Record charge / payment
@@ -206,9 +241,14 @@ export function StudentAccount({ school, studentId, admissionNo = '', brandId, c
                         <td className="px-3 py-2 text-right text-gray-700">{isCharge && s !== 0 ? money(Math.abs(s)) : ''}</td>
                         <td className="px-3 py-2 text-right text-emerald-700">{!isCharge && s !== 0 ? money(Math.abs(s)) : ''}</td>
                         <td className="px-3 py-2 text-right text-gray-700">{e.state === 'posted' ? money(running) : '—'}</td>
-                        {canEdit && <td className="px-3 py-2 text-right">{e.state === 'posted' && e.entry_type !== 'reversal' && (
-                          <button onClick={() => reverse(e.id)} disabled={busy} title="Reverse this entry" className="text-gray-300 hover:text-red-500"><RotateCcw size={14} /></button>
-                        )}</td>}
+                        {canEdit && <td className="px-3 py-2 text-right">
+                          {e.state === 'posted' && e.entry_type !== 'reversal' && (
+                            <button onClick={() => reverse(e.id)} disabled={busy} title="Reverse this entry" className="text-gray-300 hover:text-red-500"><RotateCcw size={14} /></button>
+                          )}
+                          {e.state === 'draft' && (
+                            <button onClick={() => commit(e.id)} disabled={busy} title="Post this draft charge" className="text-xs font-semibold text-emerald-600 hover:text-emerald-700">Post</button>
+                          )}
+                        </td>}
                       </tr>
                     ))}
                   </tbody>
