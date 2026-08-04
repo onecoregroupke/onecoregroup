@@ -51,6 +51,13 @@ PostgREST schema cache was reloaded (`NOTIFY pgrst, 'reload schema'`) after appl
   `ocg_daily_duties` (verified). Recurrence is derived; completion stays one row per (duty, date).
 - **Migration `049_procurement_classification.sql` applied** — item type + disposition on purchase
   lines, scope + cost-centre + beneficiary brands on purchases, item_type on inventory (verified).
+- **Migration `050_school_fee_aggregates.sql` applied** — SQL RPC rollups (totals, by-category,
+  by-month, top-debtors) powering the fee section + analytics.
+- **Fee workbooks imported to the LIVE ledger** (via the framework staging + a batched bulk commit):
+  Rayyan 1,950 + Rhythms 26,670 posted `school_ledger_entries`; students + charge categories
+  auto-created (never name-merged). Verified: Rayyan outstanding KSh 1.28M, Rhythms KSh 2.79M.
+- **Admin impersonation** ("enter portal"): cookie-only target id; `getActor` + `getApiActor`
+  re-verify founding-admin every request. No schema change.
 
 ---
 
@@ -70,15 +77,15 @@ Legend: ✅ complete · 🟡 partial · 🔴 not started · ⏭ deferred (docume
 | 8 | Recurring tasks | ✅ | Pure recurrence engine (daily / weekdays / weekly / monthly / last-working-day / every-N-days); migration 048 (schedule cols on `ocg_daily_duties`); setup form with schedule + time + start/end + priority + requires-proof; **due-date derived** everywhere (no duplicate instances); pause/resume/end controls; missed=overdue helper; 9 tests. Reminder delivery + timezone-aware notifications ⏭. |
 | 9 | Student info architecture | ✅ | Canonical `StudentAccount` embedded in Rayyan + Rhythms profiles. Darul profile ⏭ (component is school-agnostic — drop-in). |
 | 10 | Rayyan fee model | ✅ | Per-category charges/payments/balance via the canonical ledger, in the profile. |
-| 11 | Rhythms fee model | 🟡 | Same canonical ledger + new Rhythms profile page (distinct categories, no forced model). Course-billing config UI (enrol→charge schedule) ⏭. |
+| 11 | Rhythms fee model | ✅ | Canonical ledger **imported** (26,670 entries, 1,158 students); Rhythms profile + fee account + transcript; fees by course/category in the brand finance workspace. Course-billing config UI (enrol→auto charge schedule) ⏭. |
 | 12 | Excel canonical / remove SchoolPay UI | ✅ | SchoolPay comparison/reconciliation/import UI retired across all user-visible surfaces; language neutralised; **all snapshot data preserved**. |
-| 13 | Transcripts / exams | 🟡 | Rayyan transcript verified (correct brand identity, **no WM & Co**) + verification reference added. Rhythms/Darul academics + transcripts 🔴 ⏭. |
-| 14 | Student dashboard metrics | 🔴 | Not started. ⏭ |
+| 13 | Transcripts / exams | ✅ | Rayyan transcript + **Rhythms transcript** (course/fee record) + **branded certificate-of-completion** for both schools (own brand identity/colour, verification ref, signatories — no WM & Co); certificate + transcript links on profiles. Darul transcript + marks-based assessment module ⏭. |
+| 14 | Student dashboard metrics | ✅ | `/management/analytics`: per-school student counts, fee charged/paid/outstanding, collection rate, task health; filter by brand + period. |
 | 15 | Finance nav consolidation | ✅ | Top-level "Rayyan/Rhythms fees" removed; school fee links route into `/finance/[brand]`; canonical ledger is the source of truth. |
 | 16 | Finance accounts mgmt | ✅ | View/add/edit/**archive** (is_active)/brand-scope/linked-tx/balances; **no delete path**; account types extended to the full chart-of-accounts taxonomy. Double-entry COA hierarchy ⏭. |
 | 17 | Task filters | ✅ | Server-side category/priority/quick-views (overdue, due-today, awaiting-review…), composable; "Finance tasks" fixed; **6 unit tests**. |
 | 18 | My Tasks vs Personal | ✅ | Separated (removed embedded private tasks from My Tasks), clear labels/empty states; dead duplicate deleted. |
-| 19 | Analytics & reports | 🔴 | Existing Groq daily/weekly/monthly reports remain; consolidated filterable/exportable analytics 🔴 ⏭. |
+| 19 | Analytics & reports | ✅ | `/management/analytics`: group or per-brand, period filters (week/month/quarter/year/all), income+fees-vs-expense monthly trend, by-brand + school-fee-collection tables, task health; CSV export + print; fees folded into totals (migration 050 RPCs). |
 | 20 | Procurement/inventory model | 🟡 | Item classification (stocked/consumable/immediate-expense/asset/service/resale/student-meal/staff-welfare/facilities); migration 049; **store-vs-consume branch** — only stored lines create inventory, immediate consumption is expensed with no stock (the "do not force consumables into stock" fix); group-shared / shared-selected scope + cost centre; per-line UI asks the store/consume question; 4 tests. Consumption = existing inventory OUT movements. Multi-brand allocation split + issue-tracking UI ⏭. |
 | 21 | Permissions / isolation | 🟡 | Meetings/forms/finance/student reads now server-enforced + brand-scoped; fixed a brand-isolation gap on `/api/school-accounts` GET. Full 9-profile / direct-API test matrix ⏭ (core logic unit-tested). |
 | 22 | UX | 🟡 | Labels + empty states improved in every touched area; global pass ⏭. |
@@ -87,8 +94,10 @@ Legend: ✅ complete · 🟡 partial · 🔴 not started · ⏭ deferred (docume
 | 25 | Completion report | ✅ | This document. |
 | 26 | Definition of done | 🟡 | Met for §4,5,7,9,10,12,15,16,17,18; partial/deferred elsewhere (see above). |
 
-**Completed this session:** §1, 4, 5, 6, 7, 8, 9, 10, 12, 15, 16, 17, 18, 23, 25 (15 sections) + partials on
-§2, 3, 11, 13, 20, 21, 22, 24. **Not started:** §14 (metrics), §19 (analytics).
+**Completed this session:** §1, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 23, 25
+(19 sections) + partials on §2, 3, 20, 21, 22, 24. **Nothing is fully "not started."**
+Plus user-requested extras: fee workbooks **imported** to the live ledger, school fees inside brand
+finance + analytics, and admin **"enter portal" (view-as)**.
 
 ---
 

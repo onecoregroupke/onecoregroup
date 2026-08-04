@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { ArrowLeft, GraduationCap } from 'lucide-react'
+import { ArrowLeft, Award, FileText, GraduationCap } from 'lucide-react'
 import { db } from '@/lib/serverClient'
 import { requireActor } from '@/lib/server-auth'
 import { StudentAccount } from '@/components/finance/StudentAccount'
@@ -34,11 +34,17 @@ export default async function RhythmsStudentProfilePage({
       <Link href="/rhythms/students" className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800">
         <ArrowLeft size={15} /> All students
       </Link>
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-ocg-gold">Rhythms College · Student profile</p>
-        <h1 className="mt-1 flex items-center gap-2 text-2xl font-semibold text-gray-900"><GraduationCap size={22} /> {student.full_name}</h1>
-        <p className="mt-1 text-sm text-gray-500">{meta || '—'}</p>
-        {guardian && <p className="mt-0.5 text-xs text-gray-400">Guardian: {guardian.full_name}{guardian.phone ? ` · ${guardian.phone}` : ''}</p>}
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-ocg-gold">Rhythms College · Student profile</p>
+          <h1 className="mt-1 flex items-center gap-2 text-2xl font-semibold text-gray-900"><GraduationCap size={22} /> {student.full_name}</h1>
+          <p className="mt-1 text-sm text-gray-500">{meta || '—'}</p>
+          {guardian && <p className="mt-0.5 text-xs text-gray-400">Guardian: {guardian.full_name}{guardian.phone ? ` · ${guardian.phone}` : ''}</p>}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Link href={`/rhythms/students/${student.id}/transcript`} className="inline-flex items-center gap-2 rounded-lg bg-ocg-navy px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"><FileText size={15} /> Transcript</Link>
+          <Link href={`/rhythms/students/${student.id}/certificate`} className="inline-flex items-center gap-2 rounded-lg bg-[#9a2a2a] px-4 py-2 text-sm font-semibold text-white hover:opacity-90"><Award size={15} /> Certificate</Link>
+        </div>
       </div>
 
       {canFinanceView ? (

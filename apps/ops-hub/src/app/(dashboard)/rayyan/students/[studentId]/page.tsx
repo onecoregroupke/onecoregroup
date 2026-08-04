@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { ArrowLeft, FileText, GraduationCap, History, Medal } from 'lucide-react'
+import { ArrowLeft, Award, FileText, GraduationCap, History, Medal } from 'lucide-react'
 import { db } from '@/lib/serverClient'
 import { safeRows } from '@/lib/management'
 import { requireActor } from '@/lib/server-auth'
@@ -69,10 +69,16 @@ export default async function RayyanStudentProfilePage({
             {[student.class_level, student.enrollment_status, student.admission_number && `Adm ${student.admission_number}`, student.schoolpay_code && `Fee code ${student.schoolpay_code}`].filter(Boolean).join(' · ')}
           </p>
         </div>
-        <Link href={`/rayyan/students/${student.id}/transcript`}
-          className="inline-flex items-center gap-2 rounded-lg bg-ocg-navy px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800">
-          <FileText size={15} /> Transcript / report card
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <Link href={`/rayyan/students/${student.id}/transcript`}
+            className="inline-flex items-center gap-2 rounded-lg bg-ocg-navy px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800">
+            <FileText size={15} /> Transcript
+          </Link>
+          <Link href={`/rayyan/students/${student.id}/certificate`}
+            className="inline-flex items-center gap-2 rounded-lg bg-[#2c45a0] px-4 py-2 text-sm font-semibold text-white hover:opacity-90">
+            <Award size={15} /> Certificate
+          </Link>
+        </div>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
