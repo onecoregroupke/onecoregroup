@@ -8,6 +8,7 @@ import {
   Copy, Download, ExternalLink, MapPin, MessageSquare, NotebookPen, Plus, RefreshCw, Save, Sparkles, Users,
 } from 'lucide-react'
 import { api } from '@/lib/apiClient'
+import { useAutosave, autosaveLabel } from '@/lib/useAutosave'
 import type { OcgMeetingRow, OcgMeetingActionItemRow } from '@ocg/db'
 
 type Option = { id: string; label: string; email?: string }
@@ -40,7 +41,19 @@ export function MeetingWorkspace({
   const router = useRouter()
   const [notes, setNotes] = useState(meeting.notes)
   const [summary, setSummary] = useState(meeting.summary)
-  const [saving, setSaving] = useState(false)
+  // Shared meeting notes autosave (Part 10 rollout). Debounced background saves;
+  // never touches status/attendees/financial fields. Silent — no router.refresh
+  // mid-typing. A local draft is only ever RESTORED on explicit opt-in, so it can
+  // never silently clobber a collaborator's edits.
+  const autosave = useAutosave<{ notes: string; summary: string }>({
+    storageKey: `ocg-meeting-notes-${meeting.id}`,
+    onSave: async (v) => {
+      const { ok, data } = await api<{ error?: string }>('/api/meetings', {
+        method: 'POST', body: JSON.stringify({ action: 'update_meeting', id: meeting.id, values: v }),
+      })
+      if (!ok) throw new Error(data?.error ?? 'Could not save notes')
+    },
+  })
   const [prepLoading, setPrepLoading] = useState(false)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
@@ -67,12 +80,6 @@ export function MeetingWorkspace({
     if (okMessage) setMessage(okMessage)
     router.refresh()
     return true
-  }
-
-  async function saveMinutes() {
-    setSaving(true)
-    await call({ action: 'update_meeting', id: meeting.id, values: { notes, summary } }, 'Minutes saved.')
-    setSaving(false)
   }
 
   async function copyMinutes() {
@@ -244,17 +251,31 @@ export function MeetingWorkspace({
                 </a>
               </div>
             </div>
+            {canEdit && autosave.recovered && (autosave.recovered.notes !== notes || autosave.recovered.summary !== summary) && (
+              <div className="mb-2 flex items-center justify-between gap-3 rounded-lg bg-amber-50 p-2 text-xs text-amber-700">
+                <span>An unsaved local draft of these notes was found on this device.</span>
+                <span className="flex shrink-0 gap-3">
+                  <button onClick={() => { const r = autosave.recovered!; setNotes(r.notes); setSummary(r.summary); autosave.clearRecovered() }} className="font-semibold hover:underline">Restore</button>
+                  <button onClick={() => autosave.clearRecovered()} className="font-semibold hover:underline">Dismiss</button>
+                </span>
+              </div>
+            )}
             <label className="mb-1 block text-xs font-medium text-gray-500">Meeting notes</label>
-            <textarea className="input min-h-[180px]" value={notes} onChange={(e) => setNotes(e.target.value)} disabled={!canEdit}
+            <textarea className="input min-h-[180px]" value={notes} disabled={!canEdit}
+              onChange={(e) => { setNotes(e.target.value); if (canEdit) autosave.onChange({ notes: e.target.value, summary }) }}
+              onBlur={() => { if (canEdit) void autosave.flush() }}
               placeholder="What was discussed, decisions made, numbers shared…" />
             <label className="mb-1 mt-3 block text-xs font-medium text-gray-500">Executive summary</label>
-            <textarea className="input min-h-[70px]" value={summary} onChange={(e) => setSummary(e.target.value)} disabled={!canEdit}
+            <textarea className="input min-h-[70px]" value={summary} disabled={!canEdit}
+              onChange={(e) => { setSummary(e.target.value); if (canEdit) autosave.onChange({ notes, summary: e.target.value }) }}
+              onBlur={() => { if (canEdit) void autosave.flush() }}
               placeholder="2–3 sentence wrap-up (feeds the next meeting's prep brief)" />
             {canEdit && (
-              <div className="mt-3 flex justify-end">
-                <button onClick={saveMinutes} disabled={saving}
+              <div className="mt-3 flex items-center justify-end gap-3">
+                <AutosaveStatusText status={autosave.status} />
+                <button onClick={() => void autosave.flush()} disabled={autosave.status === 'saving'}
                   className="inline-flex items-center gap-2 rounded-lg bg-ocg-navy px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60">
-                  <Save size={14} /> {saving ? 'Saving…' : 'Save minutes'}
+                  <Save size={14} /> Save now
                 </button>
               </div>
             )}
@@ -372,4 +393,10 @@ function MiniBtn({ children, onClick, tone }: { children: React.ReactNode; onCli
       {children}
     </button>
   )
+}
+
+function AutosaveStatusText({ status }: { status: import('@/lib/useAutosave').AutosaveStatus }) {
+  const { text, tone } = autosaveLabel(status)
+  if (!text) return null
+  return <span className={`text-xs ${tone}`} aria-live="polite">{text}</span>
 }
