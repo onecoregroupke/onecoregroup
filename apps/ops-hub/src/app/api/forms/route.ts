@@ -3,8 +3,12 @@ import { getApiActor } from '@/lib/api-auth'
 import {
   createFormTemplate,
   getFormTemplate,
+  getSubmission,
   listFormTemplates,
   listSubmissions,
+  reviewSubmission,
+  saveDraft,
+  submitDraft,
   submitForm,
   templateInScope,
   updateFormTemplate,
@@ -21,9 +25,15 @@ import type { OcgFormSubmissionRow, OcgFormTemplateRow } from '@ocg/db'
  *
  * Access model (server-enforced, brand-scoped):
  *   forms.view  → open Forms + fill (their brands' forms + group-wide)
- *   forms.edit  → build / edit / archive templates (within brand scope)
+ *   forms.edit  → build / edit / publish / archive templates (within brand scope)
  *   forms_responses.view → see everyone's submissions (not just their own)
  *   forms_responses.edit → export submissions
+ *   forms_approvals.edit → review / approve / reject / send back for correction
+ *
+ * A respondent holding only forms.view can create and edit their OWN draft and
+ * submit it. They cannot add, rename or remove a field, change validation, or
+ * touch anyone else's entry — those paths all require forms.edit and are
+ * enforced here, not merely hidden in the UI.
  */
 export async function GET(req: NextRequest) {
   const actor = await getApiActor(req)
@@ -35,6 +45,7 @@ export async function GET(req: NextRequest) {
   const canManage = actor.can('forms', 'edit')
   const canReviewAll = actor.can('forms_responses', 'view')
   const canExport = actor.can('forms_responses', 'edit')
+  const canApprove = actor.can('forms_approvals', 'edit')
   const templateId = url.searchParams.get('template') ?? undefined
 
   // CSV export of one form's submissions — gated on forms_responses.edit.
@@ -62,6 +73,7 @@ export async function GET(req: NextRequest) {
     canManage,
     canReviewAll,
     canExport,
+    canApprove,
   })
 }
 
@@ -91,6 +103,68 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, submission }, { status: 201 })
     }
 
+    // ── Draft autosave (respondent, own draft only) ──
+    if (action === 'save-draft') {
+      if (!actor.can('forms', 'view')) return NextResponse.json({ ok: false, error: 'forbidden' }, { status: 403 })
+      const template = await getFormTemplate(String(body?.template_id ?? ''))
+      if (!template) return NextResponse.json({ ok: false, error: 'Form not found' }, { status: 404 })
+      if (!templateInScope(template.brand_id, brandIds)) {
+        return NextResponse.json({ ok: false, error: 'forbidden' }, { status: 403 })
+      }
+      const submission = await saveDraft({
+        template_id: template.id,
+        submission_id: (body?.submission_id as string) || undefined,
+        values: body?.values ?? {},
+        submitted_by: actor.email,
+        submitted_by_name: actor.name,
+        submission_date: (body?.submission_date as string) || undefined,
+        notes: (body?.notes as string) ?? undefined,
+      })
+      return NextResponse.json({ ok: true, submission })
+    }
+
+    // ── Promote own draft (or corrected entry) to a submission ──
+    if (action === 'submit-draft') {
+      if (!actor.can('forms', 'view')) return NextResponse.json({ ok: false, error: 'forbidden' }, { status: 403 })
+      const existing = await getSubmission(String(body?.submission_id ?? ''))
+      if (!existing) return NextResponse.json({ ok: false, error: 'Entry not found' }, { status: 404 })
+      if (!templateInScope(existing.brand_id, brandIds)) {
+        return NextResponse.json({ ok: false, error: 'forbidden' }, { status: 403 })
+      }
+      const submission = await submitDraft({
+        submission_id: existing.id,
+        actor_email: actor.email,
+        values: body?.values ?? undefined,
+        notes: (body?.notes as string) ?? undefined,
+        signature_name: (body?.signature_name as string) ?? undefined,
+      })
+      return NextResponse.json({ ok: true, submission })
+    }
+
+    // ── Reviewer decision — never the submitter's own entry (enforced in lib) ──
+    if (action === 'review') {
+      if (!actor.can('forms_approvals', 'edit')) {
+        return NextResponse.json({ ok: false, error: 'forbidden' }, { status: 403 })
+      }
+      const existing = await getSubmission(String(body?.submission_id ?? ''))
+      if (!existing) return NextResponse.json({ ok: false, error: 'Entry not found' }, { status: 404 })
+      if (!templateInScope(existing.brand_id, actor.allowedBrandIds('forms_approvals'))) {
+        return NextResponse.json({ ok: false, error: 'forbidden' }, { status: 403 })
+      }
+      const decision = String(body?.decision ?? '')
+      if (!['approve', 'reject', 'request_correction'].includes(decision)) {
+        return NextResponse.json({ ok: false, error: 'Unknown decision' }, { status: 400 })
+      }
+      const submission = await reviewSubmission({
+        submission_id: existing.id,
+        actor_email: actor.email,
+        actor_name: actor.name,
+        decision: decision as 'approve' | 'reject' | 'request_correction',
+        comment: (body?.comment as string) ?? '',
+      })
+      return NextResponse.json({ ok: true, submission })
+    }
+
     if (action === 'create-template') {
       if (!actor.can('forms', 'edit')) return NextResponse.json({ ok: false, error: 'forbidden' }, { status: 403 })
       const v = body?.values ?? {}
@@ -108,6 +182,12 @@ export async function POST(req: NextRequest) {
         frequency: (v.frequency as string) || 'daily',
         fields: v.fields,
         created_by: actor.email,
+        state: v.state === 'draft' ? 'draft' : 'published',
+        category: (v.category as string) ?? '',
+        reference_prefix: (v.reference_prefix as string) ?? '',
+        requires_approval: v.requires_approval === true,
+        allow_self_correction: v.allow_self_correction === true,
+        requires_signature: v.requires_signature === true,
       })
       return NextResponse.json({ ok: true, template }, { status: 201 })
     }
@@ -138,7 +218,7 @@ export async function PATCH(req: NextRequest) {
         return NextResponse.json({ ok: false, error: 'That brand is outside your scope.' }, { status: 403 })
       }
     }
-    const template = await updateFormTemplate(existing.id, values)
+    const template = await updateFormTemplate(existing.id, values, actor.email)
     return NextResponse.json({ ok: true, template })
   } catch (e) {
     return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 400 })

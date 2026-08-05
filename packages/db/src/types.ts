@@ -4,7 +4,7 @@ export type SectionKey =
   | 'glitz' | 'npt' | 'reports' | 'brands' | 'users' | 'marketing'
   | 'ops' | 'ops_agents' | 'management' | 'finance' | 'npt_service' | 'rayyan_admin' | 'rhythms_admin'
   | 'darul_admin' | 'nuuranest_admin' | 'glitz_admin' | 'personal' | 'all_tasks'
-  | 'meetings' | 'inventory' | 'procurement' | 'forms' | 'forms_responses'
+  | 'meetings' | 'inventory' | 'procurement' | 'forms' | 'forms_responses' | 'forms_approvals'
 
 export type AccessLevel = 'none' | 'view' | 'edit'
 
@@ -1226,6 +1226,14 @@ export interface NptPianoRow {
   tags: string[]
   created_at: string
   updated_at: string
+  // ── 053: generalised beyond pianos (keyboards, saxophones, guitars, …) ──
+  instrument_category: string
+  instrument_type_other: string
+  colour_finish: string
+  /** Where the instrument physically is now; maintained by npt_movements. */
+  current_location: string
+  current_status: string
+  current_repair_case_id: string | null
 }
 type NptPianoInsert = Partial<NptPianoRow>
 
@@ -1362,6 +1370,262 @@ export interface NptTimelineEventRow {
 type NptTimelineEventInsert = Partial<NptTimelineEventRow>
 
 // ─── NPT communications log (migration 041) ──────────────────────────────────
+// ─── NPT intake / repair / workshop / movement (053) ────────────────────────
+
+/** Instrument arriving AT the workshop (npt_service_jobs is a visit going OUT). */
+export interface NptIntakeRow {
+  id: string
+  reference: string | null
+  brand_id: string | null
+  date_received: string
+  time_received: string
+  received_by: string
+  received_by_email: string
+  brought_in_by: string
+  reception_location: string
+  intake_channel: string
+  ownership_type: string
+  customer_id: string | null
+  customer_name: string
+  customer_phone: string
+  customer_email: string
+  customer_location: string
+  alternative_contact: string
+  preferred_channel: string
+  institution_name: string
+  institution_contact_person: string
+  institution_phone: string
+  institution_email: string
+  institution_location: string
+  status: string
+  notes: string
+  acknowledged_at: string | null
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+type NptIntakeInsert = Partial<NptIntakeRow>
+
+export interface NptIntakeItemRow {
+  id: string
+  intake_id: string
+  piano_id: string | null
+  instrument_category: string
+  instrument_type_other: string
+  quantity: number
+  brand_make: string
+  model: string
+  serial_number: string
+  colour_finish: string
+  /** One structured list — the pad prints the column twice, which is a print artefact. */
+  accessories: string[]
+  accessories_notes: string
+  condition_at_receipt: string
+  reported_issue: string
+  work_requested: string
+  urgency: string
+  sort_order: number
+  created_at: string
+}
+type NptIntakeItemInsert = Pick<NptIntakeItemRow, 'intake_id'> & Partial<NptIntakeItemRow>
+
+export interface NptRepairCaseRow {
+  id: string
+  reference: string | null
+  intake_id: string | null
+  intake_item_id: string | null
+  piano_id: string | null
+  customer_id: string | null
+  service_job_id: string | null
+  ops_task_id: string | null
+  status: string
+  priority: string
+  assigned_technician_id: string | null
+  consulting_guide_id: string | null
+  reported_issue: string
+  assessment_summary: string
+  work_completed: string
+  parts_used: string
+  quoted_amount_ksh: number | null
+  approved_amount_ksh: number | null
+  current_location: string
+  opened_on: string
+  expected_completion: string | null
+  closed_at: string | null
+  notes: string
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+type NptRepairCaseInsert = Partial<NptRepairCaseRow>
+
+export interface NptRepairCaseStatusHistoryRow {
+  id: string
+  repair_case_id: string
+  previous_status: string
+  new_status: string
+  changed_by: string
+  changed_by_name: string
+  comment: string
+  created_at: string
+}
+type NptRepairCaseStatusHistoryInsert = Pick<NptRepairCaseStatusHistoryRow, 'repair_case_id' | 'new_status'> &
+  Partial<NptRepairCaseStatusHistoryRow>
+
+export interface NptRepairActivityRow {
+  id: string
+  repair_case_id: string
+  piano_id: string | null
+  activity_date: string
+  technician_id: string | null
+  work_performed: string
+  parts_used: string
+  hours_spent: number | null
+  progress_status: string
+  challenges: string
+  next_action: string
+  expected_completion: string | null
+  entered_by: string
+  entered_by_name: string
+  reviewed_by: string
+  reviewed_at: string | null
+  created_at: string
+}
+type NptRepairActivityInsert = Pick<NptRepairActivityRow, 'repair_case_id'> & Partial<NptRepairActivityRow>
+
+export interface NptWorkshopPlanRow {
+  id: string
+  brand_id: string | null
+  plan_date: string
+  workshop_clean: string
+  workshop_comment: string
+  showroom_clean: string
+  showroom_comment: string
+  manager_comment: string
+  manager_ack_by: string
+  manager_ack_at: string | null
+  director_comment: string
+  director_ack_by: string
+  director_ack_at: string | null
+  status: string
+  completed_at: string | null
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+type NptWorkshopPlanInsert = Partial<NptWorkshopPlanRow>
+
+export interface NptWorkshopPlanRowRow {
+  id: string
+  plan_id: string
+  /** allocation | review | challenge — the paper form's three tables. */
+  section: string
+  repair_case_id: string | null
+  piano_id: string | null
+  instrument_label: string
+  technician_id: string | null
+  consulting_guide_id: string | null
+  target_plan: string
+  priority: string
+  expected_result: string
+  due_at: string
+  actual_outcome: string
+  outcome_status: string
+  comment: string
+  challenge: string
+  required_intervention: string
+  responsible_person_id: string | null
+  resolution_target: string | null
+  sort_order: number
+  created_at: string
+}
+type NptWorkshopPlanRowInsert = Pick<NptWorkshopPlanRowRow, 'plan_id'> & Partial<NptWorkshopPlanRowRow>
+
+export interface NptMovementRow {
+  id: string
+  reference: string | null
+  brand_id: string | null
+  movement_type: string
+  customer_id: string | null
+  customer_label: string
+  piano_id: string | null
+  repair_case_id: string | null
+  instrument_category: string
+  instrument_label: string
+  serial_number: string
+  quantity: number
+  origin: string
+  destination: string
+  scheduled_at: string | null
+  departed_at: string | null
+  arrived_at: string | null
+  crew: string[]
+  crew_member_ids: string[]
+  vehicle: string
+  transport_provider: string
+  origin_contact: string
+  destination_contact: string
+  fee_ksh: number | null
+  payment_status: string
+  payment_reference: string
+  condition_before: string
+  condition_after: string
+  accessories_moved: string[]
+  special_handling: string
+  customer_ack_name: string
+  customer_ack_at: string | null
+  staff_ack_name: string
+  staff_ack_at: string | null
+  status: string
+  incident_note: string
+  notes: string
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+type NptMovementInsert = Partial<NptMovementRow>
+
+/**
+ * NOTE: no photograph of the Daily Class Logbook was supplied; these fields come
+ * from the written brief only and are unverified against the physical book.
+ */
+export interface NptTrainingSessionRow {
+  id: string
+  reference: string | null
+  brand_id: string | null
+  session_date: string
+  instructor_id: string | null
+  instructor_name: string
+  class_group: string
+  training_location: string
+  objective: string
+  topic: string
+  subtopics: string
+  practical_work: string
+  learning_review: string
+  questions_asked: string
+  instructor_signed_by: string
+  instructor_signed_at: string | null
+  manager_reviewed_by: string
+  manager_reviewed_at: string | null
+  status: string
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+type NptTrainingSessionInsert = Partial<NptTrainingSessionRow>
+
+export interface NptTrainingAttendanceRow {
+  id: string
+  session_id: string
+  trainee_id: string | null
+  trainee_name: string
+  present: boolean
+  absence_reason: string
+  created_at: string
+}
+type NptTrainingAttendanceInsert = Pick<NptTrainingAttendanceRow, 'session_id'> & Partial<NptTrainingAttendanceRow>
+
 export interface NptCommLogRow {
   id: string
   appointment_id: string | null
@@ -2002,6 +2266,13 @@ export interface InventoryMovementRow {
   recorded_by: string
   notes: string
   created_at: string
+  // ── 054: the document that caused this movement ──
+  // receipt_item_id / issue_item_id carry partial UNIQUE indexes, so one
+  // document line can never post to stock twice.
+  goods_receipt_id: string | null
+  receipt_item_id: string | null
+  goods_issue_id: string | null
+  issue_item_id: string | null
 }
 type InventoryMovementInsert = Pick<InventoryMovementRow, 'item_id'> & Partial<InventoryMovementRow>
 
@@ -2022,7 +2293,233 @@ export interface ProcurementVendorRow {
   blacklisted_at: string | null
   created_at: string
   updated_at: string
+  // ── 054: full supplier profile (SUPPLIER GENERAL INFORMATION FORM) ──
+  legal_name: string
+  trading_name: string
+  company_type: string
+  registration_number: string
+  tax_pin: string
+  vat_number: string
+  postal_address: string
+  physical_location: string
+  fax: string
+  website: string
+  nature_of_business: string
+  year_commenced_trading: string
+  quality_certification: string
+  quality_cert_year: string
+  directors: { name: string; role?: string; id_number?: string }[]
+  shareholders: { name: string; percent_held?: number }[]
+  turnover_history: { year: string; turnover_ksh?: number }[]
+  trade_references: { name: string; address?: string; contact?: string }[]
+  major_customers: string
+  management_md: string
+  management_finance: string
+  management_sales: string
+  other_information: string
+  /** Restricted — never serialise to a caller without procurement:edit. */
+  bank_name: string
+  bank_branch: string
+  bank_account_name: string
+  bank_account_number: string
+  bank_postal_address: string
+  status: string
+  signed_by: string
+  signed_position: string
+  signed_date: string | null
+  reviewed_by: string
+  reviewed_at: string | null
 }
+
+// ─── Procurement chain (migration 054) ───────────────────────────────────────
+
+export interface ProcurementCreditApplicationRow {
+  id: string
+  reference: string | null
+  vendor_id: string | null
+  brand_id: string | null
+  full_business_name: string
+  company_type: string
+  postal_address: string
+  physical_address: string
+  telephone: string
+  fax: string
+  chief_executive: string
+  nature_of_business: string
+  tax_pin: string
+  vat_number: string
+  bank_name: string
+  bank_branch: string
+  bank_postal_address: string
+  trade_references: { name: string; address?: string }[]
+  credit_limit_requested_ksh: number | null
+  credit_terms_requested: string
+  status: string
+  decision_note: string
+  approved_limit_ksh: number | null
+  approved_terms_days: number | null
+  decided_by: string
+  decided_at: string | null
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+type ProcurementCreditApplicationInsert = Partial<ProcurementCreditApplicationRow>
+
+export interface ProcurementRequisitionRow {
+  id: string
+  reference: string | null
+  brand_id: string
+  scope: string
+  shared_brand_ids: string[]
+  department: string
+  requested_by: string
+  requested_by_name: string
+  date_requested: string
+  required_by: string | null
+  purpose: string
+  linked_task_id: string | null
+  linked_repair_case_id: string | null
+  status: string
+  prepared_by: string
+  /** Never equal to requested_by unless self-approval was explicitly granted. */
+  approved_by: string
+  approved_by_name: string
+  approved_at: string | null
+  approval_comment: string
+  notes: string
+  created_at: string
+  updated_at: string
+}
+type ProcurementRequisitionInsert = Pick<ProcurementRequisitionRow, 'brand_id'> & Partial<ProcurementRequisitionRow>
+
+export interface ProcurementRequisitionItemRow {
+  id: string
+  requisition_id: string
+  inventory_item_id: string | null
+  description: string
+  unit: string
+  quantity_requested: number
+  stock_at_request: number | null
+  quantity_approved: number
+  quantity_issued: number
+  notes: string
+  sort_order: number
+  created_at: string
+}
+type ProcurementRequisitionItemInsert = Pick<ProcurementRequisitionItemRow, 'requisition_id'> &
+  Partial<ProcurementRequisitionItemRow>
+
+export interface ProcurementGoodsReceiptRow {
+  id: string
+  reference: string | null
+  brand_id: string
+  scope: string
+  shared_brand_ids: string[]
+  purchase_id: string | null
+  requisition_id: string | null
+  vendor_id: string | null
+  received_date: string
+  received_time: string
+  received_by: string
+  received_by_email: string
+  delivery_person: string
+  delivery_note_number: string
+  lpo_number: string
+  invoice_number: string
+  vehicle_number: string
+  receiving_location: string
+  stock_card_number: string
+  amount_in_words: string
+  variance_notes: string
+  damage_notes: string
+  remarks: string
+  checked_by: string
+  authorised_by: string
+  entered_by: string
+  supplier_ack_name: string
+  receiver_ack_name: string
+  status: string
+  posted_at: string | null
+  posted_by: string
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+type ProcurementGoodsReceiptInsert = Pick<ProcurementGoodsReceiptRow, 'brand_id'> &
+  Partial<ProcurementGoodsReceiptRow>
+
+export interface ProcurementGoodsReceiptItemRow {
+  id: string
+  receipt_id: string
+  purchase_item_id: string | null
+  inventory_item_id: string | null
+  description: string
+  unit: string
+  quantity_ordered: number
+  quantity_delivered: number
+  /** Only this quantity ever reaches inventory. */
+  quantity_accepted: number
+  quantity_rejected: number
+  unit_cost_ksh: number
+  batch_number: string
+  expiry_date: string | null
+  condition: string
+  rejection_reason: string
+  remarks: string
+  disposition: string
+  sort_order: number
+  created_at: string
+}
+type ProcurementGoodsReceiptItemInsert = Pick<ProcurementGoodsReceiptItemRow, 'receipt_id'> &
+  Partial<ProcurementGoodsReceiptItemRow>
+
+export interface ProcurementGoodsIssueRow {
+  id: string
+  reference: string | null
+  /** issue = GIN (goods leave to a recipient) · transfer = GTN (store to store). */
+  kind: string
+  brand_id: string
+  requisition_id: string | null
+  issue_date: string
+  issued_to_type: string
+  issued_to_member_id: string | null
+  issued_to_label: string
+  transfer_to_brand_id: string | null
+  transfer_to_location: string
+  store_location: string
+  issued_by: string
+  issued_by_email: string
+  received_by: string
+  receiver_ack_at: string | null
+  variance_notes: string
+  remarks: string
+  status: string
+  posted_at: string | null
+  posted_by: string
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+type ProcurementGoodsIssueInsert = Pick<ProcurementGoodsIssueRow, 'brand_id'> & Partial<ProcurementGoodsIssueRow>
+
+export interface ProcurementGoodsIssueItemRow {
+  id: string
+  issue_id: string
+  requisition_item_id: string | null
+  inventory_item_id: string | null
+  description: string
+  unit: string
+  quantity_approved: number
+  quantity_issued: number
+  batch_number: string
+  store_location: string
+  remarks: string
+  sort_order: number
+  created_at: string
+}
+type ProcurementGoodsIssueItemInsert = Pick<ProcurementGoodsIssueItemRow, 'issue_id'> &
+  Partial<ProcurementGoodsIssueItemRow>
 type ProcurementVendorInsert = Pick<ProcurementVendorRow, 'name'> & Partial<ProcurementVendorRow>
 
 export interface ProcurementPurchaseRow {
@@ -2184,6 +2681,9 @@ export interface OcgFormFieldDef {
   placeholder?: string
 }
 
+/** Publication state of a form template. Only `published` forms can be filled. */
+export type OcgFormTemplateState = 'draft' | 'published' | 'archived'
+
 export interface OcgFormTemplateRow {
   id: string
   brand_id: string | null
@@ -2197,8 +2697,46 @@ export interface OcgFormTemplateRow {
   created_by: string
   created_at: string
   updated_at: string
+  // ── 052 lifecycle ──
+  state: OcgFormTemplateState
+  version: number
+  category: string
+  reference_prefix: string
+  requires_approval: boolean
+  allow_self_correction: boolean
+  requires_signature: boolean
+  linked_entity_table: string
+  published_at: string | null
+  published_by: string
+  updated_by: string
 }
 type OcgFormTemplateInsert = Pick<OcgFormTemplateRow, 'name'> & Partial<OcgFormTemplateRow>
+
+export interface OcgFormTemplateVersionRow {
+  id: string
+  template_id: string
+  version: number
+  name: string
+  description: string
+  fields: OcgFormFieldDef[]
+  published_by: string
+  created_at: string
+}
+type OcgFormTemplateVersionInsert = Pick<OcgFormTemplateVersionRow, 'template_id' | 'version'> &
+  Partial<OcgFormTemplateVersionRow>
+
+/**
+ * Submission lifecycle. `draft` is the only editable state for a respondent;
+ * `correction_requested` re-opens editing for the original submitter without
+ * losing the submitted history.
+ */
+export type OcgFormSubmissionStatus =
+  | 'draft'
+  | 'submitted'
+  | 'under_review'
+  | 'approved'
+  | 'rejected'
+  | 'correction_requested'
 
 export interface OcgFormSubmissionRow {
   id: string
@@ -2211,8 +2749,81 @@ export interface OcgFormSubmissionRow {
   notes: string
   created_at: string
   updated_at: string
+  // ── 052 lifecycle ──
+  status: OcgFormSubmissionStatus
+  template_version: number
+  reference: string | null
+  submitted_at: string | null
+  autosaved_at: string | null
+  reviewed_by: string
+  reviewed_at: string | null
+  review_comment: string
+  correction_note: string
+  signature_name: string
+  signed_at: string | null
+  linked_entity_table: string
+  linked_entity_id: string
 }
 type OcgFormSubmissionInsert = Pick<OcgFormSubmissionRow, 'template_id'> & Partial<OcgFormSubmissionRow>
+
+/** How restricted an attachment is, beyond ordinary module access. */
+export type AttachmentConfidentiality = 'normal' | 'restricted' | 'confidential'
+
+/**
+ * One attachment table for every module (§28) — form submissions, NPT intakes,
+ * repair activity, movements, goods receipts, issue notes, requisitions,
+ * inspections, supplier and employee documents. Identified by entity_table +
+ * entity_id. Files live in the private `ops-attachments` bucket; only the path
+ * is stored, never a public URL.
+ */
+export interface OcgRecordAttachmentRow {
+  id: string
+  entity_table: string
+  entity_id: string
+  domain: string
+  brand_id: string | null
+  storage_path: string
+  file_name: string
+  mime_type: string
+  size_bytes: number
+  caption: string
+  confidentiality: AttachmentConfidentiality
+  uploaded_by: string
+  created_at: string
+}
+type OcgRecordAttachmentInsert = Pick<OcgRecordAttachmentRow, 'entity_table' | 'entity_id' | 'storage_path'> &
+  Partial<OcgRecordAttachmentRow>
+
+/**
+ * Legal identity printed on generated documents, kept separate from the
+ * marketing `brands` row. Iceland Geyser Ltd is the company behind the
+ * `glitz-n-glim` brand, so printed identity cannot be derived from brands.name.
+ * `document_scope` is 'default' plus optional per-document overrides.
+ */
+export interface OcgBrandPrintIdentityRow {
+  id: string
+  brand_id: string
+  document_scope: string
+  legal_name: string
+  trading_name: string
+  postal_address: string
+  physical_address: string
+  email: string
+  phone: string
+  website: string
+  tax_pin: string
+  vat_number: string
+  logo_url: string
+  accent_hex: string
+  footer_note: string
+  extra_lines: string[]
+  is_active: boolean
+  updated_by: string
+  created_at: string
+  updated_at: string
+}
+type OcgBrandPrintIdentityInsert = Pick<OcgBrandPrintIdentityRow, 'brand_id' | 'legal_name'> &
+  Partial<OcgBrandPrintIdentityRow>
 
 export interface OpsAttendanceRecordRow {
   id: string
@@ -2652,12 +3263,22 @@ export interface Database {
       ocg_notifications: DbTable<OcgNotificationRow, OcgNotificationInsert, Partial<OcgNotificationRow>>
       ocg_form_templates: DbTable<OcgFormTemplateRow, OcgFormTemplateInsert, Partial<OcgFormTemplateRow>>
       ocg_form_submissions: DbTable<OcgFormSubmissionRow, OcgFormSubmissionInsert, Partial<OcgFormSubmissionRow>>
+      ocg_form_template_versions: DbTable<OcgFormTemplateVersionRow, OcgFormTemplateVersionInsert, Partial<OcgFormTemplateVersionRow>>
+      ocg_record_attachments: DbTable<OcgRecordAttachmentRow, OcgRecordAttachmentInsert, Partial<OcgRecordAttachmentRow>>
+      ocg_brand_print_identities: DbTable<OcgBrandPrintIdentityRow, OcgBrandPrintIdentityInsert, Partial<OcgBrandPrintIdentityRow>>
       ops_attendance_records: DbTable<OpsAttendanceRecordRow, OpsAttendanceRecordInsert, Partial<OpsAttendanceRecordRow>>
       inventory_items: DbTable<InventoryItemRow, InventoryItemInsert, Partial<InventoryItemRow>>
       inventory_movements: DbTable<InventoryMovementRow, InventoryMovementInsert, Partial<InventoryMovementRow>>
       procurement_vendors: DbTable<ProcurementVendorRow, ProcurementVendorInsert, Partial<ProcurementVendorRow>>
       procurement_purchases: DbTable<ProcurementPurchaseRow, ProcurementPurchaseInsert, Partial<ProcurementPurchaseRow>>
       procurement_purchase_items: DbTable<ProcurementPurchaseItemRow, ProcurementPurchaseItemInsert, Partial<ProcurementPurchaseItemRow>>
+      procurement_credit_applications: DbTable<ProcurementCreditApplicationRow, ProcurementCreditApplicationInsert, Partial<ProcurementCreditApplicationRow>>
+      procurement_requisitions: DbTable<ProcurementRequisitionRow, ProcurementRequisitionInsert, Partial<ProcurementRequisitionRow>>
+      procurement_requisition_items: DbTable<ProcurementRequisitionItemRow, ProcurementRequisitionItemInsert, Partial<ProcurementRequisitionItemRow>>
+      procurement_goods_receipts: DbTable<ProcurementGoodsReceiptRow, ProcurementGoodsReceiptInsert, Partial<ProcurementGoodsReceiptRow>>
+      procurement_goods_receipt_items: DbTable<ProcurementGoodsReceiptItemRow, ProcurementGoodsReceiptItemInsert, Partial<ProcurementGoodsReceiptItemRow>>
+      procurement_goods_issues: DbTable<ProcurementGoodsIssueRow, ProcurementGoodsIssueInsert, Partial<ProcurementGoodsIssueRow>>
+      procurement_goods_issue_items: DbTable<ProcurementGoodsIssueItemRow, ProcurementGoodsIssueItemInsert, Partial<ProcurementGoodsIssueItemRow>>
       finance_voteheads: DbTable<FinanceVoteheadRow, FinanceVoteheadInsert, Partial<FinanceVoteheadRow>>
       finance_accounts: DbTable<FinanceAccountRow, FinanceAccountInsert, Partial<FinanceAccountRow>>
       finance_transactions: DbTable<FinanceTransactionRow, FinanceTransactionInsert, Partial<FinanceTransactionRow>>
@@ -2678,6 +3299,16 @@ export interface Database {
       npt_piano_measurements: DbTable<NptPianoMeasurementRow, NptPianoMeasurementInsert, Partial<NptPianoMeasurementRow>>
       npt_timeline_events: DbTable<NptTimelineEventRow, NptTimelineEventInsert, Partial<NptTimelineEventRow>>
       npt_comm_logs: DbTable<NptCommLogRow, NptCommLogInsert, Partial<NptCommLogRow>>
+      npt_intakes: DbTable<NptIntakeRow, NptIntakeInsert, Partial<NptIntakeRow>>
+      npt_intake_items: DbTable<NptIntakeItemRow, NptIntakeItemInsert, Partial<NptIntakeItemRow>>
+      npt_repair_cases: DbTable<NptRepairCaseRow, NptRepairCaseInsert, Partial<NptRepairCaseRow>>
+      npt_repair_case_status_history: DbTable<NptRepairCaseStatusHistoryRow, NptRepairCaseStatusHistoryInsert, Partial<NptRepairCaseStatusHistoryRow>>
+      npt_repair_activities: DbTable<NptRepairActivityRow, NptRepairActivityInsert, Partial<NptRepairActivityRow>>
+      npt_workshop_plans: DbTable<NptWorkshopPlanRow, NptWorkshopPlanInsert, Partial<NptWorkshopPlanRow>>
+      npt_workshop_plan_rows: DbTable<NptWorkshopPlanRowRow, NptWorkshopPlanRowInsert, Partial<NptWorkshopPlanRowRow>>
+      npt_movements: DbTable<NptMovementRow, NptMovementInsert, Partial<NptMovementRow>>
+      npt_training_sessions: DbTable<NptTrainingSessionRow, NptTrainingSessionInsert, Partial<NptTrainingSessionRow>>
+      npt_training_attendance: DbTable<NptTrainingAttendanceRow, NptTrainingAttendanceInsert, Partial<NptTrainingAttendanceRow>>
       rayyan_guardians: DbTable<RayyanGuardianRow, RayyanGuardianInsert, Partial<RayyanGuardianRow>>
       rayyan_students: DbTable<RayyanStudentRow, RayyanStudentInsert, Partial<RayyanStudentRow>>
       rayyan_admissions: DbTable<RayyanAdmissionRow, RayyanAdmissionInsert, Partial<RayyanAdmissionRow>>

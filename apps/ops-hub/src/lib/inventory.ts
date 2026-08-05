@@ -101,6 +101,13 @@ export interface RecordStockInput {
   purchase_id?: string | null
   notes?: string
   recorded_by: string
+  // Source document (054). The *_item_id columns carry partial UNIQUE indexes,
+  // so a re-posted goods receipt or issue note raises instead of double-moving
+  // stock — the database, not application code, is the last line of defence.
+  goods_receipt_id?: string | null
+  receipt_item_id?: string | null
+  goods_issue_id?: string | null
+  issue_item_id?: string | null
 }
 
 /** Record a stock movement and update the item's live quantity. Stock-out
@@ -144,6 +151,10 @@ export async function recordStockMovement(
       reference: input.reference ?? '',
       source: input.source ?? 'manual',
       purchase_id: input.purchase_id ?? null,
+      goods_receipt_id: input.goods_receipt_id ?? null,
+      receipt_item_id: input.receipt_item_id ?? null,
+      goods_issue_id: input.goods_issue_id ?? null,
+      issue_item_id: input.issue_item_id ?? null,
       quantity_after: after,
       recorded_by: input.recorded_by,
       notes: input.notes ?? '',

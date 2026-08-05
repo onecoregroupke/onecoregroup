@@ -34,6 +34,33 @@ export async function mintId(kind: 'task' | 'project' | 'client'): Promise<strin
   return `CLIENT-${String(n).padStart(3, '0')}`
 }
 
+/**
+ * Mint a document reference for any operational form (GRN, GIN, GTN,
+ * requisition, intake, movement…) using the atomic `ocg_next_reference` SQL
+ * function. Unlike `mintId` the sequence self-registers on first use, so a new
+ * document type needs no migration to start numbering.
+ *
+ *   mintReference('grn', 'GRN-')        → GRN-0001
+ *   mintReference('npt_intake', 'INT-') → INT-0001
+ *
+ * Sequence names are shared group-wide; pass a brand-qualified name
+ * (`grn:glitz-n-glim`) when a brand needs its own run of numbers.
+ */
+export async function mintReference(seqName: string, prefix = '', width = 4): Promise<string> {
+  const supabase = db()
+  const { data, error } = await (supabase.rpc as unknown as (
+    fn: string,
+    args: Record<string, unknown>,
+  ) => Promise<{ data: string | null; error: { message: string } | null }>)(
+    'ocg_next_reference',
+    { seq_name: seqName, prefix, width },
+  )
+  if (error || !data) {
+    throw new Error(`Failed to mint reference for "${seqName}": ${error?.message ?? 'no value returned'}`)
+  }
+  return data
+}
+
 export function nowIso(): string {
   return new Date().toISOString()
 }
