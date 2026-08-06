@@ -2081,6 +2081,88 @@ export interface OcgHolidayRow {
 }
 type OcgHolidayInsert = Pick<OcgHolidayRow, 'holiday_date' | 'name'> & Partial<OcgHolidayRow>
 
+// ─── Calendar (migration 056) ────────────────────────────────────────────────
+export interface OcgCalendarEventRow {
+  id: string
+  title: string
+  description: string
+  /** event | meeting | training | stock_count | holiday | maintenance | campaign | production_deadline | leave | reminder */
+  event_kind: string
+  brand_id: string | null
+  starts_at: string
+  ends_at: string | null
+  all_day: boolean
+  timezone: string
+  location: string
+  /** private | users | team | department | brand | company */
+  visibility: string
+  visibility_team: string
+  visibility_department: string
+  visibility_user_ids: string[]
+  created_by_id: string | null
+  created_by: string
+  /** confirmed | tentative | cancelled */
+  status: string
+  notes: string
+  created_at: string
+  updated_at: string
+}
+type OcgCalendarEventInsert = Pick<OcgCalendarEventRow, 'title' | 'starts_at'> & Partial<OcgCalendarEventRow>
+
+export interface OcgCalendarEventAttendeeRow {
+  id: string
+  event_id: string
+  team_member_id: string | null
+  email: string
+  /** invited | accepted | declined | tentative */
+  response: string
+  responded_at: string | null
+  created_at: string
+}
+type OcgCalendarEventAttendeeInsert = Pick<OcgCalendarEventAttendeeRow, 'event_id'> & Partial<OcgCalendarEventAttendeeRow>
+
+export interface OcgCalendarRescheduleRow {
+  id: string
+  /** task | duty | event | meeting */
+  entity_type: string
+  entity_id: string
+  previous_start: string | null
+  previous_end: string | null
+  new_start: string | null
+  new_end: string | null
+  previous_date: string | null
+  new_date: string | null
+  reason: string
+  moved_by: string
+  moved_by_id: string | null
+  /** calendar_drag | form | api */
+  source: string
+  created_at: string
+}
+type OcgCalendarRescheduleInsert = Pick<OcgCalendarRescheduleRow, 'entity_type' | 'entity_id'> & Partial<OcgCalendarRescheduleRow>
+
+export interface OcgLeaveRequestRow {
+  id: string
+  team_member_id: string
+  brand_id: string | null
+  /** annual | sick | compassionate | unpaid | study | maternity | paternity */
+  leave_type: string
+  start_date: string
+  end_date: string
+  half_day: boolean
+  days_count: number
+  reason: string
+  /** requested | approved | rejected | cancelled */
+  status: string
+  requested_by: string
+  approved_by: string
+  approved_at: string | null
+  decision_note: string
+  created_at: string
+  updated_at: string
+}
+type OcgLeaveRequestInsert = Pick<OcgLeaveRequestRow, 'team_member_id' | 'start_date' | 'end_date'> & Partial<OcgLeaveRequestRow>
+
 // ─── Ops task comments / progress updates (migration 029) ─────────────────────
 export interface OpsTaskCommentRow {
   id: string
@@ -3341,6 +3423,10 @@ export interface Database {
       ocg_duty_checklist_items: DbTable<OcgDutyChecklistItemRow, OcgDutyChecklistItemInsert, Partial<OcgDutyChecklistItemRow>>
       ocg_duty_checklist_results: DbTable<OcgDutyChecklistResultRow, OcgDutyChecklistResultInsert, Partial<OcgDutyChecklistResultRow>>
       ocg_holidays: DbTable<OcgHolidayRow, OcgHolidayInsert, Partial<OcgHolidayRow>>
+      ocg_calendar_events: DbTable<OcgCalendarEventRow, OcgCalendarEventInsert, Partial<OcgCalendarEventRow>>
+      ocg_calendar_event_attendees: DbTable<OcgCalendarEventAttendeeRow, OcgCalendarEventAttendeeInsert, Partial<OcgCalendarEventAttendeeRow>>
+      ocg_calendar_reschedules: DbTable<OcgCalendarRescheduleRow, OcgCalendarRescheduleInsert, Partial<OcgCalendarRescheduleRow>>
+      ocg_leave_requests: DbTable<OcgLeaveRequestRow, OcgLeaveRequestInsert, Partial<OcgLeaveRequestRow>>
       ocg_personal_tasks: DbTable<OcgPersonalTaskRow, OcgPersonalTaskInsert, Partial<OcgPersonalTaskRow>>
       ocg_approvals: DbTable<OcgApprovalRow, OcgApprovalInsert, Partial<OcgApprovalRow>>
       ocg_blockers: DbTable<OcgBlockerRow, OcgBlockerInsert, Partial<OcgBlockerRow>>
