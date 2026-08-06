@@ -1,6 +1,13 @@
 // Task lifecycle, shared by the UI, the API, and the oc-ops CLI.
-// Not Started → Ongoing → AI Draft Ready → (Approved | Edit Requested) → Completed
-// plus the terminal/aside states Blocked and Partially Completed.
+//
+// AI delivery track (unchanged):
+//   Not Started → Ongoing → AI Draft Ready → (Approved | Edit Requested) → Completed
+//
+// Human review track (§13, migration 057) — only entered when a task sets
+// requires_approval, so every existing task keeps its current behaviour:
+//   Ongoing → Submitted → Under Review → (Completed | Reopened)
+//
+// plus the aside states Blocked, Partially Completed and Cancelled.
 
 export const TASK_STATUSES = [
   'Not Started',
@@ -8,12 +15,24 @@ export const TASK_STATUSES = [
   'AI Draft Ready',
   'Edit Requested',
   'Approved',
+  'Submitted',
+  'Under Review',
+  'Reopened',
   'Completed',
   'Blocked',
   'Partially Completed',
+  'Cancelled',
 ] as const
 
 export type TaskStatus = (typeof TASK_STATUSES)[number]
+
+/** Statuses that mean "the assignee says the work is done, a manager has not
+ *  yet agreed". These are what a review queue is built from. */
+export const REVIEW_PENDING_STATUSES = ['Submitted', 'Under Review'] as const
+
+export function isAwaitingReview(status: string): boolean {
+  return (REVIEW_PENDING_STATUSES as readonly string[]).includes(status)
+}
 
 export const TASK_PRIORITIES = ['Low', 'Medium', 'High', 'Urgent'] as const
 export type TaskPriority = (typeof TASK_PRIORITIES)[number]
@@ -29,7 +48,7 @@ export const TASK_CATEGORIES = [
 export type TaskCategory = (typeof TASK_CATEGORIES)[number]
 
 export function isTerminalStatus(status: string): boolean {
-  return status === 'Completed'
+  return status === 'Completed' || status === 'Cancelled'
 }
 
 export function isActiveStatus(status: string): boolean {
@@ -42,9 +61,13 @@ const STATUS_TONE: Record<string, string> = {
   'AI Draft Ready': 'bg-amber-50 text-amber-700',
   'Edit Requested': 'bg-orange-50 text-orange-700',
   Approved: 'bg-emerald-50 text-emerald-700',
+  Submitted: 'bg-indigo-50 text-indigo-700',
+  'Under Review': 'bg-violet-50 text-violet-700',
+  Reopened: 'bg-rose-50 text-rose-700',
   Completed: 'bg-green-100 text-green-700',
   Blocked: 'bg-red-50 text-red-700',
   'Partially Completed': 'bg-yellow-50 text-yellow-700',
+  Cancelled: 'bg-gray-100 text-gray-400 line-through',
 }
 
 export function statusTone(status: string): string {
