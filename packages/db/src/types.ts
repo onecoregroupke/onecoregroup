@@ -5,6 +5,15 @@ export type SectionKey =
   | 'ops' | 'ops_agents' | 'management' | 'finance' | 'npt_service' | 'rayyan_admin' | 'rhythms_admin'
   | 'darul_admin' | 'nuuranest_admin' | 'glitz_admin' | 'personal' | 'all_tasks'
   | 'meetings' | 'inventory' | 'procurement' | 'forms' | 'forms_responses' | 'forms_approvals'
+  // Duties (055): `duties` edit = create/assign/edit/pause/end (brand-scopable),
+  // `duties_all` view = see the team's/group's duties, `duties_review` = accept
+  // or reopen a submitted occurrence. Viewing and completing your OWN duties
+  // needs no grant. See lib/dutyModel.ts for the capability mapping.
+  | 'duties' | 'duties_all' | 'duties_review'
+  // Calendar (056): `calendar` = personal calendar (implicit for all users),
+  // `calendar_team` view = permission-scoped team/brand calendars,
+  // `calendar_events` edit = create company/brand events.
+  | 'calendar_team' | 'calendar_events'
 
 export type AccessLevel = 'none' | 'view' | 'edit'
 
@@ -671,6 +680,9 @@ export interface OpsTeamMemberRow {
   start_date: string | null
   notes: string
   created_at: string
+  /** Duty/calendar targeting dimensions (migration 055). */
+  team: string
+  location: string
 }
 type OpsTeamMemberInsert = Pick<OpsTeamMemberRow, 'name'> & Partial<OpsTeamMemberRow>
 
@@ -1974,6 +1986,29 @@ export interface OcgDailyDutyRow {
   paused: boolean
   created_at: string
   updated_at: string
+  // ── Configurable duties (migration 055) ──
+  /** employee | team | department | brand | location | role */
+  target_kind: string
+  target_team: string
+  target_department: string
+  target_role: string
+  target_location: string
+  instructions: string
+  /** task | checklist | report | form | inspection */
+  duty_kind: string
+  location: string
+  reviewer_id: string | null
+  requires_note: boolean
+  requires_checklist: boolean
+  requires_approval: boolean
+  required_form_template_id: string | null
+  grace_minutes: number
+  escalation_minutes: number
+  skip_holidays: boolean
+  created_by: string
+  updated_by: string
+  /** Null until the one-time assignment email has been sent (§4). */
+  assignment_email_sent_at: string | null
 }
 type OcgDailyDutyInsert = Pick<OcgDailyDutyRow, 'title'> & Partial<OcgDailyDutyRow>
 
@@ -1985,8 +2020,66 @@ export interface OcgDailyDutyLogRow {
   status: string
   note: string
   completed_at: string
+  // ── Occurrence record (migration 055) ──
+  due_at: string | null
+  completed_on_time: boolean | null
+  checklist_done: number
+  checklist_total: number
+  /** not_required | pending | accepted | reopened */
+  review_state: string
+  reviewed_by: string
+  reviewed_at: string | null
+  review_comment: string
+  quality_rating: number | null
+  form_submission_id: string | null
+  attachment_count: number
+  /** ops_tasks.task_id — TEXT, e.g. 'TASK-0001'. */
+  task_ref: string | null
+  escalated_at: string | null
+  completed_by: string
 }
 type OcgDailyDutyLogInsert = Pick<OcgDailyDutyLogRow, 'duty_id'> & Partial<OcgDailyDutyLogRow>
+
+// ─── Duty checklists, results, holidays (migration 055) ──────────────────────
+export interface OcgDutyChecklistItemRow {
+  id: string
+  duty_id: string
+  position: number
+  label: string
+  hint: string
+  required: boolean
+  active: boolean
+  created_at: string
+  updated_at: string
+}
+type OcgDutyChecklistItemInsert = Pick<OcgDutyChecklistItemRow, 'duty_id' | 'label'> & Partial<OcgDutyChecklistItemRow>
+
+export interface OcgDutyChecklistResultRow {
+  id: string
+  log_id: string
+  item_id: string
+  checked: boolean
+  note: string
+  checked_by: string
+  checked_at: string | null
+  created_at: string
+  updated_at: string
+}
+type OcgDutyChecklistResultInsert = Pick<OcgDutyChecklistResultRow, 'log_id' | 'item_id'> & Partial<OcgDutyChecklistResultRow>
+
+export interface OcgHolidayRow {
+  id: string
+  /** null = applies group-wide. */
+  brand_id: string | null
+  holiday_date: string
+  name: string
+  /** true = a declared working day that would otherwise be off; overrides a holiday. */
+  is_working_day: boolean
+  notes: string
+  created_by: string
+  created_at: string
+}
+type OcgHolidayInsert = Pick<OcgHolidayRow, 'holiday_date' | 'name'> & Partial<OcgHolidayRow>
 
 // ─── Ops task comments / progress updates (migration 029) ─────────────────────
 export interface OpsTaskCommentRow {
@@ -3245,6 +3338,9 @@ export interface Database {
       ops_task_comments: DbTable<OpsTaskCommentRow, OpsTaskCommentInsert, Partial<OpsTaskCommentRow>>
       ocg_daily_duties: DbTable<OcgDailyDutyRow, OcgDailyDutyInsert, Partial<OcgDailyDutyRow>>
       ocg_daily_duty_logs: DbTable<OcgDailyDutyLogRow, OcgDailyDutyLogInsert, Partial<OcgDailyDutyLogRow>>
+      ocg_duty_checklist_items: DbTable<OcgDutyChecklistItemRow, OcgDutyChecklistItemInsert, Partial<OcgDutyChecklistItemRow>>
+      ocg_duty_checklist_results: DbTable<OcgDutyChecklistResultRow, OcgDutyChecklistResultInsert, Partial<OcgDutyChecklistResultRow>>
+      ocg_holidays: DbTable<OcgHolidayRow, OcgHolidayInsert, Partial<OcgHolidayRow>>
       ocg_personal_tasks: DbTable<OcgPersonalTaskRow, OcgPersonalTaskInsert, Partial<OcgPersonalTaskRow>>
       ocg_approvals: DbTable<OcgApprovalRow, OcgApprovalInsert, Partial<OcgApprovalRow>>
       ocg_blockers: DbTable<OcgBlockerRow, OcgBlockerInsert, Partial<OcgBlockerRow>>
