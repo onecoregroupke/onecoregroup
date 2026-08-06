@@ -31,8 +31,11 @@ export async function listAttendanceFor(actor: {
     .order('attendance_date', { ascending: false })
     .limit(500)
   if (actor.permissions !== null && !actor.can('management', 'view')) {
+    // Scope to this person only. Identity is by email; there is deliberately NO
+    // name fallback — two employees sharing a name would otherwise see each
+    // other's attendance. Without an email we return nothing rather than guess.
     if (actor.email) q = q.eq('employee_email', actor.email.toLowerCase())
-    else q = q.ilike('employee_name', actor.name)
+    else return []
   }
   const { data } = await q
   return (data as AttendanceRow[] | null) ?? []
@@ -68,6 +71,11 @@ export async function upsertAttendance(input: {
       raw_payload: input.raw_payload ?? {},
       notes: input.notes ?? '',
       updated_at: new Date().toISOString(),
+    }, {
+      // Migration 058 added the (member, code, date) unique index. Without an
+      // explicit conflict target this upsert INSERTED duplicates on a
+      // re-imported week instead of updating the existing day.
+      onConflict: 'team_member_id,employee_code,attendance_date',
     })
     .select('*')
     .single()
