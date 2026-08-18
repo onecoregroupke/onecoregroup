@@ -3251,6 +3251,16 @@ export type PettyCashState = 'draft' | 'submitted' | 'reviewed' | 'approved' | '
 
 export interface PettyCashTransactionRow {
   id: string
+  // Added by migration 062 — float linkage, source documents and the
+  // QuickBooks reconciliation state, kept separate from the operational status.
+  float_id?: string | null
+  supplier_invoice_no?: string
+  receipt_no?: string
+  requisition_id?: string | null
+  goods_receipt_id?: string | null
+  inventory_item_id?: string | null
+  cost_centre?: string
+  reconciliation_status?: string
   account_id: string | null
   brand_id: string | null
   department: string
@@ -3910,6 +3920,238 @@ export interface QuickbooksMatchEventRow {
 export type QuickbooksMatchEventInsert =
   Pick<QuickbooksMatchEventRow, 'event_type'> & Partial<QuickbooksMatchEventRow>
 
+// ─── Iceland sales + document series (migration 066) ────────────────────────
+
+export interface DocumentSeriesRow {
+  id: string
+  brand_id: string | null
+  /** invoice | delivery_note | grn | gin | gtn | requisition | lpo | receipt */
+  doc_type: string
+  label: string
+  prefix: string
+  suffix: string
+  pad_width: number
+  /** The last number USED on paper; the next suggestion is this + 1. */
+  current_number: number
+  system_assigned: boolean
+  notes: string
+  active: boolean
+  updated_by: string
+  created_at: string
+  updated_at: string
+}
+export type DocumentSeriesInsert = Pick<DocumentSeriesRow, 'doc_type'> & Partial<DocumentSeriesRow>
+
+export interface SalesCustomerRow {
+  id: string
+  customer_ref: string
+  brand_id: string | null
+  business_name: string
+  trading_name: string
+  location_street: string
+  postal_address: string
+  telephone: string
+  mobile: string
+  email: string
+  /** sole_proprietor | partnership | limited_company */
+  business_type: string
+  br_number: string
+  vat_pin_number: string
+  nature_of_business: string
+  nature_other: string
+  contact_person: string
+  credit_approved: boolean
+  credit_limit_ksh: number
+  payment_terms_days: number
+  purchase_frequency: string
+  intended_monthly_purchase_ksh: number
+  /** One legal entity may also be an NPT service client — linked, never copied. */
+  npt_customer_id: string | null
+  status: string
+  notes: string
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+export type SalesCustomerInsert =
+  Pick<SalesCustomerRow, 'customer_ref' | 'business_name'> & Partial<SalesCustomerRow>
+
+export interface SalesAccountApplicationRow {
+  id: string
+  application_ref: string
+  customer_id: string | null
+  brand_id: string | null
+  application_date: string
+  business_name: string
+  location_street: string
+  postal_address: string
+  telephone: string
+  mobile: string
+  email: string
+  directors: Array<{ name?: string; id_number?: string }>
+  business_type: string
+  br_number: string
+  vat_pin_number: string
+  nature_of_business: string
+  amount_intended_ksh: number
+  frequency: string
+  terms_accepted: boolean
+  customer_signature_name: string
+  customer_stamped: boolean
+  company_rep_name: string
+  company_rep_date: string | null
+  verified_by: string
+  verified_date: string | null
+  approved_by: string
+  approved_date: string | null
+  approved_terms_days: number | null
+  /** draft | submitted | verified | approved | rejected */
+  status: string
+  rejection_reason: string
+  notes: string
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+export type SalesAccountApplicationInsert =
+  Pick<SalesAccountApplicationRow, 'application_ref'> & Partial<SalesAccountApplicationRow>
+
+export interface SalesInvoiceRow {
+  id: string
+  /** Minted system reference. Never derived from the pad. */
+  invoice_ref: string
+  /** The number printed on the physical pad. Gaps are legal. */
+  invoice_number: string
+  brand_id: string | null
+  customer_id: string | null
+  /** "M/s" as written, kept verbatim even when a customer row is linked. */
+  bill_to_name: string
+  invoice_date: string
+  due_date: string | null
+  vat_rate_percent: number
+  /** DECISION: the pad's rates are VAT-INCLUSIVE. Stored per invoice AND per
+   *  line so a rate change cannot restate history. */
+  prices_include_vat: boolean
+  net_amount_ksh: number
+  vat_amount_ksh: number
+  total_amount_ksh: number
+  amount_paid_ksh: number
+  /** draft | issued | part_paid | paid | cancelled | credited */
+  status: string
+  /** cash | credit */
+  sale_type: string
+  salesperson_id: string | null
+  allocation_id: string | null
+  daily_return_id: string | null
+  source_store_id: string | null
+  delivery_note_no: string
+  lpo_number: string
+  posted_at: string | null
+  posted_by: string
+  reconciliation_status: string
+  notes: string
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+export type SalesInvoiceInsert = Pick<SalesInvoiceRow, 'invoice_ref'> & Partial<SalesInvoiceRow>
+
+export interface SalesInvoiceItemRow {
+  id: string
+  invoice_id: string
+  item_id: string | null
+  /** "CODE" on the pad. */
+  item_code: string
+  description: string
+  /** The pad's UNIT column (pack count, e.g. "8PC") — verbatim, for printing. */
+  pad_unit_text: string
+  /** The pad's QTY column (pack size, e.g. "1ltr") — verbatim, for printing. */
+  pad_qty_text: string
+  /** The real numeric quantity arithmetic uses. */
+  quantity: number
+  uom: string
+  rate_ksh: number
+  vat_rate_percent: number
+  prices_include_vat: boolean
+  /** GENERATED. */
+  line_total_ksh: number
+  line_vat_ksh: number
+  line_net_ksh: number
+  batch_number: string
+  sort_order: number
+  created_at: string
+}
+export type SalesInvoiceItemInsert =
+  Pick<SalesInvoiceItemRow, 'invoice_id'> &
+  Partial<Omit<SalesInvoiceItemRow, 'line_total_ksh' | 'line_vat_ksh' | 'line_net_ksh'>>
+
+export interface SalesPaymentRow {
+  id: string
+  payment_ref: string
+  brand_id: string | null
+  customer_id: string | null
+  payment_date: string
+  /** cash | mpesa | bank | cheque | credit_note */
+  method: string
+  amount_ksh: number
+  reference: string
+  mpesa_code: string
+  received_by: string
+  daily_return_id: string | null
+  reconciliation_status: string
+  notes: string
+  created_by: string
+  created_at: string
+}
+export type SalesPaymentInsert = Pick<SalesPaymentRow, 'payment_ref'> & Partial<SalesPaymentRow>
+
+export interface SalesPaymentAllocationRow {
+  id: string
+  payment_id: string
+  invoice_id: string
+  amount_ksh: number
+  created_at: string
+}
+export type SalesPaymentAllocationInsert =
+  Pick<SalesPaymentAllocationRow, 'payment_id' | 'invoice_id' | 'amount_ksh'> &
+  Partial<SalesPaymentAllocationRow>
+
+export interface QbAccountMapRow {
+  id: string
+  brand_id: string | null
+  event_type: string
+  debit_account: string
+  credit_account: string
+  tax_account: string
+  qb_class: string
+  active: boolean
+  notes: string
+  created_at: string
+}
+export type QbAccountMapInsert = Pick<QbAccountMapRow, 'event_type'> & Partial<QbAccountMapRow>
+
+/**
+ * A row of `qb_expected_entries` — every operational document projected into
+ * the shape a QuickBooks export arrives in. Read-only VIEW: this is what
+ * reconciliation compares against quickbooks_transactions, and it works before
+ * any export exists because it is built from documents we already hold.
+ */
+export interface QbExpectedEntryRow {
+  event_type: string
+  entity_id: string
+  entity_table: string
+  brand_id: string | null
+  entry_date: string
+  doc_number: string
+  party_name: string
+  transaction_type: string
+  amount_ksh: number
+  tax_ksh: number
+  mpesa_code: string
+  memo: string
+  reconciliation_status: string
+}
+
 export interface Database {
   public: {
     Tables: {
@@ -4103,6 +4345,14 @@ export interface Database {
       quickbooks_transactions: DbTable<QuickbooksTransactionRow, QuickbooksTransactionInsert, Partial<QuickbooksTransactionRow>>
       quickbooks_matches: DbTable<QuickbooksMatchRow, QuickbooksMatchInsert, Partial<QuickbooksMatchRow>>
       quickbooks_match_events: DbTable<QuickbooksMatchEventRow, QuickbooksMatchEventInsert, Partial<QuickbooksMatchEventRow>>
+      document_series: DbTable<DocumentSeriesRow, DocumentSeriesInsert, Partial<DocumentSeriesRow>>
+      sales_customers: DbTable<SalesCustomerRow, SalesCustomerInsert, Partial<SalesCustomerRow>>
+      sales_account_applications: DbTable<SalesAccountApplicationRow, SalesAccountApplicationInsert, Partial<SalesAccountApplicationRow>>
+      sales_invoices: DbTable<SalesInvoiceRow, SalesInvoiceInsert, Partial<SalesInvoiceRow>>
+      sales_invoice_items: DbTable<SalesInvoiceItemRow, SalesInvoiceItemInsert, Partial<SalesInvoiceItemRow>>
+      sales_payments: DbTable<SalesPaymentRow, SalesPaymentInsert, Partial<SalesPaymentRow>>
+      sales_payment_allocations: DbTable<SalesPaymentAllocationRow, SalesPaymentAllocationInsert, Partial<SalesPaymentAllocationRow>>
+      qb_account_map: DbTable<QbAccountMapRow, QbAccountMapInsert, Partial<QbAccountMapRow>>
       record_versions: DbTable<RecordVersionRow, RecordVersionInsert, Partial<RecordVersionRow>>
     }
     Views: Record<string, never>

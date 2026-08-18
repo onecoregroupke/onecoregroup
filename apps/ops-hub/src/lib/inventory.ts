@@ -115,6 +115,10 @@ export interface RecordStockInput {
   fg_transfer_id?: string | null
   allocation_id?: string | null
   allocation_item_id?: string | null
+  // Sales (066). sales_invoice_item_id also carries a partial UNIQUE index, so
+  // an invoice line moves finished goods out of stock exactly once.
+  sales_invoice_id?: string | null
+  sales_invoice_item_id?: string | null
   batch_number?: string
   store_id?: string | null
 }
@@ -168,6 +172,8 @@ export async function recordStockMovement(
       fg_transfer_id: input.fg_transfer_id ?? null,
       allocation_id: input.allocation_id ?? null,
       allocation_item_id: input.allocation_item_id ?? null,
+      sales_invoice_id: input.sales_invoice_id ?? null,
+      sales_invoice_item_id: input.sales_invoice_item_id ?? null,
       batch_number: input.batch_number ?? '',
       store_id: input.store_id ?? item.store_id ?? null,
       quantity_after: after,
