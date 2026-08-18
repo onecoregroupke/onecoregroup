@@ -2419,7 +2419,19 @@ export interface InventoryItemRow {
   location: string
   notes: string
   is_active: boolean
+  /** raw_material | packaging | work_in_progress | finished_good
+   *  | damaged | returned | sample | consumable  (migration 060) */
   item_type: string
+  store_id: string | null
+  product_family: string
+  size_label: string
+  package_config: string
+  barcode: string
+  selling_price_ksh: number
+  minimum_stock: number
+  maximum_stock: number | null
+  production_threshold: number
+  shelf_life_days: number | null
   created_at: string
   updated_at: string
 }
@@ -3372,6 +3384,532 @@ export interface RecordVersionRow {
 }
 type RecordVersionInsert = Pick<RecordVersionRow, 'record_type' | 'record_id'> & Partial<RecordVersionRow>
 
+// ─── Inventory stores, production & stock counts (migration 060) ─────────────
+
+export interface InventoryStoreRow {
+  id: string
+  brand_id: string | null
+  name: string
+  code: string
+  /** raw | packaging | production | finished_goods | quarantine | field_sales | general */
+  store_type: string
+  location: string
+  keeper_id: string | null
+  active: boolean
+  notes: string
+  created_at: string
+}
+export type InventoryStoreInsert = Pick<InventoryStoreRow, 'name'> & Partial<InventoryStoreRow>
+
+export interface ProductionBomLineRow {
+  id: string
+  product_item_id: string
+  component_item_id: string
+  quantity_per_unit: number
+  unit: string
+  wastage_percent: number
+  notes: string
+  active: boolean
+  created_at: string
+}
+export type ProductionBomLineInsert =
+  Pick<ProductionBomLineRow, 'product_item_id' | 'component_item_id' | 'quantity_per_unit'> & Partial<ProductionBomLineRow>
+
+export interface ProductionRunRow {
+  id: string
+  run_ref: string
+  batch_number: string
+  brand_id: string | null
+  product_item_id: string | null
+  planned_quantity: number
+  actual_quantity: number
+  rejected_quantity: number
+  waste_quantity: number
+  unit: string
+  started_at: string | null
+  completed_at: string | null
+  supervisor_id: string | null
+  production_team: string
+  /** planned | materials_requested | materials_issued | in_production | awaiting_quality
+   *  | completed | partially_completed | rejected | closed | cancelled */
+  status: string
+  quality_result: string
+  quality_approved_by: string
+  quality_approved_at: string | null
+  expiry_date: string | null
+  notes: string
+  approved_by: string
+  approved_at: string | null
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+export type ProductionRunInsert = Pick<ProductionRunRow, 'run_ref'> & Partial<ProductionRunRow>
+
+export interface ProductionRunMaterialRow {
+  id: string
+  run_id: string
+  item_id: string
+  goods_issue_id: string | null
+  issue_item_id: string | null
+  expected_quantity: number
+  issued_quantity: number
+  returned_quantity: number
+  consumed_quantity: number
+  waste_quantity: number
+  unit: string
+  /** GENERATED: issued - returned - consumed - waste. */
+  variance_quantity: number
+  notes: string
+  created_at: string
+}
+export type ProductionRunMaterialInsert =
+  Pick<ProductionRunMaterialRow, 'run_id' | 'item_id'> & Partial<Omit<ProductionRunMaterialRow, 'variance_quantity'>>
+
+export interface ProductionFgTransferRow {
+  id: string
+  transfer_ref: string
+  run_id: string | null
+  brand_id: string | null
+  item_id: string
+  batch_number: string
+  produced_quantity: number
+  accepted_quantity: number
+  rejected_quantity: number
+  transferred_quantity: number
+  unit: string
+  source_store_id: string | null
+  destination_store_id: string | null
+  supervisor: string
+  receiver: string
+  quality_approved_by: string
+  production_date: string | null
+  expiry_date: string | null
+  /** draft | posted | reversed */
+  status: string
+  posted_by: string
+  posted_at: string | null
+  remarks: string
+  created_at: string
+  updated_at: string
+}
+export type ProductionFgTransferInsert =
+  Pick<ProductionFgTransferRow, 'transfer_ref' | 'item_id'> & Partial<ProductionFgTransferRow>
+
+export interface InventoryStockCountRow {
+  id: string
+  count_ref: string
+  brand_id: string | null
+  store_id: string | null
+  count_date: string
+  counted_by: string
+  counted_by_id: string | null
+  /** draft | submitted | approved | posted | rejected */
+  status: string
+  approved_by: string
+  approved_at: string | null
+  posted_at: string | null
+  notes: string
+  created_at: string
+  updated_at: string
+}
+export type InventoryStockCountInsert =
+  Pick<InventoryStockCountRow, 'count_ref'> & Partial<InventoryStockCountRow>
+
+export interface InventoryStockCountItemRow {
+  id: string
+  count_id: string
+  item_id: string
+  batch_number: string
+  system_quantity: number
+  counted_quantity: number
+  /** GENERATED: counted - system. */
+  variance_quantity: number
+  reason: string
+  movement_id: string | null
+  created_at: string
+}
+export type InventoryStockCountItemInsert =
+  Pick<InventoryStockCountItemRow, 'count_id' | 'item_id'> & Partial<Omit<InventoryStockCountItemRow, 'variance_quantity'>>
+
+// ─── Reorder alerts (migration 059) ─────────────────────────────────────────
+
+export interface InventoryReorderAlertRow {
+  id: string
+  item_id: string
+  brand_id: string | null
+  store_id: string | null
+  alert_type: string
+  severity: string
+  quantity_at_alert: number
+  threshold_at_alert: number
+  /** open | acknowledged | actioned | dismissed | resolved */
+  status: string
+  acknowledged_by: string
+  acknowledged_at: string | null
+  dismissed_by: string
+  dismissed_at: string | null
+  dismissal_reason: string
+  resolved_at: string | null
+  requisition_id: string | null
+  notes: string
+  created_at: string
+  updated_at: string
+}
+export type InventoryReorderAlertInsert =
+  Pick<InventoryReorderAlertRow, 'item_id'> & Partial<InventoryReorderAlertRow>
+
+export interface InventoryReorderAlertEventRow {
+  id: string
+  alert_id: string
+  event_type: string
+  actor: string
+  note: string
+  created_at: string
+}
+export type InventoryReorderAlertEventInsert =
+  Pick<InventoryReorderAlertEventRow, 'alert_id' | 'event_type'> & Partial<InventoryReorderAlertEventRow>
+
+export interface InventoryAlertRecipientRow {
+  id: string
+  brand_id: string | null
+  store_id: string | null
+  team_member_id: string | null
+  email: string
+  alert_types: string[]
+  active: boolean
+  created_at: string
+}
+export type InventoryAlertRecipientInsert = Partial<InventoryAlertRecipientRow>
+
+// ─── Field-sales custody (migration 061) ────────────────────────────────────
+
+export interface FieldSalesAllocationRow {
+  id: string
+  allocation_ref: string
+  delivery_note_no: string
+  brand_id: string | null
+  week_start: string
+  week_end: string
+  sales_team: string
+  salesperson_id: string | null
+  vehicle_route: string
+  source_store_id: string | null
+  custody_location: string
+  issued_by: string
+  issued_by_id: string | null
+  issued_at: string | null
+  received_by: string
+  received_at: string | null
+  /** draft | prepared | issued | active | partially_reconciled | awaiting_returns
+   *  | reconciled | closed | variance_under_review | cancelled */
+  status: string
+  variance_approved_by: string
+  variance_reason: string
+  closed_by: string
+  closed_at: string | null
+  notes: string
+  created_at: string
+  updated_at: string
+}
+export type FieldSalesAllocationInsert =
+  Pick<FieldSalesAllocationRow, 'allocation_ref' | 'week_start' | 'week_end'> & Partial<FieldSalesAllocationRow>
+
+export interface FieldSalesAllocationItemRow {
+  id: string
+  allocation_id: string
+  item_id: string
+  batch_number: string
+  quantity_issued: number
+  unit: string
+  selling_price_ksh: number
+  notes: string
+  created_at: string
+}
+export type FieldSalesAllocationItemInsert =
+  Pick<FieldSalesAllocationItemRow, 'allocation_id' | 'item_id'> & Partial<FieldSalesAllocationItemRow>
+
+export interface FieldSalesCustodyMovementRow {
+  id: string
+  allocation_id: string | null
+  salesperson_id: string | null
+  item_id: string
+  brand_id: string | null
+  batch_number: string
+  /** issue | sale | return | damage | sample | adjustment | transfer */
+  movement_kind: string
+  direction: string
+  quantity: number
+  balance_after: number
+  movement_date: string
+  reference: string
+  source_table: string
+  source_id: string | null
+  allocation_item_id: string | null
+  recorded_by: string
+  notes: string
+  created_at: string
+}
+export type FieldSalesCustodyMovementInsert =
+  Pick<FieldSalesCustodyMovementRow, 'item_id' | 'movement_kind' | 'quantity'> & Partial<FieldSalesCustodyMovementRow>
+
+export interface FieldSalesDailyReturnRow {
+  id: string
+  return_ref: string
+  allocation_id: string | null
+  brand_id: string | null
+  return_date: string
+  sales_team: string
+  salesperson_id: string | null
+  cash_received_ksh: number
+  mobile_money_ksh: number
+  bank_ksh: number
+  credit_sales_ksh: number
+  amount_submitted_ksh: number
+  payment_references: string
+  /** draft | submitted | invoiced | reconciled | disputed */
+  status: string
+  submitted_by: string
+  submitted_at: string | null
+  reviewed_by: string
+  source_upload_id: string | null
+  notes: string
+  created_at: string
+  updated_at: string
+}
+export type FieldSalesDailyReturnInsert =
+  Pick<FieldSalesDailyReturnRow, 'return_ref' | 'return_date'> & Partial<FieldSalesDailyReturnRow>
+
+export interface FieldSalesDailyReturnItemRow {
+  id: string
+  daily_return_id: string
+  item_id: string
+  batch_number: string
+  quantity_sold: number
+  quantity_damaged: number
+  quantity_sample: number
+  quantity_on_hand: number
+  selling_price_ksh: number
+  /** GENERATED: quantity_sold * selling_price_ksh. */
+  line_total_ksh: number
+  customer: string
+  notes: string
+  created_at: string
+}
+export type FieldSalesDailyReturnItemInsert =
+  Pick<FieldSalesDailyReturnItemRow, 'daily_return_id' | 'item_id'> & Partial<Omit<FieldSalesDailyReturnItemRow, 'line_total_ksh'>>
+
+export interface FieldSalesReturnNoteRow {
+  id: string
+  note_ref: string
+  allocation_id: string | null
+  brand_id: string | null
+  return_date: string
+  salesperson_id: string | null
+  destination_store_id: string | null
+  received_by: string
+  received_at: string | null
+  /** draft | submitted | received | posted | disputed */
+  status: string
+  posted_at: string | null
+  posted_by: string
+  notes: string
+  created_at: string
+  updated_at: string
+}
+export type FieldSalesReturnNoteInsert =
+  Pick<FieldSalesReturnNoteRow, 'note_ref' | 'return_date'> & Partial<FieldSalesReturnNoteRow>
+
+export interface FieldSalesReturnNoteItemRow {
+  id: string
+  return_note_id: string
+  item_id: string
+  batch_number: string
+  quantity_returned: number
+  quantity_accepted: number
+  quantity_rejected: number
+  condition: string
+  reason: string
+  notes: string
+  created_at: string
+}
+export type FieldSalesReturnNoteItemInsert =
+  Pick<FieldSalesReturnNoteItemRow, 'return_note_id' | 'item_id'> & Partial<FieldSalesReturnNoteItemRow>
+
+// ─── Petty-cash floats (migration 062) ──────────────────────────────────────
+
+export interface PettyCashFloatRow {
+  id: string
+  float_ref: string
+  account_id: string | null
+  brand_id: string | null
+  custodian: string
+  custodian_id: string | null
+  opened_on: string
+  opening_amount_ksh: number
+  funding_source: string
+  funding_reference: string
+  previous_float_id: string | null
+  succeeding_float_id: string | null
+  balance_brought_forward_ksh: number
+  additional_funding_ksh: number
+  /** GENERATED: opening + brought forward + additional. */
+  total_available_ksh: number
+  purpose: string
+  /** draft | open | active | awaiting_documents | awaiting_review
+   *  | reconciled | closed | reopened | cancelled */
+  status: string
+  closed_on: string | null
+  calculated_balance_ksh: number | null
+  physical_balance_ksh: number | null
+  variance_ksh: number | null
+  variance_explanation: string
+  amount_reimbursed_ksh: number
+  amount_returned_ksh: number
+  /** carried | returned | reimbursed | written_off */
+  carry_forward_decision: string
+  reviewed_by: string
+  reviewed_at: string | null
+  approved_by: string
+  approved_at: string | null
+  reopened_by: string
+  reopened_reason: string
+  closure_notes: string
+  reconciliation_status: string
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+export type PettyCashFloatInsert =
+  Pick<PettyCashFloatRow, 'float_ref'> & Partial<Omit<PettyCashFloatRow, 'total_available_ksh'>>
+
+export interface PettyCashDocumentRow {
+  id: string
+  transaction_id: string | null
+  float_id: string | null
+  document_type: string
+  status: string
+  file_url: string
+  file_name: string
+  storage_bucket: string
+  storage_path: string
+  uploaded_by: string
+  uploaded_at: string | null
+  notes: string
+  created_at: string
+}
+export type PettyCashDocumentInsert =
+  Pick<PettyCashDocumentRow, 'document_type'> & Partial<PettyCashDocumentRow>
+
+export interface PettyCashDocumentRuleRow {
+  id: string
+  brand_id: string | null
+  category: string
+  required_documents: string[]
+  minimum_amount_ksh: number
+  active: boolean
+  created_at: string
+}
+export type PettyCashDocumentRuleInsert =
+  Pick<PettyCashDocumentRuleRow, 'category'> & Partial<PettyCashDocumentRuleRow>
+
+// ─── QuickBooks reconciliation (migration 063) ──────────────────────────────
+
+export interface QuickbooksImportRow {
+  id: string
+  import_ref: string
+  brand_id: string | null
+  export_type: string
+  source_format: string
+  file_name: string
+  file_url: string
+  file_checksum: string
+  file_size_bytes: number | null
+  period_start: string | null
+  period_end: string | null
+  /** uploaded | mapped | validated | previewed | committed | rolled_back | failed */
+  status: string
+  field_mapping: Record<string, unknown>
+  detected_headers: string[]
+  total_rows: number
+  successful_rows: number
+  rejected_rows: number
+  duplicate_rows: number
+  auto_matched_rows: number
+  review_rows: number
+  new_entities: number
+  total_amount_ksh: number
+  reconciliation_difference_ksh: number
+  error_summary: string
+  imported_by: string
+  committed_by: string
+  committed_at: string | null
+  rolled_back_by: string
+  rolled_back_at: string | null
+  notes: string
+  created_at: string
+}
+export type QuickbooksImportInsert =
+  Pick<QuickbooksImportRow, 'import_ref' | 'export_type'> & Partial<QuickbooksImportRow>
+
+export interface QuickbooksTransactionRow {
+  id: string
+  import_id: string | null
+  brand_id: string | null
+  export_type: string
+  qb_id: string
+  qb_doc_number: string
+  transaction_date: string | null
+  transaction_type: string
+  account_name: string
+  customer_name: string
+  supplier_name: string
+  description: string
+  reference: string
+  mpesa_code: string
+  amount_ksh: number
+  tax_ksh: number
+  currency: string
+  raw: Record<string, unknown>
+  row_number: number | null
+  /** unmatched | suggested | matched | partially_matched | difference | reconciled | rejected */
+  match_state: string
+  created_at: string
+}
+export type QuickbooksTransactionInsert = Partial<QuickbooksTransactionRow>
+
+export interface QuickbooksMatchRow {
+  id: string
+  qb_transaction_id: string
+  entity_table: string
+  entity_id: string
+  matched_amount_ksh: number
+  difference_ksh: number
+  /** suggested | accepted | rejected */
+  decision: string
+  confidence: number
+  /** At least TWO signals are required for an accepted match (DB CHECK). */
+  match_basis: string[]
+  note: string
+  decided_by: string
+  decided_at: string | null
+  created_at: string
+}
+export type QuickbooksMatchInsert =
+  Pick<QuickbooksMatchRow, 'qb_transaction_id' | 'entity_table' | 'entity_id'> & Partial<QuickbooksMatchRow>
+
+export interface QuickbooksMatchEventRow {
+  id: string
+  match_id: string | null
+  qb_transaction_id: string | null
+  event_type: string
+  actor: string
+  note: string
+  created_at: string
+}
+export type QuickbooksMatchEventInsert =
+  Pick<QuickbooksMatchEventRow, 'event_type'> & Partial<QuickbooksMatchEventRow>
+
 export interface Database {
   public: {
     Tables: {
@@ -3541,6 +4079,30 @@ export interface Database {
       petty_cash_reconciliations: DbTable<PettyCashReconciliationRow, PettyCashReconciliationInsert, Partial<PettyCashReconciliationRow>>
       data_imports: DbTable<DataImportRow, DataImportInsert, Partial<DataImportRow>>
       data_import_rows: DbTable<DataImportStagingRow, DataImportStagingInsert, Partial<DataImportStagingRow>>
+      inventory_stores: DbTable<InventoryStoreRow, InventoryStoreInsert, Partial<InventoryStoreRow>>
+      production_bom_lines: DbTable<ProductionBomLineRow, ProductionBomLineInsert, Partial<ProductionBomLineRow>>
+      production_runs: DbTable<ProductionRunRow, ProductionRunInsert, Partial<ProductionRunRow>>
+      production_run_materials: DbTable<ProductionRunMaterialRow, ProductionRunMaterialInsert, Partial<ProductionRunMaterialRow>>
+      production_fg_transfers: DbTable<ProductionFgTransferRow, ProductionFgTransferInsert, Partial<ProductionFgTransferRow>>
+      inventory_stock_counts: DbTable<InventoryStockCountRow, InventoryStockCountInsert, Partial<InventoryStockCountRow>>
+      inventory_stock_count_items: DbTable<InventoryStockCountItemRow, InventoryStockCountItemInsert, Partial<InventoryStockCountItemRow>>
+      inventory_reorder_alerts: DbTable<InventoryReorderAlertRow, InventoryReorderAlertInsert, Partial<InventoryReorderAlertRow>>
+      inventory_reorder_alert_events: DbTable<InventoryReorderAlertEventRow, InventoryReorderAlertEventInsert, Partial<InventoryReorderAlertEventRow>>
+      inventory_alert_recipients: DbTable<InventoryAlertRecipientRow, InventoryAlertRecipientInsert, Partial<InventoryAlertRecipientRow>>
+      field_sales_allocations: DbTable<FieldSalesAllocationRow, FieldSalesAllocationInsert, Partial<FieldSalesAllocationRow>>
+      field_sales_allocation_items: DbTable<FieldSalesAllocationItemRow, FieldSalesAllocationItemInsert, Partial<FieldSalesAllocationItemRow>>
+      field_sales_custody_movements: DbTable<FieldSalesCustodyMovementRow, FieldSalesCustodyMovementInsert, Partial<FieldSalesCustodyMovementRow>>
+      field_sales_daily_returns: DbTable<FieldSalesDailyReturnRow, FieldSalesDailyReturnInsert, Partial<FieldSalesDailyReturnRow>>
+      field_sales_daily_return_items: DbTable<FieldSalesDailyReturnItemRow, FieldSalesDailyReturnItemInsert, Partial<FieldSalesDailyReturnItemRow>>
+      field_sales_return_notes: DbTable<FieldSalesReturnNoteRow, FieldSalesReturnNoteInsert, Partial<FieldSalesReturnNoteRow>>
+      field_sales_return_note_items: DbTable<FieldSalesReturnNoteItemRow, FieldSalesReturnNoteItemInsert, Partial<FieldSalesReturnNoteItemRow>>
+      petty_cash_floats: DbTable<PettyCashFloatRow, PettyCashFloatInsert, Partial<PettyCashFloatRow>>
+      petty_cash_documents: DbTable<PettyCashDocumentRow, PettyCashDocumentInsert, Partial<PettyCashDocumentRow>>
+      petty_cash_document_rules: DbTable<PettyCashDocumentRuleRow, PettyCashDocumentRuleInsert, Partial<PettyCashDocumentRuleRow>>
+      quickbooks_imports: DbTable<QuickbooksImportRow, QuickbooksImportInsert, Partial<QuickbooksImportRow>>
+      quickbooks_transactions: DbTable<QuickbooksTransactionRow, QuickbooksTransactionInsert, Partial<QuickbooksTransactionRow>>
+      quickbooks_matches: DbTable<QuickbooksMatchRow, QuickbooksMatchInsert, Partial<QuickbooksMatchRow>>
+      quickbooks_match_events: DbTable<QuickbooksMatchEventRow, QuickbooksMatchEventInsert, Partial<QuickbooksMatchEventRow>>
       record_versions: DbTable<RecordVersionRow, RecordVersionInsert, Partial<RecordVersionRow>>
     }
     Views: Record<string, never>

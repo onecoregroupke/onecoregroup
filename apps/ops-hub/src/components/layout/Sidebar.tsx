@@ -7,7 +7,8 @@ import {
   CheckSquare, Settings, LogOut, X, BriefcaseBusiness, Wrench, GraduationCap,
   UsersRound, BookOpen, BookMarked, UserCog, CalendarCheck, Lock, Landmark,
   CalendarClock, MessagesSquare, Megaphone, Boxes, ShoppingCart, ClipboardCheck,
-  ClipboardList, ExternalLink, Home, Sparkles, BarChart3,
+  ClipboardList, ExternalLink, Home, Sparkles, BarChart3, CalendarDays, Factory,
+  Truck, Wallet,
 } from 'lucide-react'
 import { usePermissions } from '@/contexts/PermissionsContext'
 import type { SectionKey } from '@/lib/permissions'
@@ -25,10 +26,17 @@ export const OPS_BRANDS = [
 export const MAIN_NAV: { href: string; label: string; icon: React.ElementType; section: SectionKey | null }[] = [
   { href: '/',          label: 'Dashboard', icon: LayoutDashboard, section: 'ops' },
   { href: '/management', label: 'Management', icon: BriefcaseBusiness, section: 'management' },
+  // Calendar and My Duties are every user's own work — always visible, own
+  // records only. The team/company scopes inside them are permission-gated.
+  { href: '/calendar', label: 'Calendar', icon: CalendarDays, section: null },
+  { href: '/duties', label: 'My Duties', icon: CalendarCheck, section: null },
   { href: '/meetings', label: 'Meetings', icon: CalendarClock, section: null },
   { href: '/finance', label: 'Finance', icon: Landmark, section: 'finance' },
   { href: '/inventory', label: 'Inventory', icon: Boxes, section: 'inventory' },
+  { href: '/manufacturing', label: 'Manufacturing', icon: Factory, section: 'inventory' },
+  { href: '/field-sales', label: 'Field Sales', icon: Truck, section: 'inventory' },
   { href: '/procurement', label: 'Procurement', icon: ShoppingCart, section: 'procurement' },
+  { href: '/petty-cash', label: 'Petty Cash', icon: Wallet, section: 'finance' },
   { href: '/management/team', label: 'Team', icon: UsersRound, section: 'management' },
   { href: '/management/users', label: 'Portal Access', icon: UserCog, section: 'users' },
   { href: '/management/duties', label: 'Daily Duties', icon: CalendarCheck, section: 'management' },

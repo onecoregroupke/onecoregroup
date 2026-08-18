@@ -108,6 +108,15 @@ export interface RecordStockInput {
   receipt_item_id?: string | null
   goods_issue_id?: string | null
   issue_item_id?: string | null
+  // Production (060) and field-sales custody (061). fg_transfer_id and
+  // allocation_item_id also carry partial UNIQUE indexes, so a finished-goods
+  // transfer or a weekly allocation line posts to stock exactly once.
+  production_run_id?: string | null
+  fg_transfer_id?: string | null
+  allocation_id?: string | null
+  allocation_item_id?: string | null
+  batch_number?: string
+  store_id?: string | null
 }
 
 /** Record a stock movement and update the item's live quantity. Stock-out
@@ -155,6 +164,12 @@ export async function recordStockMovement(
       receipt_item_id: input.receipt_item_id ?? null,
       goods_issue_id: input.goods_issue_id ?? null,
       issue_item_id: input.issue_item_id ?? null,
+      production_run_id: input.production_run_id ?? null,
+      fg_transfer_id: input.fg_transfer_id ?? null,
+      allocation_id: input.allocation_id ?? null,
+      allocation_item_id: input.allocation_item_id ?? null,
+      batch_number: input.batch_number ?? '',
+      store_id: input.store_id ?? item.store_id ?? null,
       quantity_after: after,
       recorded_by: input.recorded_by,
       notes: input.notes ?? '',

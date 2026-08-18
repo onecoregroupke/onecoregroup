@@ -141,3 +141,17 @@ export async function updateTeamMember(
   if (error) throw new Error(error.message)
   return data as OpsTeamMemberRow
 }
+
+/**
+ * The ops_team_members row for a signed-in portal user, matched by email
+ * (case-insensitive). Returns null when the account has no team-member row —
+ * callers MUST treat that as "scoped to nothing" rather than "unscoped", the
+ * same rule loadActor() applies to task scoping.
+ */
+export async function memberForEmail(email: string | null): Promise<OpsTeamMemberRow | null> {
+  if (!email) return null
+  const lower = email.trim().toLowerCase()
+  if (!lower) return null
+  const team = await listTeam()
+  return team.find((m) => (m.email ?? '').trim().toLowerCase() === lower) ?? null
+}

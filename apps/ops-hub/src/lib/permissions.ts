@@ -30,6 +30,15 @@ export const SECTIONS: SectionDef[] = [
   { key: 'procurement', label: 'Procurement', href: '/procurement' },
   { key: 'forms', label: 'Forms (fill · edit = build)', href: '/forms' },
   { key: 'forms_responses', label: 'Form responses (view · edit = export)', href: '/forms' },
+  { key: 'forms_approvals', label: 'Form approvals (review submissions)', href: '/forms' },
+  // Duties (055). Seeing and completing YOUR OWN duties needs no grant — these
+  // three are the manager-side capabilities. See lib/dutyModel.ts `dutyCan`.
+  { key: 'duties', label: 'Duties (edit = create · assign · pause)', href: '/duties' },
+  { key: 'duties_all', label: "Duties (view all team members')", href: '/management/duties' },
+  { key: 'duties_review', label: 'Duty review (accept / reopen)', href: '/management/duties' },
+  // Calendar (056). A personal calendar is implicit for every signed-in user.
+  { key: 'calendar_team', label: 'Calendar (team / department / company)', href: '/calendar' },
+  { key: 'calendar_events', label: 'Calendar events (edit = create shared)', href: '/calendar' },
   { key: 'npt_service', label: 'NPT Service', href: '/npt' },
   { key: 'rayyan_admin', label: 'Rayyan Admin', href: '/rayyan' },
   { key: 'rhythms_admin', label: 'Rhythms Admin', href: '/rhythms' },
@@ -82,6 +91,9 @@ export const BRAND_SCOPED_SECTIONS: SectionDef[] = [
   { key: 'marketing', label: 'Marketing (brand marketer)', href: '/mhub/marketing/calendar' },
   { key: 'meetings', label: 'Meetings (view all)', href: '/meetings' },
   { key: 'forms', label: 'Forms (by brand)', href: '/forms' },
+  { key: 'duties', label: 'Duties (assign within brand)', href: '/duties' },
+  { key: 'duties_all', label: 'Duty oversight (by brand)', href: '/management/duties' },
+  { key: 'calendar_team', label: 'Team calendar (by brand)', href: '/calendar' },
 ]
 
 /**
@@ -145,6 +157,19 @@ export function can(
     // explicit `forms` grant. This is what closes the "all forms to all users" leak.
     forms: ['management'],
     forms_responses: ['management'],
+    forms_approvals: ['management'],
+    // Duties were manager-only before 055 (the /management/duties page is gated
+    // on `management`). These fallbacks keep every existing manager working
+    // exactly as before; a non-manager still needs an explicit `duties` grant.
+    // NOTE: viewing/completing your OWN duties needs no grant at all — that is
+    // handled in dutyCan(), not here.
+    duties: ['management'],
+    duties_all: ['management'],
+    duties_review: ['management'],
+    // calendar_team deliberately has NO fallback. calendarPeopleScope() already
+    // treats an `all_tasks` grant as sufficient, so managers who can see the
+    // tasks can see the calendar rendering of them — but a plain `management`
+    // grant must not silently open every colleague's schedule.
   }
   let granted = permissions[section]
   if (granted === undefined) {

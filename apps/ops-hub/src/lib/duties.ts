@@ -43,6 +43,26 @@ export interface CreateDutyInput {
   category?: string
   requires_proof?: boolean
   reminder_minutes?: number
+  // ─── Migration 055: configurable targeting, requirements and review ───────
+  /** employee | team | department | brand | location | role */
+  target_kind?: string
+  target_team?: string
+  target_department?: string
+  target_role?: string
+  target_location?: string
+  /** task | checklist | report | form | inspection */
+  duty_kind?: string
+  instructions?: string
+  location?: string
+  reviewer_id?: string | null
+  requires_note?: boolean
+  requires_checklist?: boolean
+  requires_approval?: boolean
+  required_form_template_id?: string | null
+  grace_minutes?: number
+  escalation_minutes?: number
+  skip_holidays?: boolean
+  created_by?: string
 }
 
 export async function createDuty(input: CreateDutyInput): Promise<OcgDailyDutyRow> {
@@ -69,6 +89,25 @@ export async function createDuty(input: CreateDutyInput): Promise<OcgDailyDutyRo
       category: input.category ?? '',
       requires_proof: input.requires_proof ?? false,
       reminder_minutes: input.reminder_minutes ?? 0,
+      // 055 configuration. Targeting defaults to 'employee' so an existing
+      // caller that sends only assignee_id keeps its old behaviour exactly.
+      target_kind: input.target_kind ?? 'employee',
+      target_team: input.target_team ?? '',
+      target_department: input.target_department ?? '',
+      target_role: input.target_role ?? '',
+      target_location: input.target_location ?? '',
+      duty_kind: input.duty_kind ?? 'task',
+      instructions: input.instructions ?? '',
+      location: input.location ?? '',
+      reviewer_id: input.reviewer_id || null,
+      requires_note: input.requires_note ?? false,
+      requires_checklist: input.requires_checklist ?? false,
+      requires_approval: input.requires_approval ?? false,
+      required_form_template_id: input.required_form_template_id || null,
+      grace_minutes: input.grace_minutes ?? 0,
+      escalation_minutes: input.escalation_minutes ?? 0,
+      skip_holidays: input.skip_holidays ?? false,
+      created_by: input.created_by ?? '',
     })
     .select('*')
     .single()
