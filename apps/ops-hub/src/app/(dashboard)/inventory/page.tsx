@@ -47,6 +47,18 @@ export default async function InventoryPage() {
         <Stat label="Low stock alerts" value={lowTotal} tone={lowTotal ? 'text-amber-600' : 'text-gray-900'} />
       </div>
 
+      <Link href="/inventory/stock-cards"
+        className="flex items-center justify-between gap-3 rounded-xl border border-gray-100 bg-white p-5 shadow-sm transition-colors hover:border-ocg-gold/40">
+        <span>
+          <span className="block text-sm font-semibold text-gray-900">Stock card</span>
+          <span className="mt-0.5 block text-sm text-gray-500">
+            Opening · In · Out · Closing per item for any period, replayed from the movement ledger
+            and filterable by brand, store, item type and date.
+          </span>
+        </span>
+        <ArrowUpRight size={16} className="shrink-0 text-gray-300" />
+      </Link>
+
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {perBrand.map(({ brand, count, totalValue, low }) => (
           <Link key={brand.id} href={`/inventory/${brand.slug}`}

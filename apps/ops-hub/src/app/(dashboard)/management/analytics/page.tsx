@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { BarChart3 } from 'lucide-react'
+import { BarChart3, ArrowUpRight } from 'lucide-react'
 import { requireSection } from '@/lib/server-auth'
 import { listBrands } from '@/lib/brands'
 import { getManagementAnalytics } from '@/lib/analytics'
@@ -52,7 +52,13 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
           <h1 className="mt-1 flex items-center gap-2 text-2xl font-semibold text-gray-900"><BarChart3 size={22} /> Analytics &amp; reports</h1>
           <p className="mt-1 text-sm text-gray-500">{a.scopeLabel} · income, school fees, and operations. Fees are folded into income + the monthly trend.</p>
         </div>
-        <AnalyticsExport sheets={exportSheets} filename={`ocg-analytics-${brandSlug ?? 'all'}-${period}`} />
+        <div className="flex flex-wrap items-center gap-2">
+          <Link href="/management/analytics/operations"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-600 hover:border-ocg-gold/40 print:hidden">
+            Operational analytics <ArrowUpRight size={14} />
+          </Link>
+          <AnalyticsExport sheets={exportSheets} filename={`ocg-analytics-${brandSlug ?? 'all'}-${period}`} />
+        </div>
       </div>
 
       {/* Filters */}
