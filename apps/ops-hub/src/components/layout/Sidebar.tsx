@@ -8,7 +8,6 @@ import {
   UsersRound, BookOpen, BookMarked, UserCog, CalendarCheck, Lock, Landmark,
   CalendarClock, MessagesSquare, Megaphone, Boxes, ShoppingCart, ClipboardCheck,
   ClipboardList, ExternalLink, Home, Sparkles, BarChart3, CalendarDays, Factory,
-  Truck, Wallet,
 } from 'lucide-react'
 import { usePermissions } from '@/contexts/PermissionsContext'
 import type { SectionKey } from '@/lib/permissions'
@@ -34,9 +33,10 @@ export const MAIN_NAV: { href: string; label: string; icon: React.ElementType; s
   { href: '/finance', label: 'Finance', icon: Landmark, section: 'finance' },
   { href: '/inventory', label: 'Inventory', icon: Boxes, section: 'inventory' },
   { href: '/manufacturing', label: 'Manufacturing', icon: Factory, section: 'inventory' },
-  { href: '/field-sales', label: 'Field Sales', icon: Truck, section: 'inventory' },
+  // Field Sales and Petty Cash floats have schema, types and logic but no page
+  // yet — see docs/iceland-erp/02-COMPLETION-REPORT.md §8. Add the nav entries
+  // when the pages land, not before; a link to a 404 is worse than no link.
   { href: '/procurement', label: 'Procurement', icon: ShoppingCart, section: 'procurement' },
-  { href: '/petty-cash', label: 'Petty Cash', icon: Wallet, section: 'finance' },
   { href: '/management/team', label: 'Team', icon: UsersRound, section: 'management' },
   { href: '/management/users', label: 'Portal Access', icon: UserCog, section: 'users' },
   { href: '/management/duties', label: 'Daily Duties', icon: CalendarCheck, section: 'management' },
