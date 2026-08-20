@@ -6,7 +6,7 @@ import { advanceSeries } from './sales'
 import type {
   FieldSalesAllocationRow, FieldSalesAllocationItemRow, FieldSalesCustodyMovementRow,
   FieldSalesDailyReturnRow, FieldSalesDailyReturnItemRow,
-  FieldSalesReturnNoteRow, FieldSalesReturnNoteItemRow,
+  FieldSalesReturnNoteRow,
 } from '@ocg/db'
 
 // =============================================================================
@@ -47,6 +47,8 @@ async function custodyBalanceFor(salespersonId: string | null, itemId: string): 
 export async function recordCustodyMovement(input: {
   allocation_id?: string | null
   allocation_item_id?: string | null
+  daily_return_id?: string | null
+  return_note_id?: string | null
   salesperson_id: string | null
   item_id: string
   brand_id: string | null
@@ -55,8 +57,6 @@ export async function recordCustodyMovement(input: {
   batch_number?: string
   movement_date?: string
   reference?: string
-  source_table?: string
-  source_id?: string | null
   recorded_by: string
   notes?: string
 }): Promise<FieldSalesCustodyMovementRow> {
@@ -73,6 +73,8 @@ export async function recordCustodyMovement(input: {
   const { data, error } = await db().from('field_sales_custody_movements').insert({
     allocation_id: input.allocation_id ?? null,
     allocation_item_id: input.allocation_item_id ?? null,
+    daily_return_id: input.daily_return_id ?? null,
+    return_note_id: input.return_note_id ?? null,
     salesperson_id: input.salesperson_id,
     item_id: input.item_id,
     brand_id: input.brand_id,
@@ -82,9 +84,7 @@ export async function recordCustodyMovement(input: {
     quantity: qty,
     balance_after: after,
     movement_date: input.movement_date ?? todayInEat(),
-    reference: input.reference ?? '',
-    source_table: input.source_table ?? '',
-    source_id: input.source_id ?? null,
+    invoice_ref: input.reference ?? '',
     recorded_by: input.recorded_by,
     notes: input.notes ?? '',
   }).select('*').single()
@@ -253,8 +253,6 @@ export async function issueAllocation(id: string, issuedBy: string): Promise<Fie
       batch_number: line.batch_number,
       movement_date: allocation.week_start,
       reference: allocation.delivery_note_no || allocation.allocation_ref,
-      source_table: 'field_sales_allocations',
-      source_id: allocation.id,
       recorded_by: issuedBy,
     })
   }
@@ -370,8 +368,7 @@ export async function submitDailyReturn(input: {
             batch_number: line.batch_number,
             movement_date: input.return_date,
             reference: dailyReturn.return_ref,
-            source_table: 'field_sales_daily_returns',
-            source_id: dailyReturn.id,
+            daily_return_id: dailyReturn.id,
             recorded_by: input.submitted_by,
           })
         : Promise.resolve(null)
@@ -413,10 +410,8 @@ export async function postReturnNote(input: {
     salesperson_id: input.salesperson_id,
     destination_store_id: input.destination_store_id ?? null,
     received_by: input.received_by,
-    received_at: nowIso(),
     status: 'posted',
     posted_at: nowIso(),
-    posted_by: input.received_by,
   }).select('*').single()
   if (error) throw new Error(error.message)
   const note = data as FieldSalesReturnNoteRow
@@ -437,8 +432,7 @@ export async function postReturnNote(input: {
       quantity_returned: returned,
       quantity_accepted: accepted,
       quantity_rejected: rejected,
-      condition: line.condition ?? 'good',
-      reason: line.reason ?? '',
+      condition_note: line.reason || line.condition || 'good',
     })
 
     // Everything returned leaves custody.
@@ -452,8 +446,7 @@ export async function postReturnNote(input: {
       batch_number: line.batch_number,
       movement_date: input.return_date,
       reference: note.note_ref,
-      source_table: 'field_sales_return_notes',
-      source_id: note.id,
+      return_note_id: note.id,
       recorded_by: input.received_by,
     })
 

@@ -1,6 +1,9 @@
-import type { SectionKey, AccessLevel, PermissionsMap, BrandAccessMap } from '@ocg/db'
+import type {
+  SectionKey, AccessLevel, PermissionsMap, BrandAccessMap,
+  RecordAccessLevel, RecordAccessMap,
+} from '@ocg/db'
 
-export type { SectionKey, AccessLevel, PermissionsMap, BrandAccessMap }
+export type { SectionKey, AccessLevel, PermissionsMap, BrandAccessMap, RecordAccessLevel, RecordAccessMap }
 
 export interface SectionDef {
   key: SectionKey
@@ -28,6 +31,9 @@ export const SECTIONS: SectionDef[] = [
   { key: 'finance', label: 'Finance', href: '/finance' },
   { key: 'inventory', label: 'Inventory', href: '/inventory' },
   { key: 'procurement', label: 'Procurement', href: '/procurement' },
+  { key: 'people', label: 'People · Role & Capability', href: '/management/team' },
+  { key: 'knowledge', label: 'Group Knowledge', href: '/knowledge' },
+  { key: 'historical_imports', label: 'Historical Imports', href: '/historical-imports' },
   { key: 'forms', label: 'Forms (fill · edit = build)', href: '/forms' },
   { key: 'forms_responses', label: 'Form responses (view · edit = export)', href: '/forms' },
   { key: 'forms_approvals', label: 'Form approvals (review submissions)', href: '/forms' },
@@ -94,7 +100,34 @@ export const BRAND_SCOPED_SECTIONS: SectionDef[] = [
   { key: 'duties', label: 'Duties (assign within brand)', href: '/duties' },
   { key: 'duties_all', label: 'Duty oversight (by brand)', href: '/management/duties' },
   { key: 'calendar_team', label: 'Team calendar (by brand)', href: '/calendar' },
+  { key: 'people', label: 'People (by brand)', href: '/management/team' },
+  { key: 'knowledge', label: 'Knowledge (by brand)', href: '/knowledge' },
+  { key: 'historical_imports', label: 'Historical imports (by brand)', href: '/historical-imports' },
 ]
+
+/** New sensitive surfaces use an explicit record horizon in addition to the
+ * module grant. Missing configuration is conservative (`own`); the founding
+ * admin is the only implicit cross-group viewer. */
+export function recordAccessLevel(
+  recordAccess: RecordAccessMap | null,
+  section: SectionKey,
+): RecordAccessLevel {
+  if (recordAccess === null) return 'group'
+  return recordAccess[section] ?? 'own'
+}
+
+export function recordAccessAtLeast(
+  actual: RecordAccessLevel,
+  required: RecordAccessLevel,
+): boolean {
+  const rank: Record<RecordAccessLevel, number> = {
+    own: 0,
+    department: 1,
+    management: 2,
+    group: 3,
+  }
+  return rank[actual] >= rank[required]
+}
 
 /**
  * The brand UUIDs a user may touch within a section, or null for no
@@ -147,6 +180,8 @@ export function can(
     npt_service: ['ops'],
     rayyan_admin: ['ops'],
     rhythms_admin: ['ops'],
+    people: ['management'],
+    knowledge: ['management'],
     darul_admin: ['ops'],
     nuuranest_admin: ['ops'],
     glitz_admin: ['ops'],

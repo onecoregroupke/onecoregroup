@@ -136,10 +136,12 @@ export default async function OperationalFormsPage({
           )}
           {pad === 'gin' && (
             <GoodsIssueNoteForm kind="issue" brands={brandOptions} items={allItems}
+              stores={stores.map((s) => ({ id: s.id, label: s.name }))}
               identity={identity} defaultBrandId={brandId} />
           )}
           {pad === 'gtn' && (
             <GoodsIssueNoteForm kind="transfer" brands={brandOptions} items={allItems}
+              stores={stores.map((s) => ({ id: s.id, label: s.name }))}
               identity={identity} defaultBrandId={brandId} />
           )}
           {pad === 'mrf' && (

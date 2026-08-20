@@ -5,6 +5,9 @@ export type SectionKey =
   | 'ops' | 'ops_agents' | 'management' | 'finance' | 'npt_service' | 'rayyan_admin' | 'rhythms_admin'
   | 'darul_admin' | 'nuuranest_admin' | 'glitz_admin' | 'personal' | 'all_tasks'
   | 'meetings' | 'inventory' | 'procurement' | 'forms' | 'forms_responses' | 'forms_approvals'
+  // Production-readiness foundations (067). These remain independently
+  // grantable and brand-scopable; none inherit broad Ops access.
+  | 'people' | 'knowledge' | 'historical_imports'
   // Duties (055): `duties` edit = create/assign/edit/pause/end (brand-scopable),
   // `duties_all` view = see the team's/group's duties, `duties_review` = accept
   // or reopen a submitted occurrence. Viewing and completing your OWN duties
@@ -26,12 +29,16 @@ export type PermissionsMap = Partial<Record<SectionKey, AccessLevel>>
  */
 export type BrandAccessMap = Partial<Record<SectionKey, string[]>>
 
+export type RecordAccessLevel = 'own' | 'department' | 'management' | 'group'
+export type RecordAccessMap = Partial<Record<SectionKey, RecordAccessLevel>>
+
 export interface UserPermission {
   id: string
   user_id: string
   display_name: string | null
   permissions: PermissionsMap
   brand_access: BrandAccessMap
+  record_access: RecordAccessMap
   is_active: boolean
   created_at: string
   updated_at: string
@@ -683,8 +690,214 @@ export interface OpsTeamMemberRow {
   /** Duty/calendar targeting dimensions (migration 055). */
   team: string
   location: string
+  /** Structured people model (migration 067). */
+  user_id: string | null
+  primary_brand_id: string | null
+  reporting_manager_id: string | null
+  employment_status: string
+  job_description: string
+  updated_at: string
 }
 type OpsTeamMemberInsert = Pick<OpsTeamMemberRow, 'name'> & Partial<OpsTeamMemberRow>
+
+// ─── Structured people, capability and authority (migration 067) ────────────
+export interface EmployeeEntityAssignmentRow {
+  id: string
+  member_id: string
+  brand_id: string
+  department: string
+  operational_area: string
+  role_title: string
+  assignment_kind: 'primary' | 'additional' | 'temporary'
+  is_primary: boolean
+  reporting_manager_id: string | null
+  effective_from: string | null
+  effective_until: string | null
+  active: boolean
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+type EmployeeEntityAssignmentInsert = Pick<EmployeeEntityAssignmentRow, 'member_id' | 'brand_id'> & Partial<EmployeeEntityAssignmentRow>
+
+export interface EmployeeResponsibilityRow {
+  id: string
+  member_id: string
+  assignment_id: string | null
+  brand_id: string | null
+  title: string
+  description: string
+  responsibility_type: 'formal' | 'routine' | 'resource' | 'control'
+  cadence: string
+  criticality: string
+  active: boolean
+  effective_from: string | null
+  effective_until: string | null
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+type EmployeeResponsibilityInsert = Pick<EmployeeResponsibilityRow, 'member_id' | 'title'> & Partial<EmployeeResponsibilityRow>
+
+export interface EmployeeCapabilityRow {
+  id: string
+  code: string
+  title: string
+  description: string
+  operational_area: string
+  brand_id: string | null
+  active: boolean
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+type EmployeeCapabilityInsert = Pick<EmployeeCapabilityRow, 'code' | 'title'> & Partial<EmployeeCapabilityRow>
+
+export interface EmployeeCapabilityAssignmentRow {
+  id: string
+  member_id: string
+  capability_id: string
+  proficiency: 'awareness' | 'working' | 'proficient' | 'expert'
+  evidence_notes: string
+  verified_by: string
+  verified_at: string | null
+  expires_at: string | null
+  active: boolean
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+type EmployeeCapabilityAssignmentInsert = Pick<EmployeeCapabilityAssignmentRow, 'member_id' | 'capability_id'> & Partial<EmployeeCapabilityAssignmentRow>
+
+export interface EmployeeAuthorityRow {
+  id: string
+  member_id: string
+  brand_id: string | null
+  operational_area: string
+  resource_type: string
+  authority_action: 'prepare' | 'submit' | 'review' | 'approve' | 'authorise' | 'post' | 'adjust' | 'reverse'
+  authority_scope: 'own' | 'department' | 'entity' | 'group'
+  limit_amount_ksh: number | null
+  granted_by: string
+  grant_reason: string
+  effective_from: string
+  effective_until: string | null
+  active: boolean
+  revoked_by: string
+  revoked_at: string | null
+  created_at: string
+  updated_at: string
+}
+type EmployeeAuthorityInsert = Pick<EmployeeAuthorityRow, 'member_id' | 'authority_action' | 'granted_by'> & Partial<EmployeeAuthorityRow>
+
+export interface EmployeeCoverAssignmentRow {
+  id: string
+  covered_member_id: string
+  cover_member_id: string
+  capability_id: string | null
+  brand_id: string | null
+  process_name: string
+  cover_type: 'primary' | 'secondary' | 'emergency'
+  reason: string
+  effective_from: string | null
+  effective_until: string | null
+  active: boolean
+  approved_by: string
+  created_at: string
+  updated_at: string
+}
+type EmployeeCoverAssignmentInsert = Pick<EmployeeCoverAssignmentRow, 'covered_member_id' | 'cover_member_id'> & Partial<EmployeeCoverAssignmentRow>
+
+export interface EmployeeResourceAssignmentRow {
+  id: string
+  member_id: string
+  brand_id: string | null
+  resource_type: string
+  resource_name: string
+  resource_reference: string
+  responsibility: string
+  effective_from: string | null
+  effective_until: string | null
+  active: boolean
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+type EmployeeResourceAssignmentInsert = Pick<EmployeeResourceAssignmentRow, 'member_id' | 'resource_type' | 'resource_name'> & Partial<EmployeeResourceAssignmentRow>
+
+export interface EmployeeQualificationRow {
+  id: string
+  member_id: string
+  qualification_type: 'skill' | 'qualification' | 'training' | 'certification'
+  title: string
+  provider: string
+  completed_on: string | null
+  expires_on: string | null
+  evidence_url: string
+  status: string
+  notes: string
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+type EmployeeQualificationInsert = Pick<EmployeeQualificationRow, 'member_id' | 'title'> & Partial<EmployeeQualificationRow>
+
+export interface EmployeeActivityHistoryRow {
+  id: string
+  member_id: string
+  brand_id: string | null
+  activity_type: string
+  activity_date: string
+  record_type: string
+  record_id: string
+  summary: string
+  outcome: string
+  source: string
+  metadata: Record<string, unknown>
+  created_at: string
+}
+type EmployeeActivityHistoryInsert = Pick<EmployeeActivityHistoryRow, 'member_id' | 'activity_type' | 'summary'> & Partial<EmployeeActivityHistoryRow>
+
+export interface KnowledgeEntryRow {
+  id: string
+  title: string
+  brand_id: string | null
+  department: string
+  operational_area: string
+  knowledge_type: string
+  owner_member_id: string | null
+  visibility_scope: 'own' | 'department' | 'management' | 'group'
+  tags: string[]
+  current_version_id: string | null
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+type KnowledgeEntryInsert = Pick<KnowledgeEntryRow, 'title'> & Partial<KnowledgeEntryRow>
+
+export interface KnowledgeVersionRow {
+  id: string
+  entry_id: string
+  version_no: number
+  status: 'draft' | 'current' | 'legacy' | 'superseded' | 'archived'
+  content_body: string
+  file_url: string
+  file_hash: string
+  source_title: string
+  source_type: string
+  source_date: string | null
+  source_reference: string
+  effective_from: string | null
+  effective_until: string | null
+  review_date: string | null
+  approved_by: string
+  approved_at: string | null
+  change_summary: string
+  supersedes_version_id: string | null
+  created_by: string
+  created_at: string
+}
+type KnowledgeVersionInsert = Pick<KnowledgeVersionRow, 'entry_id' | 'version_no'> & Partial<KnowledgeVersionRow>
 
 export interface OpsTaskRow {
   task_id: string
@@ -1048,10 +1261,55 @@ export interface FinanceTransactionRow {
   statement_import_id: string | null
   statement_line_id: string | null
   transaction_cost_ksh: number
+  source_type: string
+  source_id: string
+  source_reference: string
+  posting_status: string
+  idempotency_key: string
+  approved_by: string
+  approved_at: string | null
+  reversed_by_id: string | null
+  import_id: string | null
   created_at: string
   updated_at: string
 }
 type FinanceTransactionInsert = Partial<FinanceTransactionRow>
+
+export interface FinanceJournalRow {
+  id: string
+  brand_id: string
+  journal_ref: string
+  effective_date: string
+  source_type: string
+  source_id: string
+  source_reference: string
+  posting_status: 'draft' | 'submitted' | 'approved' | 'posted' | 'reversed'
+  idempotency_key: string
+  description: string
+  created_by: string
+  approved_by: string
+  approved_at: string | null
+  posted_by: string
+  posted_at: string | null
+  reversal_of_id: string | null
+  import_id: string | null
+  created_at: string
+  updated_at: string
+}
+type FinanceJournalInsert = Pick<FinanceJournalRow, 'brand_id' | 'journal_ref' | 'effective_date' | 'source_type' | 'source_id' | 'idempotency_key' | 'created_by'> & Partial<FinanceJournalRow>
+
+export interface FinanceJournalLineRow {
+  id: string
+  journal_id: string
+  line_no: number
+  account_id: string | null
+  account_code: string
+  description: string
+  debit_ksh: number
+  credit_ksh: number
+  created_at: string
+}
+type FinanceJournalLineInsert = Pick<FinanceJournalLineRow, 'journal_id' | 'line_no'> & Partial<FinanceJournalLineRow>
 
 export interface FinanceStatementImportRow {
   id: string
@@ -2009,6 +2267,11 @@ export interface OcgDailyDutyRow {
   updated_by: string
   /** Null until the one-time assignment email has been sent (§4). */
   assignment_email_sent_at: string | null
+  responsible_role: string
+  required_capability_id: string | null
+  completion_window_minutes: number
+  evidence_requirement: string
+  escalation_rule: Record<string, unknown>
 }
 type OcgDailyDutyInsert = Pick<OcgDailyDutyRow, 'title'> & Partial<OcgDailyDutyRow>
 
@@ -2037,8 +2300,26 @@ export interface OcgDailyDutyLogRow {
   task_ref: string | null
   escalated_at: string | null
   completed_by: string
+  original_assignee_id: string | null
+  substitute_assignee_id: string | null
+  reassignment_reason: string
+  not_completed_reason: string
 }
 type OcgDailyDutyLogInsert = Pick<OcgDailyDutyLogRow, 'duty_id'> & Partial<OcgDailyDutyLogRow>
+
+export interface OcgDutyAssignmentEventRow {
+  id: string
+  duty_id: string
+  duty_log_id: string | null
+  duty_date: string
+  original_assignee_id: string | null
+  substitute_assignee_id: string | null
+  reason: string
+  event_type: 'cover' | 'reassign' | 'return'
+  changed_by: string
+  created_at: string
+}
+type OcgDutyAssignmentEventInsert = Pick<OcgDutyAssignmentEventRow, 'duty_id' | 'duty_date' | 'reason' | 'changed_by'> & Partial<OcgDutyAssignmentEventRow>
 
 // ─── Duty checklists, results, holidays (migration 055) ──────────────────────
 export interface OcgDutyChecklistItemRow {
@@ -2432,6 +2713,12 @@ export interface InventoryItemRow {
   maximum_stock: number | null
   production_threshold: number
   shelf_life_days: number | null
+  canonical_name: string
+  base_unit: string
+  pack_size: number
+  purchasable: boolean
+  producible: boolean
+  sellable: boolean
   created_at: string
   updated_at: string
 }
@@ -2460,8 +2747,32 @@ export interface InventoryMovementRow {
   receipt_item_id: string | null
   goods_issue_id: string | null
   issue_item_id: string | null
+  movement_unit: string
+  conversion_rate: number
+  base_quantity: number
+  effective_at: string
+  source_table: string
+  source_record_id: string
+  idempotency_key: string
+  approved_by: string
+  reversal_of_id: string | null
+  import_id: string | null
 }
 type InventoryMovementInsert = Pick<InventoryMovementRow, 'item_id'> & Partial<InventoryMovementRow>
+
+export interface InventoryItemAliasRow {
+  id: string
+  item_id: string
+  brand_id: string
+  alias: string
+  alias_type: 'legacy' | 'supplier' | 'barcode' | 'import'
+  source_id: string | null
+  notes: string
+  active: boolean
+  created_by: string
+  created_at: string
+}
+type InventoryItemAliasInsert = Pick<InventoryItemAliasRow, 'item_id' | 'brand_id' | 'alias'> & Partial<InventoryItemAliasRow>
 
 // ─── Procurement (migration 035) ─────────────────────────────────────────────
 export interface ProcurementVendorRow {
@@ -2675,6 +2986,12 @@ export interface ProcurementGoodsIssueRow {
   transfer_to_brand_id: string | null
   transfer_to_location: string
   store_location: string
+  source_store_id: string | null
+  destination_store_id: string | null
+  department: string
+  purpose: string
+  stock_card_number: string
+  entered_by: string
   issued_by: string
   issued_by_email: string
   received_by: string
@@ -3322,6 +3639,8 @@ type PettyCashReconciliationInsert = Partial<PettyCashReconciliationRow>
 // ─── Import framework + versions (migration 046) ─────────────────────────────
 export type DataImportStatus =
   | 'uploaded' | 'parsed' | 'validated' | 'committed' | 'partially_committed' | 'failed' | 'rolled_back'
+  | 'mapping_required' | 'validation_failed' | 'ready_for_review' | 'approved' | 'posted'
+  | 'reconciled' | 'locked' | 'cancelled'
 export type DataImportRowState =
   | 'pending' | 'valid' | 'warning' | 'error' | 'skipped' | 'committed' | 'rolled_back'
 export type DataImportDupStatus =
@@ -3356,6 +3675,24 @@ export interface DataImportRow {
   notes: string
   created_at: string
   updated_at: string
+  source_id: string | null
+  period_id: string | null
+  evidence_class: number | null
+  target_domain: string
+  period_start: string | null
+  period_end: string | null
+  idempotency_key: string
+  validation_summary: Record<string, unknown>
+  reviewed_by: string
+  reviewed_at: string | null
+  approved_by: string
+  approved_at: string | null
+  posted_by: string
+  posted_at: string | null
+  reconciled_by: string
+  reconciled_at: string | null
+  locked_by: string
+  locked_at: string | null
 }
 type DataImportInsert = Partial<DataImportRow>
 
@@ -3375,6 +3712,14 @@ export interface DataImportStagingRow {
   messages: unknown[]
   created_at: string
   updated_at: string
+  proposed_brand_id: string | null
+  proposed_mappings: Record<string, unknown>
+  validation_status: string
+  exception_status: string
+  reviewer_decision: string
+  reviewed_by: string
+  reviewed_at: string | null
+  idempotency_key: string
 }
 type DataImportStagingInsert = Pick<DataImportStagingRow, 'import_id'> & Partial<DataImportStagingRow>
 
@@ -3393,6 +3738,150 @@ export interface RecordVersionRow {
   created_at: string
 }
 type RecordVersionInsert = Pick<RecordVersionRow, 'record_type' | 'record_id'> & Partial<RecordVersionRow>
+
+export interface OperationalRecordAccessRow {
+  id: string
+  brand_id: string | null
+  record_type: string
+  record_id: string
+  principal_kind: 'member' | 'department' | 'team' | 'role'
+  principal_value: string
+  access_level: 'view' | 'edit' | 'review' | 'approve'
+  granted_by: string
+  reason: string
+  expires_at: string | null
+  created_at: string
+}
+type OperationalRecordAccessInsert = Pick<OperationalRecordAccessRow, 'record_type' | 'record_id' | 'principal_value'> & Partial<OperationalRecordAccessRow>
+
+export interface OperationalDocumentEventRow {
+  id: string
+  brand_id: string | null
+  record_type: string
+  record_id: string
+  event_type: string
+  summary: string
+  actor_user_id: string | null
+  actor_name: string
+  metadata: Record<string, unknown>
+  source_record_type: string
+  source_record_id: string | null
+  created_at: string
+}
+type OperationalDocumentEventInsert = Pick<OperationalDocumentEventRow, 'record_type' | 'record_id' | 'event_type' | 'summary'> & Partial<OperationalDocumentEventRow>
+
+export interface HistoricalImportSourceRow {
+  id: string
+  source_ref: string
+  title: string
+  filename: string
+  source_type: string
+  evidence_class: number
+  brand_id: string | null
+  period_start: string | null
+  period_end: string | null
+  received_at: string
+  description: string
+  storage_bucket: string
+  storage_path: string
+  checksum_sha256: string
+  source_date: string | null
+  notes: string
+  registered_by: string
+  created_at: string
+}
+type HistoricalImportSourceInsert = Pick<HistoricalImportSourceRow, 'source_ref' | 'title' | 'source_type' | 'evidence_class' | 'registered_by'> & Partial<HistoricalImportSourceRow>
+
+export interface HistoricalImportPeriodRow {
+  id: string
+  brand_id: string
+  target_domain: string
+  period_start: string
+  period_end: string
+  status: 'not_started' | 'staging' | 'under_review' | 'reconciled' | 'locked'
+  reconciled_by: string
+  reconciled_at: string | null
+  locked_by: string
+  locked_at: string | null
+  lock_reason: string
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+type HistoricalImportPeriodInsert = Pick<HistoricalImportPeriodRow, 'brand_id' | 'target_domain' | 'period_start' | 'period_end' | 'created_by'> & Partial<HistoricalImportPeriodRow>
+
+export interface HistoricalImportMappingRow {
+  id: string
+  brand_id: string | null
+  target_domain: string
+  source_field: string
+  original_value: string
+  normalized_value: string
+  target_type: string
+  target_id: string | null
+  status: 'proposed' | 'approved' | 'rejected' | 'retired'
+  context: Record<string, unknown>
+  source_id: string | null
+  reviewed_by: string
+  reviewed_at: string | null
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+type HistoricalImportMappingInsert = Pick<HistoricalImportMappingRow, 'target_domain' | 'source_field' | 'original_value' | 'target_type' | 'created_by'> & Partial<HistoricalImportMappingRow>
+
+export interface HistoricalImportExceptionRow {
+  id: string
+  import_id: string
+  import_row_id: string | null
+  exception_code: string
+  severity: 'warning' | 'error' | 'fatal'
+  source_value: unknown
+  message: string
+  status: 'open' | 'resolved' | 'accepted' | 'rejected'
+  resolution: string
+  resolved_by: string
+  resolved_at: string | null
+  created_at: string
+}
+type HistoricalImportExceptionInsert = Pick<HistoricalImportExceptionRow, 'import_id' | 'exception_code' | 'message'> & Partial<HistoricalImportExceptionRow>
+
+export interface HistoricalImportReconciliationRow {
+  id: string
+  import_id: string
+  reconciliation_type: string
+  control_name: string
+  source_total: number | null
+  posted_total: number | null
+  variance: number | null
+  result: 'pending' | 'matched' | 'explained' | 'failed'
+  notes: string
+  reconciled_by: string
+  reconciled_at: string | null
+  created_at: string
+}
+type HistoricalImportReconciliationInsert = Pick<HistoricalImportReconciliationRow, 'import_id' | 'reconciliation_type' | 'control_name'> & Partial<HistoricalImportReconciliationRow>
+
+export interface HistoricalImportSourceLinkRow {
+  import_id: string
+  source_id: string
+  created_at: string
+}
+type HistoricalImportSourceLinkInsert = Pick<HistoricalImportSourceLinkRow, 'import_id' | 'source_id'> & Partial<HistoricalImportSourceLinkRow>
+
+export interface HistoricalImportEventRow {
+  id: string
+  import_id: string
+  event_type: string
+  from_status: string
+  to_status: string
+  summary: string
+  actor_user_id: string | null
+  actor_name: string
+  metadata: Record<string, unknown>
+  created_at: string
+}
+type HistoricalImportEventInsert = Pick<HistoricalImportEventRow, 'import_id' | 'event_type' | 'summary'> & Partial<HistoricalImportEventRow>
 
 // ─── Inventory stores, production & stock counts (migration 060) ─────────────
 
@@ -3643,19 +4132,21 @@ export interface FieldSalesCustodyMovementRow {
   id: string
   allocation_id: string | null
   salesperson_id: string | null
+  sales_team: string
   item_id: string
   brand_id: string | null
   batch_number: string
-  /** issue | sale | return | damage | sample | adjustment | transfer */
+  /** issue | sale | return | damage | sample | promotion | adjustment | reversal */
   movement_kind: string
   direction: string
   quantity: number
   balance_after: number
   movement_date: string
-  reference: string
-  source_table: string
-  source_id: string | null
   allocation_item_id: string | null
+  daily_return_id: string | null
+  return_note_id: string | null
+  invoice_ref: string
+  reason: string
   recorded_by: string
   notes: string
   created_at: string
@@ -3685,7 +4176,6 @@ export interface FieldSalesDailyReturnRow {
   source_upload_id: string | null
   notes: string
   created_at: string
-  updated_at: string
 }
 export type FieldSalesDailyReturnInsert =
   Pick<FieldSalesDailyReturnRow, 'return_ref' | 'return_date'> & Partial<FieldSalesDailyReturnRow>
@@ -3718,14 +4208,11 @@ export interface FieldSalesReturnNoteRow {
   salesperson_id: string | null
   destination_store_id: string | null
   received_by: string
-  received_at: string | null
   /** draft | submitted | received | posted | disputed */
   status: string
   posted_at: string | null
-  posted_by: string
   notes: string
   created_at: string
-  updated_at: string
 }
 export type FieldSalesReturnNoteInsert =
   Pick<FieldSalesReturnNoteRow, 'note_ref' | 'return_date'> & Partial<FieldSalesReturnNoteRow>
@@ -3738,9 +4225,7 @@ export interface FieldSalesReturnNoteItemRow {
   quantity_returned: number
   quantity_accepted: number
   quantity_rejected: number
-  condition: string
-  reason: string
-  notes: string
+  condition_note: string
   created_at: string
 }
 export type FieldSalesReturnNoteItemInsert =
@@ -4187,6 +4672,17 @@ export interface Database {
       ops_clients: DbTable<OpsClientRow, OpsClientInsert, Partial<OpsClientRow>>
       ops_projects: DbTable<OpsProjectRow, OpsProjectInsert, Partial<OpsProjectRow>>
       ops_team_members: DbTable<OpsTeamMemberRow, OpsTeamMemberInsert, Partial<OpsTeamMemberRow>>
+      employee_entity_assignments: DbTable<EmployeeEntityAssignmentRow, EmployeeEntityAssignmentInsert, Partial<EmployeeEntityAssignmentRow>>
+      employee_responsibilities: DbTable<EmployeeResponsibilityRow, EmployeeResponsibilityInsert, Partial<EmployeeResponsibilityRow>>
+      employee_capabilities: DbTable<EmployeeCapabilityRow, EmployeeCapabilityInsert, Partial<EmployeeCapabilityRow>>
+      employee_capability_assignments: DbTable<EmployeeCapabilityAssignmentRow, EmployeeCapabilityAssignmentInsert, Partial<EmployeeCapabilityAssignmentRow>>
+      employee_authorities: DbTable<EmployeeAuthorityRow, EmployeeAuthorityInsert, Partial<EmployeeAuthorityRow>>
+      employee_cover_assignments: DbTable<EmployeeCoverAssignmentRow, EmployeeCoverAssignmentInsert, Partial<EmployeeCoverAssignmentRow>>
+      employee_resource_assignments: DbTable<EmployeeResourceAssignmentRow, EmployeeResourceAssignmentInsert, Partial<EmployeeResourceAssignmentRow>>
+      employee_qualifications: DbTable<EmployeeQualificationRow, EmployeeQualificationInsert, Partial<EmployeeQualificationRow>>
+      employee_activity_history: DbTable<EmployeeActivityHistoryRow, EmployeeActivityHistoryInsert, Partial<EmployeeActivityHistoryRow>>
+      ocg_knowledge_entries: DbTable<KnowledgeEntryRow, KnowledgeEntryInsert, Partial<KnowledgeEntryRow>>
+      ocg_knowledge_versions: DbTable<KnowledgeVersionRow, KnowledgeVersionInsert, Partial<KnowledgeVersionRow>>
       ops_tasks: DbTable<OpsTaskRow, OpsTaskInsert, Partial<OpsTaskRow>>
       ops_project_context: DbTable<OpsProjectContextRow, OpsProjectContextRow, Partial<OpsProjectContextRow>>
       ops_completion_records: DbTable<OpsCompletionRecordRow, OpsCompletionRecordInsert, Partial<OpsCompletionRecordRow>>
@@ -4200,6 +4696,7 @@ export interface Database {
       ops_task_comments: DbTable<OpsTaskCommentRow, OpsTaskCommentInsert, Partial<OpsTaskCommentRow>>
       ocg_daily_duties: DbTable<OcgDailyDutyRow, OcgDailyDutyInsert, Partial<OcgDailyDutyRow>>
       ocg_daily_duty_logs: DbTable<OcgDailyDutyLogRow, OcgDailyDutyLogInsert, Partial<OcgDailyDutyLogRow>>
+      ocg_duty_assignment_events: DbTable<OcgDutyAssignmentEventRow, OcgDutyAssignmentEventInsert, Partial<OcgDutyAssignmentEventRow>>
       ocg_duty_checklist_items: DbTable<OcgDutyChecklistItemRow, OcgDutyChecklistItemInsert, Partial<OcgDutyChecklistItemRow>>
       ocg_duty_checklist_results: DbTable<OcgDutyChecklistResultRow, OcgDutyChecklistResultInsert, Partial<OcgDutyChecklistResultRow>>
       ocg_holidays: DbTable<OcgHolidayRow, OcgHolidayInsert, Partial<OcgHolidayRow>>
@@ -4231,6 +4728,7 @@ export interface Database {
       ops_attendance_records: DbTable<OpsAttendanceRecordRow, OpsAttendanceRecordInsert, Partial<OpsAttendanceRecordRow>>
       inventory_items: DbTable<InventoryItemRow, InventoryItemInsert, Partial<InventoryItemRow>>
       inventory_movements: DbTable<InventoryMovementRow, InventoryMovementInsert, Partial<InventoryMovementRow>>
+      inventory_item_aliases: DbTable<InventoryItemAliasRow, InventoryItemAliasInsert, Partial<InventoryItemAliasRow>>
       procurement_vendors: DbTable<ProcurementVendorRow, ProcurementVendorInsert, Partial<ProcurementVendorRow>>
       procurement_purchases: DbTable<ProcurementPurchaseRow, ProcurementPurchaseInsert, Partial<ProcurementPurchaseRow>>
       procurement_purchase_items: DbTable<ProcurementPurchaseItemRow, ProcurementPurchaseItemInsert, Partial<ProcurementPurchaseItemRow>>
@@ -4244,6 +4742,8 @@ export interface Database {
       finance_voteheads: DbTable<FinanceVoteheadRow, FinanceVoteheadInsert, Partial<FinanceVoteheadRow>>
       finance_accounts: DbTable<FinanceAccountRow, FinanceAccountInsert, Partial<FinanceAccountRow>>
       finance_transactions: DbTable<FinanceTransactionRow, FinanceTransactionInsert, Partial<FinanceTransactionRow>>
+      finance_journals: DbTable<FinanceJournalRow, FinanceJournalInsert, Partial<FinanceJournalRow>>
+      finance_journal_lines: DbTable<FinanceJournalLineRow, FinanceJournalLineInsert, Partial<FinanceJournalLineRow>>
       finance_statement_imports: DbTable<FinanceStatementImportRow, FinanceStatementImportInsert, Partial<FinanceStatementImportRow>>
       finance_statement_lines: DbTable<FinanceStatementLineRow, FinanceStatementLineInsert, Partial<FinanceStatementLineRow>>
       finance_interbrand_transfers: DbTable<FinanceInterbrandTransferRow, FinanceInterbrandTransferInsert, Partial<FinanceInterbrandTransferRow>>
@@ -4321,6 +4821,15 @@ export interface Database {
       petty_cash_reconciliations: DbTable<PettyCashReconciliationRow, PettyCashReconciliationInsert, Partial<PettyCashReconciliationRow>>
       data_imports: DbTable<DataImportRow, DataImportInsert, Partial<DataImportRow>>
       data_import_rows: DbTable<DataImportStagingRow, DataImportStagingInsert, Partial<DataImportStagingRow>>
+      historical_import_sources: DbTable<HistoricalImportSourceRow, HistoricalImportSourceInsert, Partial<HistoricalImportSourceRow>>
+      historical_import_periods: DbTable<HistoricalImportPeriodRow, HistoricalImportPeriodInsert, Partial<HistoricalImportPeriodRow>>
+      historical_import_mappings: DbTable<HistoricalImportMappingRow, HistoricalImportMappingInsert, Partial<HistoricalImportMappingRow>>
+      historical_import_exceptions: DbTable<HistoricalImportExceptionRow, HistoricalImportExceptionInsert, Partial<HistoricalImportExceptionRow>>
+      historical_import_reconciliations: DbTable<HistoricalImportReconciliationRow, HistoricalImportReconciliationInsert, Partial<HistoricalImportReconciliationRow>>
+      historical_import_source_links: DbTable<HistoricalImportSourceLinkRow, HistoricalImportSourceLinkInsert, Partial<HistoricalImportSourceLinkRow>>
+      historical_import_events: DbTable<HistoricalImportEventRow, HistoricalImportEventInsert, Partial<HistoricalImportEventRow>>
+      operational_record_access: DbTable<OperationalRecordAccessRow, OperationalRecordAccessInsert, Partial<OperationalRecordAccessRow>>
+      operational_document_events: DbTable<OperationalDocumentEventRow, OperationalDocumentEventInsert, Partial<OperationalDocumentEventRow>>
       inventory_stores: DbTable<InventoryStoreRow, InventoryStoreInsert, Partial<InventoryStoreRow>>
       production_bom_lines: DbTable<ProductionBomLineRow, ProductionBomLineInsert, Partial<ProductionBomLineRow>>
       production_runs: DbTable<ProductionRunRow, ProductionRunInsert, Partial<ProductionRunRow>>
@@ -4356,6 +4865,15 @@ export interface Database {
       record_versions: DbTable<RecordVersionRow, RecordVersionInsert, Partial<RecordVersionRow>>
     }
     Views: Record<string, never>
-    Functions: Record<string, never>
+    Functions: {
+      publish_knowledge_version: {
+        Args: { p_version_id: string; p_approved_by: string }
+        Returns: KnowledgeVersionRow
+      }
+      post_finance_journal: {
+        Args: { p_journal_id: string; p_posted_by: string }
+        Returns: FinanceJournalRow
+      }
+    }
   }
 }

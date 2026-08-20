@@ -8,6 +8,15 @@ import { api } from '@/lib/apiClient'
 type ItemOption = { id: string; label: string; unit: string; quantity: number }
 type Mode = 'in' | 'out' | 'item'
 
+const ITEM_TYPE_OPTIONS = [
+  { value: 'consumable', label: 'Consumable / general' },
+  { value: 'raw_material', label: 'Raw material' },
+  { value: 'packaging', label: 'Packaging' },
+  { value: 'work_in_progress', label: 'Work in progress' },
+  { value: 'finished_good', label: 'Finished good' },
+  { value: 'sample', label: 'Sample' },
+]
+
 /**
  * Brand inventory actions: stock-in and stock-out forms (the tracked ways
  * goods enter and leave), plus new-item registration with opening stock.
@@ -109,6 +118,11 @@ export function InventoryForms({ brandId, items, categories = [] }: { brandId: s
         <div className="grid gap-3 lg:grid-cols-4">
           <Field label="Item name *"><input className="input" value={values.name ?? ''} onChange={(e) => set('name', e.target.value)} /></Field>
           <Field label="SKU / code"><input className="input" value={values.sku ?? ''} onChange={(e) => set('sku', e.target.value)} /></Field>
+          <Field label="Item type">
+            <select className="input" value={values.item_type ?? 'consumable'} onChange={(e) => set('item_type', e.target.value)}>
+              {ITEM_TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </Field>
           <Field label="Category">
             {categories.length > 0 ? (
               <select className="input" value={values.category ?? ''} onChange={(e) => set('category', e.target.value)}>

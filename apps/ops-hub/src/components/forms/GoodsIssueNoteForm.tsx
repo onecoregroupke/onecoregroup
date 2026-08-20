@@ -35,11 +35,12 @@ const blankLine = (): Line => ({
  * is on hand, so this cannot drive a store negative.
  */
 export function GoodsIssueNoteForm({
-  kind, brands, items, identity, defaultBrandId,
+  kind, brands, items, stores, identity, defaultBrandId,
 }: {
   kind: 'issue' | 'transfer'
   brands: { id: string; label: string }[]
   items: ItemOption[]
+  stores: { id: string; label: string }[]
   identity: Identity | null
   defaultBrandId: string
 }) {
@@ -56,6 +57,8 @@ export function GoodsIssueNoteForm({
     destination_location: '',
     purpose: '',
     stock_card_number: '',
+    source_store_id: '',
+    destination_store_id: '',
     issued_by: '',
     received_by: '',
     entered_by: '',
@@ -96,17 +99,34 @@ export function GoodsIssueNoteForm({
       method: 'POST',
       body: JSON.stringify({
         action: 'create-issue',
-        kind,
-        ...head,
-        items: usable.map((l) => ({
-          inventory_item_id: l.inventory_item_id || null,
-          description: l.description,
-          unit: l.unit,
-          quantity_issued: Number(l.quantity_issued || 0),
-          batch_number: l.batch_number,
-          store_location: l.store_location,
-          remarks: l.remarks,
-        })),
+        values: {
+          kind,
+          brand_id: head.brand_id,
+          issue_date: head.issue_date,
+          issued_to_type: isTransfer ? 'store' : 'department',
+          issued_to_label: head.issued_to,
+          transfer_to_location: head.destination_location,
+          store_location: stores.find((s) => s.id === head.source_store_id)?.label ?? '',
+          source_store_id: head.source_store_id || null,
+          destination_store_id: head.destination_store_id || null,
+          department: head.department,
+          purpose: head.purpose,
+          stock_card_number: head.stock_card_number,
+          entered_by: head.entered_by,
+          issued_by: head.issued_by,
+          received_by: head.received_by,
+          remarks: head.remarks,
+          items: usable.map((l) => ({
+            inventory_item_id: l.inventory_item_id || null,
+            description: l.description,
+            unit: l.unit,
+            quantity_approved: Number(l.quantity_issued || 0),
+            quantity_issued: Number(l.quantity_issued || 0),
+            batch_number: l.batch_number,
+            store_location: l.store_location,
+            remarks: l.remarks,
+          })),
+        },
       }),
     })
     if (!ok) { setSaving(false); setError(data?.error ?? 'Could not save the note.'); return }
@@ -151,10 +171,24 @@ export function GoodsIssueNoteForm({
         <PadField label="Department">
           <input className="input" value={head.department} onChange={(e) => set('department', e.target.value)} />
         </PadField>
+        <PadField label="Source store">
+          <select className="input" value={head.source_store_id} onChange={(e) => set('source_store_id', e.target.value)}>
+            <option value="">Select source store…</option>
+            {stores.map((store) => <option key={store.id} value={store.id}>{store.label}</option>)}
+          </select>
+        </PadField>
         {isTransfer && (
-          <PadField label="Destination store">
-            <input className="input" value={head.destination_location} onChange={(e) => set('destination_location', e.target.value)} />
-          </PadField>
+          <>
+            <PadField label="Destination store">
+              <select className="input" value={head.destination_store_id} onChange={(e) => {
+                const id = e.target.value
+                setHead((current) => ({ ...current, destination_store_id: id, destination_location: stores.find((s) => s.id === id)?.label ?? '' }))
+              }}>
+                <option value="">Select destination store…</option>
+                {stores.filter((store) => store.id !== head.source_store_id).map((store) => <option key={store.id} value={store.id}>{store.label}</option>)}
+              </select>
+            </PadField>
+          </>
         )}
         <PadField label="Purpose">
           <input className="input" value={head.purpose} onChange={(e) => set('purpose', e.target.value)} />
@@ -229,9 +263,9 @@ export function GoodsIssueNoteForm({
       ]} />
 
       <StockEffectNotice tone="out">
-        Posting this note removes <strong>{totalOut}</strong> unit(s) from stock.
+        Posting this note {isTransfer ? 'moves' : 'removes'} <strong>{totalOut}</strong> unit(s) {isTransfer ? 'between stores' : 'from stock'}.
         {isTransfer
-          ? ' A transfer is recorded as stock leaving the source store; the destination is named on the note.'
+          ? ' Paired source and destination ledger movements keep total stock unchanged and are protected against replay.'
           : ' Material issued to production is consumed — it leaves the store and is reconciled against the run.'}
         {' '}An issue larger than the quantity on hand is refused by the ledger.
       </StockEffectNotice>

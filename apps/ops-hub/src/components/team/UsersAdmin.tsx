@@ -8,7 +8,10 @@ import {
 import { getClient } from '@/lib/supabase'
 import { SECTIONS, MARKETING_SECTIONS, USERS_SECTION, ALL_TASKS_SECTION, BRAND_SCOPED_SECTIONS, defaultPermissions } from '@/lib/permissions'
 import { usePermissions } from '@/contexts/PermissionsContext'
-import type { PermissionsMap, BrandAccessMap, AccessLevel, SectionKey, SectionDef } from '@/lib/permissions'
+import type {
+  PermissionsMap, BrandAccessMap, AccessLevel, SectionKey, SectionDef,
+  RecordAccessMap, RecordAccessLevel,
+} from '@/lib/permissions'
 
 type BrandOption = { id: string; label: string }
 type TeamOption = { id: string; name: string; email: string; role: string; brand_ids: string[] }
@@ -19,6 +22,7 @@ interface PortalUser {
   display_name: string | null
   permissions: PermissionsMap | null // null = founding admin
   brand_access: BrandAccessMap
+  record_access: RecordAccessMap
   is_active: boolean
   is_admin: boolean
   email_confirmed_at: string | null
@@ -60,12 +64,14 @@ export function UsersAdmin({ brands, team }: { brands: BrandOption[]; team: Team
   const [inviteBrands, setInviteBrands] = useState<string[]>([])
   const [invitePerms, setInvitePerms] = useState<PermissionsMap>(defaultPermissions())
   const [inviteBrandAccess, setInviteBrandAccess] = useState<BrandAccessMap>({})
+  const [inviteRecordAccess, setInviteRecordAccess] = useState<RecordAccessMap>({})
   const [inviting, setInviting] = useState(false)
   const [pickedTeamId, setPickedTeamId] = useState('')
 
   // Editor state
   const [editPerms, setEditPerms] = useState<PermissionsMap>({})
   const [editBrandAccess, setEditBrandAccess] = useState<BrandAccessMap>({})
+  const [editRecordAccess, setEditRecordAccess] = useState<RecordAccessMap>({})
   const [editName, setEditName] = useState('')
   const [editEmail, setEditEmail] = useState('')
 
@@ -109,6 +115,7 @@ export function UsersAdmin({ brands, team }: { brands: BrandOption[]; team: Team
     setSelected(u)
     setEditPerms(u.permissions ?? {})
     setEditBrandAccess(u.brand_access ?? {})
+    setEditRecordAccess(u.record_access ?? {})
     setEditName(u.display_name ?? '')
     setEditEmail(u.email)
     setMessage(''); setError('')
@@ -127,12 +134,13 @@ export function UsersAdmin({ brands, team }: { brands: BrandOption[]; team: Team
           display_name: editName,
           permissions: editPerms,
           brand_access: editBrandAccess,
+          record_access: editRecordAccess,
           ...(emailChanged ? { email: editEmail.trim() } : {}),
         }),
       })
       const json = await res.json() as { error?: string }
       if (!res.ok) throw new Error(json.error)
-      const updated: PortalUser = { ...selected, display_name: editName || null, permissions: editPerms, brand_access: editBrandAccess, email: emailChanged ? editEmail.trim() : selected.email }
+      const updated: PortalUser = { ...selected, display_name: editName || null, permissions: editPerms, brand_access: editBrandAccess, record_access: editRecordAccess, email: emailChanged ? editEmail.trim() : selected.email }
       setUsers(prev => prev.map(u => u.id === updated.id ? updated : u))
       setSelected(updated)
       setMessage(emailChanged ? 'Saved. Email updated.' : 'Saved.')
@@ -213,13 +221,14 @@ export function UsersAdmin({ brands, team }: { brands: BrandOption[]; team: Team
         body: JSON.stringify({
           email: inviteEmail, display_name: inviteName, role: inviteRole,
           brand_ids: inviteBrands, permissions: invitePerms, brand_access: inviteBrandAccess,
+          record_access: inviteRecordAccess,
         }),
       })
       const json = await res.json() as { user?: PortalUser; error?: string }
       if (!res.ok) throw new Error(json.error)
       setUsers(prev => [...prev, json.user!])
       setShowInvite(false)
-      setPickedTeamId(''); setInviteEmail(''); setInviteName(''); setInviteRole(''); setInviteBrands([]); setInvitePerms(defaultPermissions()); setInviteBrandAccess({})
+      setPickedTeamId(''); setInviteEmail(''); setInviteName(''); setInviteRole(''); setInviteBrands([]); setInvitePerms(defaultPermissions()); setInviteBrandAccess({}); setInviteRecordAccess({})
       setMessage(`Invite sent to ${json.user!.email}. They'll get an email to set their password and access their portal.`)
       selectUser(json.user!)
     } catch (e) {
@@ -337,6 +346,7 @@ export function UsersAdmin({ brands, team }: { brands: BrandOption[]; team: Team
               </div>
 
               <BrandScopeEditor permissions={invitePerms} brandAccess={inviteBrandAccess} onChange={setInviteBrandAccess} brands={brands} />
+              <RecordScopeEditor permissions={invitePerms} value={inviteRecordAccess} onChange={setInviteRecordAccess} />
 
             </div>
             <div className="flex shrink-0 justify-end gap-2 border-t border-gray-100 px-5 py-4">
@@ -446,6 +456,7 @@ export function UsersAdmin({ brands, team }: { brands: BrandOption[]; team: Team
                     </div>
 
                     <BrandScopeEditor permissions={editPerms} brandAccess={editBrandAccess} onChange={setEditBrandAccess} brands={brands} readonly={!canEdit} />
+                    <RecordScopeEditor permissions={editPerms} value={editRecordAccess} onChange={setEditRecordAccess} readonly={!canEdit} />
                   </>
                 )}
 
@@ -633,6 +644,52 @@ function BrandScopeEditor({ permissions, brandAccess, onChange, brands, readonly
             </div>
           )
         })}
+      </div>
+    </div>
+  )
+}
+
+const RECORD_SCOPED_SECTIONS: SectionDef[] = [
+  { key: 'people', label: 'People · Role & Capability', href: '/management/team' },
+  { key: 'knowledge', label: 'Group Knowledge', href: '/knowledge' },
+  { key: 'historical_imports', label: 'Historical Imports', href: '/historical-imports' },
+]
+
+const RECORD_LEVELS: Array<{ value: RecordAccessLevel; label: string }> = [
+  { value: 'own', label: 'Own records' },
+  { value: 'department', label: 'Department / team' },
+  { value: 'management', label: 'Entity management' },
+  { value: 'group', label: 'Group administration' },
+]
+
+function RecordScopeEditor({ permissions, value, onChange, readonly = false }: {
+  permissions: PermissionsMap
+  value: RecordAccessMap
+  onChange: (next: RecordAccessMap) => void
+  readonly?: boolean
+}) {
+  const sections = RECORD_SCOPED_SECTIONS.filter((section) => (permissions[section.key] ?? 'none') !== 'none')
+  if (sections.length === 0) return null
+  return (
+    <div>
+      <p className="mb-2 text-xs font-bold uppercase tracking-wide text-gray-500">Record visibility</p>
+      <p className="mb-3 text-xs text-gray-400">
+        Module access and record reach are separate. Group administration should only be granted deliberately.
+      </p>
+      <div className="space-y-2 rounded-xl border border-gray-100 p-3">
+        {sections.map((section) => (
+          <label key={section.key} className="grid gap-2 sm:grid-cols-[1fr_220px] sm:items-center">
+            <span className="text-sm font-medium text-gray-700">{section.label}</span>
+            <select
+              className="input"
+              disabled={readonly}
+              value={value[section.key] ?? 'own'}
+              onChange={(event) => onChange({ ...value, [section.key]: event.target.value as RecordAccessLevel })}
+            >
+              {RECORD_LEVELS.map((level) => <option key={level.value} value={level.value}>{level.label}</option>)}
+            </select>
+          </label>
+        ))}
       </div>
     </div>
   )

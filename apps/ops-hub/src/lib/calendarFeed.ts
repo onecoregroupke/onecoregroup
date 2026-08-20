@@ -82,7 +82,7 @@ async function visibleMemberIds(viewer: CalendarViewer): Promise<string[] | null
 // ─── Sources ────────────────────────────────────────────────────────────────
 
 async function tasksIn(from: string, to: string, memberIds: string[] | null, viewer: CalendarViewer): Promise<CalendarItem[]> {
-  let q = db().from('ops_tasks').select('*')
+  const q = db().from('ops_tasks').select('*')
     .gte('target_date', from).lte('target_date', to).limit(2000)
   const { data } = await q
   const rows = (data as OpsTaskRow[] | null) ?? []

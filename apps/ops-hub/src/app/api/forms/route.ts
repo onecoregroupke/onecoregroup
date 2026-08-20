@@ -15,6 +15,7 @@ import {
 } from '@/lib/forms'
 import { listBrands } from '@/lib/brands'
 import type { OcgFormSubmissionRow, OcgFormTemplateRow } from '@ocg/db'
+import { listVersions } from '@/lib/recordVersions'
 
 /**
  * Custom forms API — permission-scoped.
@@ -47,6 +48,19 @@ export async function GET(req: NextRequest) {
   const canExport = actor.can('forms_responses', 'edit')
   const canApprove = actor.can('forms_approvals', 'edit')
   const templateId = url.searchParams.get('template') ?? undefined
+  const historyId = url.searchParams.get('history') ?? undefined
+
+  if (historyId) {
+    const submission = await getSubmission(historyId)
+    if (!submission || !templateInScope(submission.brand_id, brandIds)) {
+      return NextResponse.json({ ok: false, error: 'not found' }, { status: 404 })
+    }
+    if (!canReviewAll && submission.submitted_by.toLowerCase() !== actor.email.toLowerCase()) {
+      return NextResponse.json({ ok: false, error: 'not found' }, { status: 404 })
+    }
+    const versions = await listVersions('ocg_form_submissions', submission.id)
+    return NextResponse.json({ ok: true, submission, versions })
+  }
 
   // CSV export of one form's submissions — gated on forms_responses.edit.
   if (url.searchParams.get('export') === 'csv') {

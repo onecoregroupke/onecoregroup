@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AlertCircle, CheckCircle, Plus, Save, Archive } from 'lucide-react'
 import { usePermissions } from '@/contexts/PermissionsContext'
 import { apiFetch } from '@/lib/marketing/client'
@@ -75,7 +75,7 @@ export default function PlatformsPage() {
     setForm((c) => ({ ...c, [key]: value }))
   }
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true)
     setError('')
     try {
@@ -85,17 +85,19 @@ export default function PlatformsPage() {
       ])
       setBrands(b.brands ?? [])
       setPlatforms(p.platforms ?? [])
-      if (!form.brandId && b.brands?.[0]) update('brandId', b.brands[0].id)
+      if (b.brands?.[0]) {
+        setForm((current) => current.brandId ? current : { ...current, brandId: b.brands[0]!.id })
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load platforms.')
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
     void load()
-  }, [])
+  }, [load])
 
   async function save() {
     setSaving(true)

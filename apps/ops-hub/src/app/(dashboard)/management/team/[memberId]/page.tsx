@@ -2,7 +2,11 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { activeTasks, dueWithinDays, getManagementData, isOverdue, workloadLabel } from '@/lib/management'
 import { priorityTone, statusTone } from '@/lib/taskStatuses'
-import { requireSection } from '@/lib/server-auth'
+import { requireActor } from '@/lib/server-auth'
+import { memberForEmail } from '@/lib/team'
+import { getEmployeeProfile } from '@/lib/people'
+import { canAccessEmployee } from '@/lib/governanceModel'
+import { RoleCapabilityProfile } from '@/components/team/RoleCapabilityProfile'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,8 +15,21 @@ export default async function TeamMemberPage({
 }: {
   params: Promise<{ memberId: string }>
 }) {
-  await requireSection('management')
+  const actor = await requireActor()
+  if (!actor.can('people', 'view')) notFound()
   const { memberId } = await params
+  const [profile, me] = await Promise.all([getEmployeeProfile(memberId), memberForEmail(actor.email)])
+  if (!profile) notFound()
+  if (!canAccessEmployee({
+    memberId: me?.id ?? null,
+    department: me?.department ?? '',
+    brandIds: actor.allowedBrandIds('people'),
+    scope: actor.recordScope('people'),
+  }, {
+    memberId: profile.member.id,
+    department: profile.member.department,
+    brandIds: profile.member.brand_ids,
+  })) notFound()
   const data = await getManagementData()
   const member = data.team.find((m) => m.id === memberId)
   if (!member) notFound()
@@ -47,6 +64,13 @@ export default async function TeamMemberPage({
         <Stat label="Overdue" value={overdue.length} tone="text-red-600" />
         <Stat label="Blocked" value={blocked.length} tone="text-amber-600" />
       </div>
+
+      <RoleCapabilityProfile
+        profile={profile}
+        brands={data.brands.map((brand) => ({ id: brand.id, name: brand.short_name || brand.name }))}
+        team={data.team.map((person) => ({ id: person.id, name: person.name }))}
+        canEdit={actor.can('people', 'edit') && ['management', 'group'].includes(actor.recordScope('people'))}
+      />
 
       <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
         <Panel title="Current work">

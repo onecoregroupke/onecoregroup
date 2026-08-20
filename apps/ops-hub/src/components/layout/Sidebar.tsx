@@ -9,6 +9,7 @@ import {
   CalendarClock, MessagesSquare, Megaphone, Boxes, ShoppingCart, ClipboardCheck,
   ClipboardList, ExternalLink, Home, Sparkles, BarChart3, CalendarDays, Factory,
   Truck, Wallet,
+  ArchiveRestore,
 } from 'lucide-react'
 import { usePermissions } from '@/contexts/PermissionsContext'
 import type { SectionKey } from '@/lib/permissions'
@@ -37,7 +38,9 @@ export const MAIN_NAV: { href: string; label: string; icon: React.ElementType; s
   { href: '/field-sales', label: 'Field Sales', icon: Truck, section: 'inventory' },
   { href: '/procurement', label: 'Procurement', icon: ShoppingCart, section: 'procurement' },
   { href: '/petty-cash', label: 'Petty Cash', icon: Wallet, section: 'finance' },
-  { href: '/management/team', label: 'Team', icon: UsersRound, section: 'management' },
+  { href: '/management/team', label: 'Team', icon: UsersRound, section: 'people' },
+  { href: '/knowledge', label: 'Knowledge', icon: BookOpen, section: 'knowledge' },
+  { href: '/historical-imports', label: 'Historical Imports', icon: ArchiveRestore, section: 'historical_imports' },
   { href: '/management/users', label: 'Portal Access', icon: UserCog, section: 'users' },
   { href: '/management/duties', label: 'Daily Duties', icon: CalendarCheck, section: 'management' },
   { href: '/management/analytics', label: 'Analytics', icon: BarChart3, section: 'management' },

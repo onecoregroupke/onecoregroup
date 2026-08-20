@@ -1,9 +1,9 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { BookOpen, Plus, Receipt, Trash2, UserPlus, X } from 'lucide-react'
+import { BookOpen, Plus, Receipt, UserPlus, X } from 'lucide-react'
 import { api } from '@/lib/apiClient'
-import type { SchoolProgrammeRow, SchoolFeeStructureRow, SchoolFeeStructureItemRow, SchoolEnrollmentRow } from '@ocg/db'
+import type { SchoolProgrammeRow, SchoolFeeStructureRow, SchoolFeeStructureItemRow } from '@ocg/db'
 
 type School = 'rayyan' | 'rhythms' | 'darul'
 type StructureWithItems = SchoolFeeStructureRow & { items: SchoolFeeStructureItemRow[] }

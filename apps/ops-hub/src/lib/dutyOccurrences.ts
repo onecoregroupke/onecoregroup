@@ -282,16 +282,18 @@ export async function completeDutyOccurrence(input: CompleteDutyInput): Promise<
     attachment_count: input.attachment_count ?? 0,
   }
 
-  const { data: existing } = await supabase
+  const existingQuery = supabase
     .from('ocg_daily_duty_logs').select('id')
     .eq('duty_id', duty.id).eq('duty_date', date)
-    .eq('assignee_id', input.assignee_id ?? '')
-    .maybeSingle()
+  const scopedExistingQuery = input.assignee_id
+    ? existingQuery.eq('assignee_id', input.assignee_id)
+    : existingQuery.is('assignee_id', null)
+  const { data: existingRow } = await scopedExistingQuery.maybeSingle()
 
   let log: OcgDailyDutyLogRow
-  if (existing) {
+  if (existingRow) {
     const { data, error } = await supabase.from('ocg_daily_duty_logs')
-      .update(payload).eq('id', (existing as { id: string }).id).select('*').single()
+      .update(payload).eq('id', (existingRow as { id: string }).id).select('*').single()
     if (error) throw new Error(error.message)
     log = data as OcgDailyDutyLogRow
   } else {
@@ -312,6 +314,67 @@ export async function completeDutyOccurrence(input: CompleteDutyInput): Promise<
       }, { onConflict: 'log_id,item_id' })
     }
   }
+  return log
+}
+
+/** Assign a substitute to one occurrence without changing the duty template or
+ * replacing the original owner. This is the audit-safe cover operation. */
+export async function coverDutyOccurrence(input: {
+  duty_id: string
+  duty_date: string
+  original_assignee_id: string
+  substitute_assignee_id: string
+  reason: string
+  changed_by: string
+}): Promise<OcgDailyDutyLogRow> {
+  if (!input.reason.trim()) throw new Error('A cover reason is required')
+  if (input.original_assignee_id === input.substitute_assignee_id) {
+    throw new Error('The substitute must be a different person')
+  }
+  const supabase = db()
+  const { data: duty } = await supabase.from('ocg_daily_duties').select('*').eq('id', input.duty_id).maybeSingle()
+  if (!duty) throw new Error('Duty not found')
+
+  const { data: existing } = await supabase.from('ocg_daily_duty_logs').select('*')
+    .eq('duty_id', input.duty_id).eq('duty_date', input.duty_date)
+    .eq('assignee_id', input.original_assignee_id).maybeSingle()
+  const patch = {
+    original_assignee_id: input.original_assignee_id,
+    substitute_assignee_id: input.substitute_assignee_id,
+    reassignment_reason: input.reason.trim(),
+  }
+  let log: OcgDailyDutyLogRow
+  if (existing) {
+    const { data, error } = await supabase.from('ocg_daily_duty_logs').update(patch)
+      .eq('id', (existing as OcgDailyDutyLogRow).id).select('*').single()
+    if (error) throw new Error(error.message)
+    log = data as OcgDailyDutyLogRow
+  } else {
+    const row = duty as OcgDailyDutyRow
+    const { data, error } = await supabase.from('ocg_daily_duty_logs').insert({
+      duty_id: input.duty_id,
+      assignee_id: input.original_assignee_id,
+      duty_date: input.duty_date,
+      status: 'pending',
+      note: '',
+      completed_at: nowIso(),
+      due_at: row.time_of_day ? dutyDueAt(input.duty_date, row.time_of_day, row.timezone) : null,
+      ...patch,
+    }).select('*').single()
+    if (error) throw new Error(error.message)
+    log = data as OcgDailyDutyLogRow
+  }
+
+  await supabase.from('ocg_duty_assignment_events').insert({
+    duty_id: input.duty_id,
+    duty_log_id: log.id,
+    duty_date: input.duty_date,
+    original_assignee_id: input.original_assignee_id,
+    substitute_assignee_id: input.substitute_assignee_id,
+    reason: input.reason.trim(),
+    event_type: 'cover',
+    changed_by: input.changed_by,
+  })
   return log
 }
 

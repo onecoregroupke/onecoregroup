@@ -1,5 +1,5 @@
 import { createServerClient } from '@ocg/db/client'
-import type { PermissionsMap, BrandAccessMap } from '@ocg/db'
+import type { PermissionsMap, BrandAccessMap, RecordAccessMap } from '@ocg/db'
 import { buildCallbackUrl, hubUrl, sendInviteEmail, sendRecoveryEmail } from '@/lib/auth-emails'
 import { upsertTeamMemberByEmail, deactivateTeamMemberByEmail } from '@/lib/team'
 
@@ -10,6 +10,7 @@ type PermRow = {
   display_name: string | null
   permissions: PermissionsMap
   brand_access?: BrandAccessMap | null
+  record_access?: RecordAccessMap | null
   is_active: boolean
   created_at: string
   updated_at: string
@@ -53,6 +54,7 @@ export async function GET(req: Request) {
     display_name: permsMap[u.id]?.display_name ?? null,
     permissions: permsMap[u.id]?.permissions ?? null, // null = founding admin
     brand_access: permsMap[u.id]?.brand_access ?? {},
+    record_access: permsMap[u.id]?.record_access ?? {},
     is_active: permsMap[u.id]?.is_active ?? true,
     is_admin: !permsMap[u.id],
     email_confirmed_at: u.email_confirmed_at ?? null, // accepted invite
@@ -75,6 +77,7 @@ export async function POST(req: Request) {
     display_name?: string
     permissions?: PermissionsMap
     brand_access?: BrandAccessMap
+    record_access?: RecordAccessMap
     brand_ids?: string[]
     role?: string
   }
@@ -142,6 +145,7 @@ export async function POST(req: Request) {
       display_name: body.display_name?.trim() || null,
       permissions: body.permissions ?? {},
       brand_access: body.brand_access ?? {},
+      record_access: body.record_access ?? {},
       is_active: true,
     })
     .select()
@@ -162,6 +166,8 @@ export async function POST(req: Request) {
       email,
       display_name: data.display_name,
       permissions: data.permissions,
+      brand_access: data.brand_access ?? {},
+      record_access: data.record_access ?? {},
       is_active: data.is_active,
       is_admin: false,
       email_confirmed_at: null,
@@ -181,6 +187,7 @@ export async function PATCH(req: Request) {
     display_name?: string
     permissions?: PermissionsMap
     brand_access?: BrandAccessMap
+    record_access?: RecordAccessMap
     is_active?: boolean
     email?: string
   }
@@ -198,6 +205,7 @@ export async function PATCH(req: Request) {
   if (body.display_name !== undefined) updates.display_name = body.display_name?.trim() || null
   if (body.permissions !== undefined) updates.permissions = body.permissions
   if (body.brand_access !== undefined) updates.brand_access = body.brand_access
+  if (body.record_access !== undefined) updates.record_access = body.record_access
   if (body.is_active !== undefined) updates.is_active = body.is_active
 
   if (Object.keys(updates).length > 0) {

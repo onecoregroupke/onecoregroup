@@ -12,5 +12,5 @@ export default async function ChatPage() {
   const contacts = team
     .filter((m) => m.email && m.email.toLowerCase() !== (actor.email ?? '').toLowerCase())
     .map((m) => ({ email: m.email!, name: m.name }))
-  return <ChatWorkspace meEmail={actor.email ?? ''} meName={actor.name} contacts={contacts} />
+  return <ChatWorkspace meEmail={actor.email ?? ''} contacts={contacts} />
 }

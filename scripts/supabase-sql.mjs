@@ -3,6 +3,7 @@
 //
 //   node scripts/supabase-sql.mjs --file packages/db/migrations/055_x.sql
 //   node scripts/supabase-sql.mjs --query "select 1"
+//   node scripts/supabase-sql.mjs --check-file packages/db/migrations/067_x.sql
 //   node scripts/supabase-sql.mjs --tables            # list public tables
 //
 // Reads SUPABASE_ACCESS_TOKEN + NEXT_PUBLIC_SUPABASE_URL from process.env or
@@ -114,13 +115,15 @@ async function main() {
   let label = ''
   let migrationFile = null
   if (args.includes('--tables')) { sql = TABLES_SQL; label = 'public tables' }
-  else if (flag('--file')) {
-    const p = resolve(ROOT, flag('--file'))
+  else if (flag('--file') || flag('--check-file')) {
+    const checkOnly = Boolean(flag('--check-file'))
+    const p = resolve(ROOT, flag('--file') || flag('--check-file'))
     sql = readFileSync(p, 'utf8')
-    label = flag('--file')
-    if (p.includes('migrations')) migrationFile = basename(p)
+    label = checkOnly ? `${flag('--check-file')} (transactional check)` : flag('--file')
+    if (checkOnly) sql = `BEGIN;\n${sql}\nROLLBACK;`
+    else if (p.includes('migrations')) migrationFile = basename(p)
   } else if (flag('--query')) { sql = flag('--query'); label = 'query' }
-  else { console.error('Usage: --file <path> | --query <sql> | --tables | --pending'); process.exit(1) }
+  else { console.error('Usage: --file <path> | --check-file <path> | --query <sql> | --tables | --pending'); process.exit(1) }
 
   process.stderr.write(`→ project ${ref} · ${label}\n`)
   const out = await runSql(sql)

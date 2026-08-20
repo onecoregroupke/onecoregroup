@@ -7,6 +7,7 @@ import type {
   OcgFormSubmissionStatus,
   OcgFormFieldDef,
 } from '@ocg/db'
+import { snapshotVersion } from './recordVersions'
 
 // =============================================================================
 // Custom forms — the report-book engine. Templates define a form (fields as
@@ -268,6 +269,19 @@ async function mintSubmissionReference(template: OcgFormTemplateRow): Promise<st
   return mintReference(`form:${template.id}`, prefix.endsWith('-') ? prefix : `${prefix}-`)
 }
 
+async function snapshotSubmission(
+  row: OcgFormSubmissionRow,
+  input: { before?: OcgFormSubmissionRow | null; changedBy: string; reason: string },
+) {
+  await snapshotVersion({
+    record_type: 'ocg_form_submissions', record_id: row.id,
+    action: input.before ? 'update' : 'create',
+    snapshot: row as unknown as Record<string, unknown>,
+    previous_snapshot: input.before as unknown as Record<string, unknown> | null | undefined,
+    brand_id: row.brand_id, changed_by: input.changedBy, reason: input.reason,
+  })
+}
+
 export async function submitForm(input: {
   template_id: string
   values: Record<string, unknown>
@@ -302,7 +316,9 @@ export async function submitForm(input: {
     .select('*')
     .single()
   if (error) throw new Error(error.message)
-  return data as OcgFormSubmissionRow
+  const row = data as OcgFormSubmissionRow
+  await snapshotSubmission(row, { changedBy: input.submitted_by, reason: 'Form submitted' })
+  return row
 }
 
 // ─── Draft lifecycle ────────────────────────────────────────────────────────
@@ -350,7 +366,9 @@ export async function saveDraft(input: {
       .select('*')
       .single()
     if (error) throw new Error(error.message)
-    return data as OcgFormSubmissionRow
+    const row = data as OcgFormSubmissionRow
+    await snapshotSubmission(row, { before: existing, changedBy: email, reason: existing.status === 'correction_requested' ? 'Correction saved' : 'Draft autosaved' })
+    return row
   }
 
   const { data, error } = await db()
@@ -370,7 +388,9 @@ export async function saveDraft(input: {
     .select('*')
     .single()
   if (error) throw new Error(error.message)
-  return data as OcgFormSubmissionRow
+  const row = data as OcgFormSubmissionRow
+  await snapshotSubmission(row, { changedBy: email, reason: 'Draft created' })
+  return row
 }
 
 /**
@@ -433,7 +453,9 @@ export async function submitDraft(input: {
     .select('*')
     .single()
   if (error) throw new Error(error.message)
-  return data as OcgFormSubmissionRow
+  const row = data as OcgFormSubmissionRow
+  await snapshotSubmission(row, { before: existing, changedBy: input.actor_email, reason: existing.status === 'correction_requested' ? 'Correction resubmitted' : 'Draft submitted' })
+  return row
 }
 
 /** Reviewer decision. The reviewer may never be the submitter. */
@@ -468,7 +490,9 @@ export async function reviewSubmission(input: {
     .select('*')
     .single()
   if (error) throw new Error(error.message)
-  return data as OcgFormSubmissionRow
+  const row = data as OcgFormSubmissionRow
+  await snapshotSubmission(row, { before: existing, changedBy: input.actor_email, reason: `Review: ${input.decision}${input.comment ? ` — ${input.comment}` : ''}` })
+  return row
 }
 
 /**

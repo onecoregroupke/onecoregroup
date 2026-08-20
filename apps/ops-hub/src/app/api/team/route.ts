@@ -8,7 +8,7 @@ import { auditEvent } from '@/lib/audit'
 export async function GET(req: NextRequest) {
   const actor = await getApiActor(req)
   if (!actor) return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 })
-  if (!actor.can('ops', 'view') && !actor.isSuperAdmin) {
+  if (!actor.can('ops', 'view') && !actor.can('people', 'view') && !actor.isSuperAdmin) {
     return NextResponse.json({ ok: false, error: 'forbidden' }, { status: 403 })
   }
   const team = await listTeam()
@@ -18,16 +18,24 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const actor = await getApiActor(req)
   if (!actor) return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 })
-  if (!actor.can('ops', 'edit') && !actor.isSuperAdmin) {
+  if (!actor.can('people', 'edit') && !actor.isSuperAdmin) {
+    return NextResponse.json({ ok: false, error: 'forbidden' }, { status: 403 })
+  }
+  if (!['management', 'group'].includes(actor.recordScope('people'))) {
     return NextResponse.json({ ok: false, error: 'forbidden' }, { status: 403 })
   }
   try {
     const body = await req.json()
+    const requestedBrands = Array.isArray(body?.brand_ids) ? body.brand_ids as string[] : []
+    const allowedBrands = actor.allowedBrandIds('people')
+    if (allowedBrands !== null && (requestedBrands.length === 0 || requestedBrands.some((id) => !allowedBrands.includes(id)))) {
+      return NextResponse.json({ ok: false, error: 'Pick an entity within your people-management scope.' }, { status: 403 })
+    }
     const row = await createTeamMember({
       name: body?.name ?? '',
       email: body?.email,
       role: body?.role,
-      brand_ids: Array.isArray(body?.brand_ids) ? body.brand_ids : [],
+      brand_ids: requestedBrands,
       active: body?.active ?? true,
       phone: body?.phone,
       job_title: body?.job_title,
@@ -52,17 +60,27 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   const actor = await getApiActor(req)
   if (!actor) return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 })
-  if (!actor.can('ops', 'edit') && !actor.can('management', 'edit') && !actor.isSuperAdmin) {
+  if (!actor.can('people', 'edit') && !actor.can('management', 'edit') && !actor.isSuperAdmin) {
+    return NextResponse.json({ ok: false, error: 'forbidden' }, { status: 403 })
+  }
+  if (!['management', 'group'].includes(actor.recordScope('people'))) {
     return NextResponse.json({ ok: false, error: 'forbidden' }, { status: 403 })
   }
   try {
     const body = await req.json()
     const before = (await listTeam()).find((m) => m.id === body?.id) ?? null
+    if (!before) return NextResponse.json({ ok: false, error: 'not found' }, { status: 404 })
+    const allowedBrands = actor.allowedBrandIds('people')
+    const requestedBrands = Array.isArray(body?.brand_ids) ? body.brand_ids as string[] : before.brand_ids
+    if (allowedBrands !== null && (
+      !before.brand_ids.some((id) => allowedBrands.includes(id)) ||
+      requestedBrands.length === 0 || requestedBrands.some((id) => !allowedBrands.includes(id))
+    )) return NextResponse.json({ ok: false, error: 'forbidden' }, { status: 403 })
     const row = await updateTeamMember(String(body?.id ?? ''), {
       name: body?.name,
       email: body?.email,
       role: body?.role,
-      brand_ids: Array.isArray(body?.brand_ids) ? body.brand_ids : undefined,
+      brand_ids: Array.isArray(body?.brand_ids) ? requestedBrands : undefined,
       active: body?.active,
       phone: body?.phone,
       job_title: body?.job_title,

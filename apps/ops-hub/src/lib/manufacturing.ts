@@ -3,7 +3,7 @@ import { recordStockMovement } from './inventory'
 import { scopedBrandIds } from './stockCards'
 import {
   validateFgTransfer, expectedFromBom, reconcileMaterial, suggestProduction,
-  type RunMaterial, type ProductionSuggestion,
+  type ProductionSuggestion,
 } from './manufacturingModel'
 import type {
   InventoryItemRow, InventoryStoreRow, ProductionRunRow, ProductionRunMaterialRow,

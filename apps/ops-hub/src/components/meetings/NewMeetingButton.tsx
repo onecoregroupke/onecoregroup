@@ -54,7 +54,7 @@ export function NewMeetingButton({
   function toggleAttendee(id: string) {
     setAttendees((prev) => (prev.includes(id) ? prev.filter((n) => n !== id) : [...prev, id]))
   }
-  function useTemplate(id: string) {
+  function applyTemplate(id: string) {
     const template = templates.find((t) => t.id === id)
     if (!template) return
     setForm((f) => ({
@@ -114,7 +114,7 @@ export function NewMeetingButton({
             <div className="space-y-3">
               {templates.length > 0 && (
                 <Field label="Use saved meeting">
-                  <select className="input" defaultValue="" onChange={(e) => useTemplate(e.target.value)}>
+                  <select className="input" defaultValue="" onChange={(e) => applyTemplate(e.target.value)}>
                     <option value="">Start fresh</option>
                     {templates.map((template) => <option key={template.id} value={template.id}>{template.title}</option>)}
                   </select>

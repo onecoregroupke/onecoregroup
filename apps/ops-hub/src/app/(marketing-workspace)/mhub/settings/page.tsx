@@ -10,7 +10,6 @@ export default function SettingsPage() {
 
   // ── Profile state ───────────────────────────────────────────────────────────
   const [email, setEmail] = useState('')
-  const [userId, setUserId] = useState('')
   const [displayName, setDisplayName] = useState('')
   const [profileSaving, setProfileSaving] = useState(false)
   const [profileMsg, setProfileMsg] = useState<{ ok: boolean; text: string } | null>(null)
@@ -26,7 +25,6 @@ export default function SettingsPage() {
     getSession().then(async (session) => {
       if (!session) return
       setEmail(session.user.email ?? '')
-      setUserId(session.user.id)
 
       // Fetch display name from user_permissions row
       const supabase = getClient()

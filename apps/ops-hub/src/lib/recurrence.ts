@@ -5,7 +5,7 @@
 // completion is the single (duty_id, date) log row.
 
 export interface RecurrenceRule {
-  frequency: string              // daily | weekdays | weekly | monthly | interval
+  frequency: string              // daily | weekdays | weekly | monthly | quarterly | interval
   weekdays?: number[] | null     // 0=Sun … 6=Sat — for 'weekly' / selected days
   day_of_month?: number | null   // 1..31 for 'monthly'; -1 = last WORKING day of month
   interval_days?: number | null  // for 'interval' (every N days from start_date)
@@ -44,6 +44,17 @@ export function isDutyDueOn(rule: RecurrenceRule, dateISO: string): boolean {
     case 'monthly':
       if (rule.day_of_month === -1) return dateISO === lastWorkingDayOfMonth(dateISO)
       return dom(dateISO) === (rule.day_of_month ?? 1)
+    case 'quarterly': {
+      if (!rule.start_date) return false
+      const start = atUtc(rule.start_date)
+      const current = atUtc(dateISO)
+      const months = (current.getUTCFullYear() - start.getUTCFullYear()) * 12 + current.getUTCMonth() - start.getUTCMonth()
+      return months >= 0 && months % 3 === 0 && (
+        rule.day_of_month === -1
+          ? dateISO === lastWorkingDayOfMonth(dateISO)
+          : dom(dateISO) === (rule.day_of_month ?? start.getUTCDate())
+      )
+    }
     case 'interval': {
       const n = rule.interval_days ?? 0
       if (n <= 0 || !rule.start_date) return false
@@ -79,6 +90,7 @@ export const RECURRENCE_FREQUENCIES = [
   { value: 'weekdays', label: 'Every weekday (Mon–Fri)' },
   { value: 'weekly', label: 'Selected days of the week' },
   { value: 'monthly', label: 'Monthly (day of month)' },
+  { value: 'quarterly', label: 'Quarterly' },
   { value: 'interval', label: 'Every N days' },
 ] as const
 
@@ -91,6 +103,7 @@ export function describeRecurrence(rule: RecurrenceRule): string {
     case 'weekdays': return 'Every weekday (Mon–Fri)'
     case 'weekly': return `Weekly on ${(rule.weekdays ?? []).map((d) => WEEKDAY_LABELS[d]).join(', ') || '—'}`
     case 'monthly': return rule.day_of_month === -1 ? 'Last working day of the month' : `Monthly on day ${rule.day_of_month ?? 1}`
+    case 'quarterly': return rule.day_of_month === -1 ? 'Quarterly on the last working day' : `Quarterly on day ${rule.day_of_month ?? 1}`
     case 'interval': return `Every ${rule.interval_days ?? 0} days`
     default: return 'Every day'
   }

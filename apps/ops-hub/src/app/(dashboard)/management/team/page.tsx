@@ -3,14 +3,23 @@ import { activeTasks, getManagementData, isOverdue, workloadLabel } from '@/lib/
 import { TeamMemberCreateForm } from '@/components/team/TeamMemberCreateForm'
 import { TeamMemberEditButton } from '@/components/team/TeamMemberEditButton'
 import { requireSection } from '@/lib/server-auth'
+import { memberForEmail } from '@/lib/team'
+import { canAccessEmployee } from '@/lib/governanceModel'
 
 export const dynamic = 'force-dynamic'
 
 export default async function TeamWorkloadPage() {
-  await requireSection('management')
-  const { team, tasks, brands, completions } = await getManagementData()
+  const actor = await requireSection('people')
+  const [{ team: allTeam, tasks, brands, completions }, me] = await Promise.all([getManagementData(), memberForEmail(actor.email)])
+  const team = allTeam.filter((member) => canAccessEmployee({
+    memberId: me?.id ?? null,
+    department: me?.department ?? '',
+    brandIds: actor.allowedBrandIds('people'),
+    scope: actor.recordScope('people'),
+  }, { memberId: member.id, department: member.department, brandIds: member.brand_ids }))
   const active = activeTasks(tasks)
   const brandById = new Map(brands.map((b) => [b.id, b]))
+  const canEdit = actor.can('people', 'edit') && ['management', 'group'].includes(actor.recordScope('people'))
 
   return (
     <div className="space-y-6">
@@ -24,7 +33,7 @@ export default async function TeamWorkloadPage() {
         </p>
       </div>
 
-      <TeamMemberCreateForm brands={brands.map((brand) => ({ id: brand.id, label: brand.name }))} />
+      {canEdit && <TeamMemberCreateForm brands={brands.map((brand) => ({ id: brand.id, label: brand.name }))} />}
 
       <div className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm">
         {team.length === 0 ? (
@@ -60,7 +69,7 @@ export default async function TeamWorkloadPage() {
                           </Link>
                           <p className="text-xs text-gray-400">{member.role}{member.email ? ` · ${member.email}` : ''}</p>
                         </div>
-                        <TeamMemberEditButton member={member} brands={brandOptions} />
+                        {canEdit && <TeamMemberEditButton member={member} brands={brandOptions} />}
                       </div>
                     </td>
                     <td className="px-4 py-3 text-gray-600">

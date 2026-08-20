@@ -2,10 +2,16 @@ import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { cache } from 'react'
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
-import type { Database, PermissionsMap, BrandAccessMap, SectionKey, AccessLevel } from '@ocg/db'
+import type {
+  Database, PermissionsMap, BrandAccessMap, SectionKey, AccessLevel,
+  RecordAccessMap, RecordAccessLevel,
+} from '@ocg/db'
 import { db } from './serverClient'
 import { listTeam } from './team'
-import { can as canFn, canSeeAllTasks, allowedBrands, taskScope, type TaskScope } from './permissions'
+import {
+  can as canFn, canSeeAllTasks, allowedBrands, taskScope, recordAccessLevel,
+  type TaskScope,
+} from './permissions'
 
 /**
  * The authenticated caller, resolved from a verified Supabase session, enriched
@@ -24,6 +30,8 @@ export interface Actor {
   permissions: PermissionsMap | null
   /** Per-section brand restriction. null = founding admin (unrestricted). */
   brandAccess: BrandAccessMap | null
+  /** Per-section row horizon. null = founding admin (`group`). */
+  recordAccess: RecordAccessMap | null
   isActive: boolean
   /** May see EVERY team member's tasks (founding admin or `all_tasks` grant). */
   isSuperAdmin: boolean
@@ -40,6 +48,7 @@ export interface Actor {
    * to every read AND write in those modules.
    */
   allowedBrandIds: (section: SectionKey) => string[] | null
+  recordScope: (section: SectionKey) => RecordAccessLevel
   /** Set to the founding admin's email when this actor is being viewed via
    *  impersonation ("enter portal"); null otherwise. */
   impersonatedBy?: string | null
@@ -64,6 +73,7 @@ export async function loadActor(user: { id: string; email: string | null }): Pro
     data: {
       permissions: PermissionsMap
       brand_access?: BrandAccessMap | null
+      record_access?: RecordAccessMap | null
       display_name: string | null
       is_active: boolean
     } | null
@@ -77,6 +87,7 @@ export async function loadActor(user: { id: string; email: string | null }): Pro
   // No row → founding admin (permissions stays null = full access).
   const permissions: PermissionsMap | null = row ? (row.permissions ?? {}) : null
   const brandAccess: BrandAccessMap | null = row ? (row.brand_access ?? {}) : null
+  const recordAccess: RecordAccessMap | null = row ? (row.record_access ?? {}) : null
 
   // Resolve the assignee name for task scoping (email match, then fallbacks).
   // Final fallback is the user id (never empty, never matches an assigned_to)
@@ -94,11 +105,19 @@ export async function loadActor(user: { id: string; email: string | null }): Pro
     name,
     permissions,
     brandAccess,
+    recordAccess,
     isActive: row ? row.is_active !== false : true,
     isSuperAdmin: canSeeAllTasks(permissions),
     taskScope: taskScope(permissions, brandAccess),
     can: (section, level = 'view') => canFn(permissions, section, level),
     allowedBrandIds: (section) => allowedBrands(brandAccess, section),
+    recordScope: (section) => {
+      if (recordAccess === null || recordAccess[section]) return recordAccessLevel(recordAccess, section)
+      if ((section === 'people' || section === 'knowledge') && canFn(permissions, 'management', 'view')) {
+        return 'management'
+      }
+      return 'own'
+    },
   }
 }
 

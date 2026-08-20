@@ -1,5 +1,6 @@
 import { db, nowIso } from './serverClient'
 import type { InventoryItemRow, InventoryMovementRow } from '@ocg/db'
+import { toBaseQuantity } from './inventoryIntegrity'
 
 // =============================================================================
 // Inventory — per-brand stock registers with in/out movements. Every movement
@@ -37,6 +38,10 @@ export async function listMovements(
   return (data as InventoryMovementRow[] | null) ?? []
 }
 
+// Valid values for inventory_items.item_type (inventory_items_type_check, 060).
+const ITEM_TYPES = ['raw_material', 'packaging', 'work_in_progress', 'finished_good', 'damaged', 'returned', 'sample', 'consumable'] as const
+export type InventoryItemType = (typeof ITEM_TYPES)[number]
+
 export async function createItem(input: {
   brand_id: string
   name: string
@@ -49,10 +54,21 @@ export async function createItem(input: {
   location?: string
   notes?: string
   recorded_by?: string
+  // Canonical identity (§15) — classification, home store, and what the item
+  // may be used for. All optional so the plain brand "New item" form keeps
+  // working without every caller knowing the manufacturing model.
+  item_type?: string
+  store_id?: string | null
+  purchasable?: boolean
+  producible?: boolean
+  sellable?: boolean
 }): Promise<InventoryItemRow> {
   if (!input.brand_id) throw new Error('brand_id is required')
   if (!input.name?.trim()) throw new Error('Item name is required')
   const openingQty = Number(input.quantity ?? 0)
+  const itemType: InventoryItemType = (ITEM_TYPES as readonly string[]).includes(input.item_type ?? '')
+    ? (input.item_type as InventoryItemType)
+    : 'consumable'
   const { data, error } = await db()
     .from('inventory_items')
     .insert({
@@ -61,11 +77,19 @@ export async function createItem(input: {
       sku: input.sku ?? '',
       category: input.category ?? '',
       unit: input.unit || 'pcs',
+      canonical_name: input.name.trim(),
+      base_unit: input.unit || 'pcs',
+      pack_size: 1,
       quantity: openingQty,
       unit_value_ksh: Number(input.unit_value_ksh ?? 0),
       reorder_level: Number(input.reorder_level ?? 0),
       location: input.location ?? '',
       notes: input.notes ?? '',
+      item_type: itemType,
+      store_id: input.store_id ?? null,
+      purchasable: input.purchasable ?? (itemType !== 'finished_good'),
+      producible: input.producible ?? (itemType === 'finished_good' || itemType === 'work_in_progress'),
+      sellable: input.sellable ?? (itemType === 'finished_good'),
     })
     .select('*')
     .single()
@@ -79,6 +103,10 @@ export async function createItem(input: {
       brand_id: item.brand_id,
       direction: 'in',
       quantity: openingQty,
+      movement_unit: item.base_unit || item.unit,
+      conversion_rate: 1,
+      base_quantity: openingQty,
+      effective_at: nowIso(),
       unit_value_ksh: item.unit_value_ksh,
       reason: 'Opening stock',
       source: 'manual',
@@ -121,6 +149,13 @@ export interface RecordStockInput {
   sales_invoice_item_id?: string | null
   batch_number?: string
   store_id?: string | null
+  movement_unit?: string
+  conversion_rate?: number
+  source_table?: string
+  source_record_id?: string
+  idempotency_key?: string
+  approved_by?: string
+  import_id?: string | null
 }
 
 /** Record a stock movement and update the item's live quantity. Stock-out
@@ -132,6 +167,20 @@ export async function recordStockMovement(
   const supabase = db()
   const qty = Number(input.quantity)
   if (!Number.isFinite(qty) || qty <= 0) throw new Error('Quantity must be greater than 0')
+  const conversionRate = Number(input.conversion_rate ?? 1)
+  const baseQty = toBaseQuantity(qty, conversionRate)
+
+  if (input.idempotency_key) {
+    const { data: replay } = await supabase
+      .from('inventory_movements')
+      .select('*')
+      .eq('idempotency_key', input.idempotency_key)
+      .maybeSingle()
+    if (replay) {
+      const { data: replayItem } = await supabase.from('inventory_items').select('*').eq('id', input.item_id).single()
+      return { movement: replay as InventoryMovementRow, item: replayItem as InventoryItemRow }
+    }
+  }
 
   const { data: itemRow } = await supabase
     .from('inventory_items')
@@ -142,9 +191,9 @@ export async function recordStockMovement(
   const item = itemRow as InventoryItemRow
 
   const current = Number(item.quantity ?? 0)
-  const after = input.direction === 'in' ? current + qty : current - qty
+  const after = input.direction === 'in' ? current + baseQty : current - baseQty
   if (after < 0) {
-    throw new Error(`Only ${current} ${item.unit} of "${item.name}" in stock — cannot issue ${qty}.`)
+    throw new Error(`Only ${current} ${item.base_unit || item.unit} of "${item.name}" in stock — cannot issue ${baseQty}.`)
   }
 
   const unitValue = input.unit_value_ksh != null && input.unit_value_ksh !== 0
@@ -158,11 +207,20 @@ export async function recordStockMovement(
       brand_id: item.brand_id,
       direction: input.direction,
       quantity: qty,
+      movement_unit: input.movement_unit || item.base_unit || item.unit,
+      conversion_rate: conversionRate,
+      base_quantity: baseQty,
+      effective_at: input.movement_date ? `${input.movement_date}T00:00:00.000Z` : nowIso(),
       unit_value_ksh: unitValue,
       movement_date: input.movement_date || nowIso().slice(0, 10),
       reason: input.reason ?? '',
       reference: input.reference ?? '',
       source: input.source ?? 'manual',
+      source_table: input.source_table ?? '',
+      source_record_id: input.source_record_id ?? '',
+      idempotency_key: input.idempotency_key ?? '',
+      approved_by: input.approved_by ?? '',
+      import_id: input.import_id ?? null,
       purchase_id: input.purchase_id ?? null,
       goods_receipt_id: input.goods_receipt_id ?? null,
       receipt_item_id: input.receipt_item_id ?? null,

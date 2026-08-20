@@ -37,6 +37,13 @@ test('monthly last working day (skips weekend)', () => {
   assert.equal(isDutyDueOn({ frequency: 'monthly', day_of_month: -1 }, '2026-05-31'), false)
 })
 
+test('quarterly recurrence follows the start month', () => {
+  const rule = { frequency: 'quarterly', start_date: '2026-01-15', day_of_month: 15 }
+  assert.deepEqual(dueDatesBetween(rule, '2026-01-01', '2026-08-31'), [
+    '2026-01-15', '2026-04-15', '2026-07-15',
+  ])
+})
+
 test('interval: every N days from start', () => {
   const r = { frequency: 'interval', interval_days: 14, start_date: MON }
   assert.equal(isDutyDueOn(r, MON), true)

@@ -40,11 +40,9 @@ const EMOJI_PACK = ['😀', '😂', '😊', '😍', '🙏', '👏', '👍', '✅
  */
 export function ChatWorkspace({
   meEmail,
-  meName,
   contacts,
 }: {
   meEmail: string
-  meName: string
   contacts: Contact[]
 }) {
   const [conversations, setConversations] = useState<Conversation[]>([])

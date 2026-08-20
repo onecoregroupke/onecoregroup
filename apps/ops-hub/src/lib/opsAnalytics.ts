@@ -60,8 +60,6 @@ export async function manufacturingAnalytics(
     return d >= win.from && d <= win.to
   })
   const itemById = new Map(items.map((i) => [i.id, i]))
-  const balanceById = new Map(balances.map((b) => [b.item_id, b]))
-
   const sum = (rows: ProductionRunRow[], key: keyof ProductionRunRow) =>
     rows.reduce((acc, r) => acc + Number(r[key] ?? 0), 0)
 

@@ -39,8 +39,6 @@ export function useAutosave<T>(opts: {
   const saving = useRef(false)
   const lastSaved = useRef<string>('')
 
-  const eq = opts.isEqual ?? ((a: T, b: T) => JSON.stringify(a) === JSON.stringify(b))
-
   // Recover a local draft on mount.
   useEffect(() => {
     if (!storageKey || typeof window === 'undefined') return
@@ -68,7 +66,8 @@ export function useAutosave<T>(opts: {
       persist(storageKey, value) // keep a recoverable copy
     } finally {
       saving.current = false
-      if (pending.current && !eq(pending.current, value)) {
+      const isEqual = opts.isEqual ?? ((a: T, b: T) => JSON.stringify(a) === JSON.stringify(b))
+      if (pending.current && !isEqual(pending.current, value)) {
         const next = pending.current
         pending.current = null
         void doSave(next)
@@ -76,7 +75,7 @@ export function useAutosave<T>(opts: {
         pending.current = null
       }
     }
-  }, [onSave, storageKey, eq])
+  }, [onSave, storageKey, opts.isEqual])
 
   const onChange = useCallback((value: T) => {
     setStatus('unsaved')

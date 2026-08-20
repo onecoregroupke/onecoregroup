@@ -65,14 +65,16 @@ export function MaterialRequisitionForm({
       method: 'POST',
       body: JSON.stringify({
         action: 'create-requisition',
-        ...head,
-        items: usable.map((l) => ({
-          inventory_item_id: l.inventory_item_id || null,
-          description: l.description,
-          unit: l.unit,
-          quantity_requested: Number(l.quantity_requested || 0),
-          notes: l.notes,
-        })),
+        values: {
+          ...head,
+          items: usable.map((l) => ({
+            inventory_item_id: l.inventory_item_id || null,
+            description: l.description,
+            unit: l.unit,
+            quantity_requested: Number(l.quantity_requested || 0),
+            notes: l.notes,
+          })),
+        },
       }),
     })
     if (!ok) { setSaving(false); setError(data?.error ?? 'Could not save the requisition.'); return }

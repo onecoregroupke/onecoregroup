@@ -60,6 +60,8 @@ export default function CompliancePage() {
 
   const days = getWeekDays(weekStart)
   const weekEnd = days[days.length - 1]!
+  const weekStartIso = fmtDate(weekStart)
+  const weekEndIso = fmtDate(weekEnd)
 
   useEffect(() => {
     const supabase = getClient()
@@ -68,14 +70,14 @@ export default function CompliancePage() {
       supabase
         .from('daily_metrics')
         .select('brand_id, metric_date, feed_posts_count')
-        .gte('metric_date', fmtDate(weekStart))
-        .lte('metric_date', fmtDate(weekEnd)),
+        .gte('metric_date', weekStartIso)
+        .lte('metric_date', weekEndIso),
     ]).then(([br, mr]) => {
       setBrands((br.data as Brand[]) ?? [])
       setMetrics((mr.data as DailyMetric[]) ?? [])
       setLoading(false)
     })
-  }, [weekStart])
+  }, [weekStartIso, weekEndIso])
 
   function navigate(dir: -1 | 1) {
     setLoading(true)

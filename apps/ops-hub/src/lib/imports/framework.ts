@@ -3,6 +3,7 @@ import { db, nowIso } from '../serverClient'
 import type { WorkbookData } from '../xlsx'
 import type { Actor } from '../api-auth'
 import type { DataImportRow, DataImportStagingRow, DataImportDupStatus } from '@ocg/db'
+import { importIdempotencyKey } from '../governanceModel'
 
 /**
  * Reusable import foundation (migration 046 / Part 8). One flow:
@@ -62,8 +63,29 @@ export async function createImport(input: {
   sheets_available: Array<{ name: string; rowCount: number; colCount: number }>
   field_mappings?: Record<string, unknown>
   uploaded_by: string
+  source_id?: string | null
+  period_id?: string | null
+  evidence_class?: number | null
+  target_domain?: string
+  period_start?: string | null
+  period_end?: string | null
 }): Promise<DataImportRow> {
-  const { data, error } = await db()
+  const key = importIdempotencyKey({
+    brandId: input.brand_id,
+    importType: input.import_type,
+    fileHash: input.file_hash,
+    periodStart: input.period_start,
+    periodEnd: input.period_end,
+  })
+  const supabase = db()
+  const { data: existing } = await supabase
+    .from('data_imports')
+    .select('*')
+    .eq('idempotency_key', key)
+    .maybeSingle()
+  if (existing) return existing as DataImportRow
+
+  const { data, error } = await supabase
     .from('data_imports')
     .insert({
       import_type: input.import_type,
@@ -76,6 +98,13 @@ export async function createImport(input: {
       sheets_available: input.sheets_available,
       field_mappings: input.field_mappings ?? {},
       uploaded_by: input.uploaded_by,
+      idempotency_key: key,
+      source_id: input.source_id ?? null,
+      period_id: input.period_id ?? null,
+      evidence_class: input.evidence_class ?? null,
+      target_domain: input.target_domain ?? '',
+      period_start: input.period_start ?? null,
+      period_end: input.period_end ?? null,
       status: 'uploaded',
     })
     .select('*')
@@ -156,7 +185,10 @@ export async function parseAndStage(
   // Batch insert staging rows.
   for (let i = 0; i < toInsert.length; i += 500) {
     const chunk = toInsert.slice(i, i + 500)
-    const { error } = await supabase.from('data_import_rows').insert(chunk as never)
+    const { error } = await supabase.from('data_import_rows').upsert(chunk as never, {
+      onConflict: 'import_id,sheet_name,source_row,record_kind',
+      ignoreDuplicates: true,
+    })
     if (error) throw new Error(error.message)
   }
 

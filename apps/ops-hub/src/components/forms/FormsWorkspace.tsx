@@ -3,11 +3,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   ArrowDown, ArrowUp, CheckCircle2, ClipboardList, Download, FilePlus2, Pencil,
-  Plus, Send, Trash2, X,
+  Plus, Send, Trash2, X, History,
 } from 'lucide-react'
 import { api } from '@/lib/apiClient'
 import { getClient } from '@/lib/supabase'
-import type { OcgFormTemplateRow, OcgFormSubmissionRow, OcgFormFieldDef } from '@ocg/db'
+import type { OcgFormTemplateRow, OcgFormSubmissionRow, OcgFormFieldDef, RecordVersionRow } from '@ocg/db'
 
 type BrandOption = { id: string; label: string; slug: string }
 
@@ -44,7 +44,7 @@ export function FormsWorkspace({ initialBrandSlug = '' }: { initialBrandSlug?: s
     if (!ok) { setError(json?.error ?? 'Failed to load forms.'); return }
     setData(json)
   }
-  useEffect(() => { void load() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { void load() }, [])
 
   // CSV export needs the Bearer token, so we fetch → blob → download rather than
   // a plain link (which wouldn't authenticate against the Bearer-gated route).
@@ -286,6 +286,16 @@ function SubmissionsList({ template, submissions, canReviewAll, canExport, onExp
   onExport: () => void
 }) {
   const fieldLabel = new Map(template.fields.map((f) => [f.key, f.label]))
+  const [historyId, setHistoryId] = useState<string | null>(null)
+  const [versions, setVersions] = useState<RecordVersionRow[]>([])
+  const [historyError, setHistoryError] = useState('')
+  async function showHistory(id: string) {
+    if (historyId === id) { setHistoryId(null); return }
+    setHistoryError('')
+    const { ok, data } = await api<{ versions?: RecordVersionRow[]; error?: string }>(`/api/forms?history=${encodeURIComponent(id)}`)
+    if (!ok) { setHistoryError(data?.error ?? 'Could not load history.'); return }
+    setHistoryId(id); setVersions(data?.versions ?? [])
+  }
   return (
     <section className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
       <div className="mb-1 flex items-center justify-between gap-3">
@@ -311,6 +321,10 @@ function SubmissionsList({ template, submissions, canReviewAll, canExport, onExp
               <p className="text-xs font-semibold text-gray-500">
                 {s.submission_date} · {s.submitted_by_name || s.submitted_by}
               </p>
+              <div className="mt-1 flex items-center justify-between gap-2">
+                <span className="text-[11px] text-gray-400">{s.reference || 'Reference pending'} · {s.status.replaceAll('_', ' ')}</span>
+                <button onClick={() => showHistory(s.id)} className="inline-flex items-center gap-1 text-[11px] font-medium text-gray-500 hover:text-ocg-gold"><History size={12} /> History</button>
+              </div>
               <dl className="mt-2 grid gap-x-6 gap-y-1.5 text-sm sm:grid-cols-2">
                 {Object.entries(s.values).map(([key, value]) => {
                   const text = typeof value === 'boolean' ? (value ? 'Yes' : 'No') : String(value ?? '')
@@ -323,8 +337,15 @@ function SubmissionsList({ template, submissions, canReviewAll, canExport, onExp
                   )
                 })}
               </dl>
+              {historyId === s.id && (
+                <div className="mt-3 rounded-lg bg-gray-50 p-3">
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Document timeline</p>
+                  {versions.length === 0 ? <p className="mt-2 text-xs text-gray-500">No version events recorded for this legacy entry.</p> : <ol className="mt-2 space-y-2">{versions.map((version) => <li key={version.id} className="text-xs text-gray-600"><b>v{version.version_no}</b> · {version.reason || version.action} · {version.changed_by || 'system'} · {new Date(version.created_at).toLocaleString()}</li>)}</ol>}
+                </div>
+              )}
             </div>
           ))}
+          {historyError && <p className="text-xs text-red-600">{historyError}</p>}
         </div>
       )}
     </section>

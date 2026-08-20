@@ -384,19 +384,6 @@ export default function PropertiesAdminPage() {
     }
   }
 
-  /** Core fetcher — called both automatically and from the manual button. */
-  async function fetchSitePhotos(slug: string): Promise<void> {
-    if (!slug) return
-    try {
-      const res = await fetch(`${NUURANEST_URL}/api/mhub/photos/${slug}`)
-      const json = (await res.json()) as { photos?: string[] }
-      const photos = json.photos ?? []
-      if (photos.length) update('photos', photos.join('\n'))
-    } catch {
-      // silent — manual button will show an error if needed
-    }
-  }
-
   /** Manual "Load from site" button handler — shows user-visible feedback. */
   async function loadSitePhotos() {
     const slug = form.slug.trim()

@@ -574,7 +574,7 @@ async function replaceIssueItems(issueId: string, items: IssueItemInput[]): Prom
       inventory_item_id: i.inventory_item_id ?? null,
       description: i.description ?? '',
       unit: i.unit || 'pcs',
-      quantity_approved: Number(i.quantity_approved ?? 0),
+      quantity_approved: Number(i.quantity_approved ?? i.quantity_issued ?? 0),
       quantity_issued: Number(i.quantity_issued ?? 0),
       batch_number: i.batch_number ?? '',
       store_location: i.store_location ?? '',
@@ -603,6 +603,21 @@ export async function postGoodsIssue(
 
   const items = await getGoodsIssueItems(issue.id)
   if (items.length === 0) throw new Error('Add at least one line before issuing.')
+
+  if (issue.kind === 'transfer') {
+    if (!issue.source_store_id || !issue.destination_store_id) {
+      throw new Error('A transfer requires explicit source and destination stores.')
+    }
+    if (issue.source_store_id === issue.destination_store_id) {
+      throw new Error('Source and destination stores must be different.')
+    }
+    const { data: stores } = await db().from('inventory_stores').select('*')
+      .in('id', [issue.source_store_id, issue.destination_store_id])
+    const rows = (stores as Array<{ id: string; brand_id: string | null }> | null) ?? []
+    if (rows.length !== 2 || rows.some((store) => store.brand_id && store.brand_id !== issue.brand_id)) {
+      throw new Error('Both transfer stores must belong to the document brand.')
+    }
+  }
 
   // Validate everything BEFORE moving any stock — a bad line must not leave a
   // half-posted note behind.
@@ -642,9 +657,29 @@ export async function postGoodsIssue(
       source: 'manual',
       goods_issue_id: issue.id,
       issue_item_id: line.id,
+      store_id: issue.source_store_id,
       recorded_by: actor.email,
     })
     movementsCreated += 1
+
+    if (issue.kind === 'transfer') {
+      await recordStockMovement({
+        item_id: line.inventory_item_id,
+        direction: 'in',
+        quantity,
+        movement_unit: line.unit,
+        reason: `Received from transfer ${reference}`,
+        reference,
+        source: 'goods_transfer_destination',
+        goods_issue_id: issue.id,
+        store_id: issue.destination_store_id,
+        source_table: 'procurement_goods_issue_items',
+        source_record_id: line.id,
+        idempotency_key: `goods-transfer-destination:${line.id}`,
+        recorded_by: actor.email,
+      })
+      movementsCreated += 1
+    }
 
     if (line.requisition_item_id) {
       const { data: reqItem } = await db()

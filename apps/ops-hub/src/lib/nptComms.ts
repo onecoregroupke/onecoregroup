@@ -15,7 +15,6 @@ import type { NptAppointmentRow, NptCustomerRow, NptPianoRow, OpsTeamMemberRow }
 // a missing RESEND_API_KEY never blocks scheduling.
 // =============================================================================
 
-const GOLD = '#b07a00'
 const NAVY = '#1a1a2e'
 
 function resend(): Resend | null {

@@ -36,6 +36,8 @@ export async function POST(req: NextRequest) {
         location: (values.location as string) ?? '',
         notes: (values.notes as string) ?? '',
         recorded_by: recordedBy,
+        item_type: (values.item_type as string) ?? undefined,
+        store_id: (values.store_id as string) || null,
       })
       return NextResponse.json({ ok: true, item }, { status: 201 })
     }
