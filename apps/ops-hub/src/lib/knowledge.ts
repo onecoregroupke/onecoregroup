@@ -1,6 +1,6 @@
 import { db, nowIso } from './serverClient'
-import { initialKnowledgeStatus, type KnowledgeSourceClass } from './governanceModel'
-import type { KnowledgeEntryRow, KnowledgeVersionRow, RecordAccessLevel } from '@ocg/db'
+import { hasAuthority, initialKnowledgeStatus, type KnowledgeSourceClass } from './governanceModel'
+import type { EmployeeAuthorityRow, KnowledgeEntryRow, KnowledgeVersionRow, RecordAccessLevel } from '@ocg/db'
 
 export interface KnowledgeRecord extends KnowledgeEntryRow {
   versions: KnowledgeVersionRow[]
@@ -119,5 +119,45 @@ export async function publishKnowledgeVersion(versionId: string, approvedBy: str
 export async function getKnowledgeEntry(id: string): Promise<KnowledgeEntryRow | null> {
   const { data } = await db().from('ocg_knowledge_entries').select('*').eq('id', id).maybeSingle()
   return (data as KnowledgeEntryRow | null) ?? null
+}
+
+/** Full record for the reader page: entry + every version, oldest last. */
+export async function getKnowledgeRecord(id: string): Promise<KnowledgeRecord | null> {
+  const entry = await getKnowledgeEntry(id)
+  if (!entry) return null
+  const { data: versionsData } = await db().from('ocg_knowledge_versions').select('*')
+    .eq('entry_id', id).order('version_no', { ascending: false })
+  const versions = (versionsData as KnowledgeVersionRow[] | null) ?? []
+  return { ...entry, versions, currentVersion: versions.find((version) => version.id === entry.current_version_id) ?? null }
+}
+
+/** The same brand/record-scope boundary the list and detail routes both enforce.
+ *  Shared so a direct `/knowledge/[entryId]` visit and the API route agree. */
+export function knowledgeEntryInScope(entry: KnowledgeEntryRow, opts: {
+  allowedBrands: string[] | null
+  recordScope: RecordAccessLevel
+  memberDepartment: string | null
+  memberId: string | null
+}): boolean {
+  if (opts.allowedBrands !== null && (!entry.brand_id || !opts.allowedBrands.includes(entry.brand_id))) return false
+  if (opts.recordScope === 'group' || opts.recordScope === 'management') return true
+  if (opts.recordScope === 'department') return Boolean(opts.memberDepartment) && opts.memberDepartment === entry.department
+  return Boolean(opts.memberId) && opts.memberId === entry.owner_member_id
+}
+
+/** Explicit "approve" authority (never inferred from edit access) is required to
+ *  publish a draft as current knowledge — mirrors the server-side check the
+ *  `publish` API action performs before calling publish_knowledge_version(). */
+export async function canApproveKnowledgeForEntry(input: {
+  isFoundingAdmin: boolean
+  memberId: string | null
+  brandId: string | null
+}): Promise<boolean> {
+  if (input.isFoundingAdmin) return true
+  if (!input.memberId) return false
+  const { data } = await db().from('employee_authorities').select('*').eq('member_id', input.memberId).eq('active', true)
+  return hasAuthority((data as EmployeeAuthorityRow[] | null) ?? [], 'approve', {
+    brandId: input.brandId, operationalArea: 'knowledge',
+  })
 }
 

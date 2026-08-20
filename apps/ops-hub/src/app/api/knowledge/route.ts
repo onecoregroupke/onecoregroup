@@ -3,13 +3,11 @@ import { getApiActor } from '@/lib/api-auth'
 import { memberForEmail } from '@/lib/team'
 import { listBrands } from '@/lib/brands'
 import { auditEvent } from '@/lib/audit'
-import { hasAuthority } from '@/lib/governanceModel'
 import {
-  createKnowledge, createKnowledgeVersion, getKnowledgeEntry,
-  listKnowledge, publishKnowledgeVersion,
+  canApproveKnowledgeForEntry, createKnowledge, createKnowledgeVersion, getKnowledgeEntry,
+  knowledgeEntryInScope, listKnowledge, publishKnowledgeVersion,
 } from '@/lib/knowledge'
-import { db } from '@/lib/serverClient'
-import type { EmployeeAuthorityRow, KnowledgeEntryRow } from '@ocg/db'
+import type { KnowledgeEntryRow } from '@ocg/db'
 
 async function knowledgeContext(req: NextRequest) {
   const actor = await getApiActor(req)
@@ -20,12 +18,12 @@ async function knowledgeContext(req: NextRequest) {
 }
 
 function entryInScope(entry: KnowledgeEntryRow, ctx: Exclude<Awaited<ReturnType<typeof knowledgeContext>>, { error: NextResponse }>): boolean {
-  const allowed = ctx.actor.allowedBrandIds('knowledge')
-  if (allowed !== null && (!entry.brand_id || !allowed.includes(entry.brand_id))) return false
-  const scope = ctx.actor.recordScope('knowledge')
-  if (scope === 'group' || scope === 'management') return true
-  if (scope === 'department') return Boolean(ctx.member?.department) && ctx.member?.department === entry.department
-  return Boolean(ctx.member?.id) && ctx.member?.id === entry.owner_member_id
+  return knowledgeEntryInScope(entry, {
+    allowedBrands: ctx.actor.allowedBrandIds('knowledge'),
+    recordScope: ctx.actor.recordScope('knowledge'),
+    memberDepartment: ctx.member?.department ?? null,
+    memberId: ctx.member?.id ?? null,
+  })
 }
 
 export async function GET(req: NextRequest) {
@@ -93,13 +91,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, version }, { status: 201 })
     }
     if (action === 'publish') {
-      let authorised = ctx.actor.permissions === null
-      if (!authorised && ctx.member) {
-        const { data } = await db().from('employee_authorities').select('*').eq('member_id', ctx.member.id).eq('active', true)
-        authorised = hasAuthority((data as EmployeeAuthorityRow[] | null) ?? [], 'approve', {
-          brandId: entry.brand_id, operationalArea: 'knowledge',
-        })
-      }
+      const authorised = await canApproveKnowledgeForEntry({
+        isFoundingAdmin: ctx.actor.permissions === null,
+        memberId: ctx.member?.id ?? null,
+        brandId: entry.brand_id,
+      })
       if (!authorised) return NextResponse.json({ ok: false, error: 'Explicit knowledge approval authority is required.' }, { status: 403 })
       const version = await publishKnowledgeVersion(String(values.version_id ?? ''), actorName)
       await auditEvent({ actor: ctx.actor, action: 'knowledge.publish', entity_table: 'ocg_knowledge_versions', entity_id: version.id, entity_label: entry.title, after_data: version as unknown as Record<string, unknown> })
