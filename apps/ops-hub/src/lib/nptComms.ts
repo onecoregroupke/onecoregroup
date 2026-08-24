@@ -178,7 +178,7 @@ export async function sendAppointmentCreatedComms(appointmentId: string): Promis
         kind: 'npt_appointment',
         title: `New appointment: ${appointment.title || 'Piano service'}`,
         body: `${when}${appointment.location ? ` · ${appointment.location}` : ''}${customer ? ` · ${customer.full_name}` : ''}`,
-        href: '/my-tasks',
+        href: '/my-work',
         metadata: { appointment_id: appointment.id },
       })
     }
@@ -255,7 +255,7 @@ export async function runAppointmentReminders(): Promise<{ checked: number; sent
         kind: 'npt_reminder',
         title: `Appointment ${label}: ${appointment.title || 'Piano service'}`,
         body: `${when}${appointment.location ? ` · ${appointment.location}` : ''}`,
-        href: '/my-tasks',
+        href: '/my-work',
         metadata: { appointment_id: appointment.id },
       })
       if (ok) sent++

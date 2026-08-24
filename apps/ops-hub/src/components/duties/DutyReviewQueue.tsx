@@ -2,8 +2,9 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ShieldCheck, RotateCcw, Check } from 'lucide-react'
+import { ShieldCheck, RotateCcw, Check, Paperclip, ClipboardList, UserCheck } from 'lucide-react'
 import { api } from '@/lib/apiClient'
+import { validateReopenComment } from '@/lib/reviewAuthority'
 
 export interface ReviewRow {
   logId: string
@@ -11,18 +12,28 @@ export interface ReviewRow {
   date: string
   assigneeName: string
   completedBy: string
+  completedAt: string | null
   note: string
   checklistDone: number
   checklistTotal: number
+  evidenceCount: number
   onTime: boolean | null
+  /** Non-empty when this occurrence is reserved for a named countersignatory. */
+  namedReviewer: string
 }
 
+const time = (iso: string | null) =>
+  iso
+    ? new Date(iso).toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Nairobi' })
+    : ''
+
 /**
- * Manager review of submitted duty occurrences (§13).
+ * Countersigning submitted duty occurrences (§§13–16).
  *
- * The server refuses a reviewer who is also the person who did the work; this
- * component simply surfaces that refusal rather than trying to pre-empt it,
- * because "who am I" is an authorization question and belongs on the server.
+ * Every row here has already passed the same canReview() predicate the POST
+ * enforces, so nothing is offered that will be refused. The reopen reason is
+ * validated locally to save a round-trip; the server validates it again, which
+ * is the check that counts.
  */
 export function DutyReviewQueue({ rows }: { rows: ReviewRow[] }) {
   const router = useRouter()
@@ -31,11 +42,16 @@ export function DutyReviewQueue({ rows }: { rows: ReviewRow[] }) {
   const [comments, setComments] = useState<Record<string, string>>({})
 
   async function decide(logId: string, decision: 'accept' | 'reopen') {
+    const comment = comments[logId] ?? ''
+    if (decision === 'reopen') {
+      const problem = validateReopenComment(comment)
+      if (problem) { setError(problem); return }
+    }
     setBusy(logId)
     setError('')
     const { ok, data } = await api<{ error?: string }>('/api/duties/review', {
       method: 'POST',
-      body: JSON.stringify({ log_id: logId, decision, comment: comments[logId] ?? '' }),
+      body: JSON.stringify({ log_id: logId, decision, comment }),
     })
     setBusy(null)
     if (!ok) { setError(data?.error ?? 'Could not save the decision.'); return }
@@ -45,7 +61,7 @@ export function DutyReviewQueue({ rows }: { rows: ReviewRow[] }) {
   if (rows.length === 0) {
     return (
       <p className="rounded-lg bg-gray-50 p-4 text-sm text-gray-500">
-        Nothing awaiting review.
+        Nothing awaiting your review.
       </p>
     )
   }
@@ -58,22 +74,44 @@ export function DutyReviewQueue({ rows }: { rows: ReviewRow[] }) {
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div className="min-w-0">
               <p className="text-sm font-medium text-gray-900">{r.dutyTitle}</p>
-              <p className="mt-0.5 text-xs text-gray-500">
-                {r.assigneeName || r.completedBy || 'Unassigned'} · {r.date}
-                {r.checklistTotal > 0 && ` · checklist ${r.checklistDone}/${r.checklistTotal}`}
-                {r.onTime === false && ' · late'}
+              <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-gray-500">
+                <span className="font-medium text-gray-600">{r.assigneeName || r.completedBy || 'Unassigned'}</span>
+                <span>· {r.date}</span>
+                {r.completedAt && <span>· submitted {time(r.completedAt)}</span>}
+                {r.onTime === false && <span className="text-amber-700">· late</span>}
+                {r.onTime === true && <span className="text-emerald-700">· on time</span>}
+                {r.checklistTotal > 0 && (
+                  <span className="inline-flex items-center gap-1">
+                    <ClipboardList size={11} /> {r.checklistDone}/{r.checklistTotal}
+                  </span>
+                )}
+                {r.evidenceCount > 0 && (
+                  <span className="inline-flex items-center gap-1">
+                    <Paperclip size={11} /> {r.evidenceCount}
+                  </span>
+                )}
               </p>
               {r.note && <p className="mt-1.5 rounded bg-white/80 px-2 py-1 text-xs text-gray-600">{r.note}</p>}
             </div>
-            <span className="inline-flex shrink-0 items-center gap-1 rounded bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
-              <ShieldCheck size={10} /> Pending
+            <span className="flex shrink-0 flex-col items-end gap-1">
+              <span className="inline-flex items-center gap-1 rounded bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
+                <ShieldCheck size={10} /> Pending
+              </span>
+              {r.namedReviewer && (
+                <span
+                  className="inline-flex items-center gap-1 rounded bg-white px-2 py-0.5 text-[10px] font-medium text-gray-500"
+                  title="Reserved for its named reviewer — no other manager can sign this off."
+                >
+                  <UserCheck size={10} /> Reserved for {r.namedReviewer}
+                </span>
+              )}
             </span>
           </div>
 
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <input
-              className="input flex-1 min-w-[180px]"
-              placeholder="Comment (optional)"
+              className="input min-w-[180px] flex-1"
+              placeholder="Comment (required to reopen)"
               value={comments[r.logId] ?? ''}
               onChange={(e) => setComments((c) => ({ ...c, [r.logId]: e.target.value }))}
             />

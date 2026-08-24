@@ -142,7 +142,9 @@ async function dutiesIn(from: string, to: string, viewer: CalendarViewer): Promi
         assigneeId: o.assignee.id,
         assigneeName: o.assignee.name,
         createdById: null,
-        href: `/duties/${o.duty.id}?date=${date}`,
+        // The occurrence is completed in My Work, which is where the rich duty
+        // controls live (§5). /duties still resolves here for older links.
+        href: `/my-work?tab=duties&date=${date}`,
         dutyId: o.duty.id,
         canMove: canReschedule(viewer, { type: 'duty' }),
         meta: {

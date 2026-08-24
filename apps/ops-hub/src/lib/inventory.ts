@@ -1,6 +1,7 @@
 import { db, nowIso } from './serverClient'
 import type { InventoryItemRow, InventoryMovementRow } from '@ocg/db'
 import { toBaseQuantity } from './inventoryIntegrity'
+import { scopedBrandIds } from './stockCards'
 
 // =============================================================================
 // Inventory — per-brand stock registers with in/out movements. Every movement
@@ -9,31 +10,42 @@ import { toBaseQuantity } from './inventoryIntegrity'
 // Brand-scope enforcement (assertBrandInScope) is the API route's job.
 // =============================================================================
 
+/**
+ * Active items, optionally narrowed to one brand.
+ *
+ * `brandId` can only ever NARROW what `allowed` already permits. The previous
+ * form applied the brand filter INSTEAD of the allow-list, so a brand-scoped
+ * user passing ?brand=<another-brand> read that brand's stock. scopedBrandIds()
+ * intersects the two, and answers with the sentinel no-brand id when the
+ * intersection is empty — so an out-of-scope request returns nothing rather
+ * than everything (§30, §40.3).
+ */
 export async function listItems(allowed: string[] | null, brandId?: string): Promise<InventoryItemRow[]> {
+  const brands = scopedBrandIds(allowed, brandId)
   let q = db()
     .from('inventory_items')
     .select('*')
     .eq('is_active', true)
     .order('category', { ascending: true })
     .order('name', { ascending: true })
-  if (brandId) q = q.eq('brand_id', brandId)
-  else if (allowed !== null) q = q.in('brand_id', allowed)
+  if (brands !== null) q = q.in('brand_id', brands)
   const { data } = await q
   return (data as InventoryItemRow[] | null) ?? []
 }
 
+/** Movements, newest first. `brandId` narrows within `allowed`, never past it. */
 export async function listMovements(
   allowed: string[] | null,
   opts: { brandId?: string; itemId?: string; limit?: number } = {},
 ): Promise<InventoryMovementRow[]> {
+  const brands = scopedBrandIds(allowed, opts.brandId)
   let q = db()
     .from('inventory_movements')
     .select('*')
     .order('created_at', { ascending: false })
     .limit(opts.limit ?? 100)
   if (opts.itemId) q = q.eq('item_id', opts.itemId)
-  if (opts.brandId) q = q.eq('brand_id', opts.brandId)
-  else if (allowed !== null) q = q.in('brand_id', allowed)
+  if (brands !== null) q = q.in('brand_id', brands)
   const { data } = await q
   return (data as InventoryMovementRow[] | null) ?? []
 }

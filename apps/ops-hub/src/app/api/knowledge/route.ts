@@ -4,8 +4,9 @@ import { memberForEmail } from '@/lib/team'
 import { listBrands } from '@/lib/brands'
 import { auditEvent } from '@/lib/audit'
 import {
-  canApproveKnowledgeForEntry, createKnowledge, createKnowledgeVersion, getKnowledgeEntry,
-  knowledgeEntryInScope, listKnowledge, publishKnowledgeVersion,
+  canApproveKnowledgeForEntry, canApproveKnowledgeByEntry, createKnowledge, createKnowledgeVersion,
+  getKnowledgeEntry, getKnowledgeVersion, knowledgeEntryInScope, listKnowledge,
+  publishKnowledgeVersion,
 } from '@/lib/knowledge'
 import type { KnowledgeEntryRow } from '@ocg/db'
 
@@ -38,10 +39,21 @@ export async function GET(req: NextRequest) {
     }),
     listBrands(),
   ])
+  const canEdit = ctx.actor.can('knowledge', 'edit')
+    && ['management', 'group'].includes(ctx.actor.recordScope('knowledge'))
+  // §37: Publish is offered per record, from the SAME decision the reader and
+  // the server use. Editing is not publishing.
+  const canPublish = canEdit
+    ? await canApproveKnowledgeByEntry(
+      { isFoundingAdmin: ctx.actor.permissions === null, memberId: ctx.member?.id ?? null },
+      records,
+    )
+    : {}
   return NextResponse.json({
     ok: true, records,
     brands: brands.map((brand) => ({ id: brand.id, name: brand.short_name || brand.name })),
-    canEdit: ctx.actor.can('knowledge', 'edit') && ['management', 'group'].includes(ctx.actor.recordScope('knowledge')),
+    canEdit,
+    canPublish,
   })
 }
 
@@ -91,14 +103,35 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, version }, { status: 201 })
     }
     if (action === 'publish') {
+      // §33: resolve the version FIRST and authorise against its real parent
+      // entry. Trusting the caller's entry_id here is what let a permitted
+      // entry id launder a publish of an unrelated version.
+      const versionId = String(values.version_id ?? '')
+      const version0 = await getKnowledgeVersion(versionId)
+      if (!version0 || version0.entry_id !== entry.id) {
+        return NextResponse.json(
+          { ok: false, error: 'That version does not belong to this knowledge entry.' },
+          { status: 400 },
+        )
+      }
+      const parent = await getKnowledgeEntry(version0.entry_id)
+      if (!parent || !entryInScope(parent, ctx)) {
+        return NextResponse.json({ ok: false, error: 'not found' }, { status: 404 })
+      }
       const authorised = await canApproveKnowledgeForEntry({
         isFoundingAdmin: ctx.actor.permissions === null,
         memberId: ctx.member?.id ?? null,
-        brandId: entry.brand_id,
+        brandId: parent.brand_id,
       })
-      if (!authorised) return NextResponse.json({ ok: false, error: 'Explicit knowledge approval authority is required.' }, { status: 403 })
-      const version = await publishKnowledgeVersion(String(values.version_id ?? ''), actorName)
-      await auditEvent({ actor: ctx.actor, action: 'knowledge.publish', entity_table: 'ocg_knowledge_versions', entity_id: version.id, entity_label: entry.title, after_data: version as unknown as Record<string, unknown> })
+      if (!authorised) {
+        return NextResponse.json(
+          { ok: false, error: 'Explicit knowledge approval authority is required.' },
+          { status: 403 },
+        )
+      }
+      // Re-checked inside, against the version's own entry_id.
+      const version = await publishKnowledgeVersion(versionId, actorName, parent.id)
+      await auditEvent({ actor: ctx.actor, action: 'knowledge.publish', entity_table: 'ocg_knowledge_versions', entity_id: version.id, entity_label: parent.title, after_data: version as unknown as Record<string, unknown> })
       return NextResponse.json({ ok: true, version })
     }
     return NextResponse.json({ ok: false, error: 'Unknown action' }, { status: 400 })

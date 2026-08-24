@@ -7,25 +7,61 @@ export interface KnowledgeRecord extends KnowledgeEntryRow {
   currentVersion: KnowledgeVersionRow | null
 }
 
+/**
+ * Entries this reader may see.
+ *
+ * The database query narrows; `knowledgeEntryInScope` decides. Running the same
+ * predicate the detail route uses over the fetched rows is what guarantees §34's
+ * "list, detail route and API must agree" — the filter cannot drift from the
+ * gate, because it IS the gate.
+ */
 export async function listKnowledge(input: {
   allowedBrands: string[] | null
   recordScope: RecordAccessLevel
   department: string
   ownerMemberId: string | null
 }): Promise<KnowledgeRecord[]> {
-  let query = db().from('ocg_knowledge_entries').select('*').order('updated_at', { ascending: false }).limit(500)
-  if (input.allowedBrands !== null) query = query.in('brand_id', input.allowedBrands)
+  const base = () => {
+    let q = db().from('ocg_knowledge_entries').select('*')
+      .order('updated_at', { ascending: false }).limit(500)
+    if (input.allowedBrands !== null) q = q.in('brand_id', input.allowedBrands)
+    return q
+  }
+
+  // Narrow in the DATABASE first. These filters can only ever narrow — the
+  // predicate below is what decides — but they keep the 500-row limit meaningful
+  // per reader instead of spending it on rows they will never be shown.
+  const queries: PromiseLike<{ data: unknown }>[] = []
   if (input.recordScope === 'own') {
     if (!input.ownerMemberId) return []
-    query = query.eq('owner_member_id', input.ownerMemberId)
+    queries.push(base().eq('owner_member_id', input.ownerMemberId))
   } else if (input.recordScope === 'department') {
-    if (!input.department) return []
-    query = query.eq('department', input.department)
-  } else if (input.recordScope !== 'group') {
-    query = query.in('visibility_scope', ['own', 'department', 'management'])
+    if (!input.department && !input.ownerMemberId) return []
+    if (input.department) queries.push(base().eq('department', input.department))
+    // A document someone owns stays reachable even if it sits in another
+    // department — knowledgeEntryInScope() grants the owner unconditionally, so
+    // the query must be able to return it.
+    if (input.ownerMemberId) queries.push(base().eq('owner_member_id', input.ownerMemberId))
+  } else {
+    queries.push(base())
   }
-  const { data } = await query
-  const entries = (data as KnowledgeEntryRow[] | null) ?? []
+
+  const results = await Promise.all(queries)
+  const byId = new Map<string, KnowledgeEntryRow>()
+  for (const result of results) {
+    for (const row of ((result.data as KnowledgeEntryRow[] | null) ?? [])) byId.set(row.id, row)
+  }
+
+  // The same predicate the detail route runs. The filter cannot drift from the
+  // gate, because it IS the gate (§34).
+  const entries = [...byId.values()]
+    .filter((entry) => knowledgeEntryInScope(entry, {
+      allowedBrands: input.allowedBrands,
+      recordScope: input.recordScope,
+      memberDepartment: input.department || null,
+      memberId: input.ownerMemberId,
+    }))
+    .sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || ''))
   if (entries.length === 0) return []
   const { data: versionsData } = await db().from('ocg_knowledge_versions').select('*')
     .in('entry_id', entries.map((entry) => entry.id)).order('version_no', { ascending: false })
@@ -81,6 +117,19 @@ export async function createKnowledge(input: {
   return { ...entry, versions: [version], currentVersion: null }
 }
 
+/**
+ * A new draft version of an entry.
+ *
+ * §38, PROVENANCE. Where a document came from — its source title, type, date,
+ * reference, file, and its effective/review dates — describes the ORIGIN of the
+ * knowledge, not the wording of one revision. Blanking those fields because a
+ * revision form did not resend them silently destroys the audit trail: a policy
+ * would keep its text and lose the board minute that authorised it.
+ *
+ * So each field is carried forward from the current version unless the caller
+ * explicitly supplies a new value. `content_body` and `change_summary` are the
+ * fields genuinely being revised and are never inherited.
+ */
 export async function createKnowledgeVersion(input: {
   entry: KnowledgeEntryRow
   content_body: string
@@ -89,17 +138,36 @@ export async function createKnowledgeVersion(input: {
   source_type?: string
   source_date?: string | null
   source_reference?: string
+  effective_from?: string | null
+  review_date?: string | null
   change_summary: string
   actor: string
 }): Promise<KnowledgeVersionRow> {
-  const { data: last } = await db().from('ocg_knowledge_versions').select('version_no')
+  const { data: last } = await db().from('ocg_knowledge_versions').select('*')
     .eq('entry_id', input.entry.id).order('version_no', { ascending: false }).limit(1).maybeSingle()
-  const next = Number((last as { version_no: number } | null)?.version_no ?? 0) + 1
+  const previous = (last as KnowledgeVersionRow | null) ?? null
+  const next = Number(previous?.version_no ?? 0) + 1
+
+  /** Explicit value wins; a blank/absent one inherits rather than erases. */
+  const carry = (supplied: string | null | undefined, prior: string | null | undefined): string =>
+    (supplied ?? '').trim() ? String(supplied) : (prior ?? '')
+  const carryDate = (supplied: string | null | undefined, prior: string | null | undefined): string | null =>
+    supplied ? supplied : (prior ?? null)
+
   const { data, error } = await db().from('ocg_knowledge_versions').insert({
-    entry_id: input.entry.id, version_no: next, status: 'draft', content_body: input.content_body,
-    file_url: input.file_url ?? '', source_title: input.source_title ?? '', source_type: input.source_type ?? '',
-    source_date: input.source_date ?? null, source_reference: input.source_reference ?? '',
-    change_summary: input.change_summary, supersedes_version_id: input.entry.current_version_id,
+    entry_id: input.entry.id,
+    version_no: next,
+    status: 'draft',
+    content_body: input.content_body,
+    file_url: carry(input.file_url, previous?.file_url),
+    source_title: carry(input.source_title, previous?.source_title),
+    source_type: carry(input.source_type, previous?.source_type),
+    source_date: carryDate(input.source_date, previous?.source_date),
+    source_reference: carry(input.source_reference, previous?.source_reference),
+    effective_from: carryDate(input.effective_from, previous?.effective_from),
+    review_date: carryDate(input.review_date, previous?.review_date),
+    change_summary: input.change_summary,
+    supersedes_version_id: input.entry.current_version_id,
     created_by: input.actor,
   }).select('*').single()
   if (error) throw new Error(error.message)
@@ -107,7 +175,42 @@ export async function createKnowledgeVersion(input: {
   return data as KnowledgeVersionRow
 }
 
-export async function publishKnowledgeVersion(versionId: string, approvedBy: string): Promise<KnowledgeVersionRow> {
+export class KnowledgeVersionMismatchError extends Error {
+  constructor() {
+    super('That version does not belong to this knowledge entry.')
+    this.name = 'KnowledgeVersionMismatchError'
+  }
+}
+
+/** One version row, or null. Used to bind a publish request to its real entry. */
+export async function getKnowledgeVersion(versionId: string): Promise<KnowledgeVersionRow | null> {
+  if (!versionId) return null
+  const { data } = await db().from('ocg_knowledge_versions').select('*').eq('id', versionId).maybeSingle()
+  return (data as KnowledgeVersionRow | null) ?? null
+}
+
+/**
+ * Publish a draft as the entry's current version.
+ *
+ * §33: the version is resolved SERVER-SIDE and must belong to `entryId`. The
+ * previous flow authorised against an entry taken from the request and then
+ * published a version id taken from the same request without ever relating the
+ * two — so a caller permitted on one entry could pass an unrelated version id
+ * and publish a document they had no rights to. The parent entry is now the
+ * thing authorisation is performed against, and it comes from the version.
+ *
+ * `entryId` is still required and still checked: the caller must be right about
+ * what they are publishing, not merely be permitted on something.
+ */
+export async function publishKnowledgeVersion(
+  versionId: string,
+  approvedBy: string,
+  entryId: string,
+): Promise<KnowledgeVersionRow> {
+  const version = await getKnowledgeVersion(versionId)
+  if (!version) throw new Error('Knowledge version not found')
+  if (!entryId || version.entry_id !== entryId) throw new KnowledgeVersionMismatchError()
+
   const { data, error } = await db().rpc('publish_knowledge_version', {
     p_version_id: versionId,
     p_approved_by: approvedBy,
@@ -131,8 +234,41 @@ export async function getKnowledgeRecord(id: string): Promise<KnowledgeRecord | 
   return { ...entry, versions, currentVersion: versions.find((version) => version.id === entry.current_version_id) ?? null }
 }
 
-/** The same brand/record-scope boundary the list and detail routes both enforce.
- *  Shared so a direct `/knowledge/[entryId]` visit and the API route agree. */
+/**
+ * §34: `visibility_scope` ranked. own < department < management < group.
+ *
+ * A document marked `group` is the MOST restricted, not the most public — it is
+ * group-level material, reachable only by someone whose record horizon reaches
+ * the whole group. Reading the ladder the other way round is the mistake that
+ * turns a confidential board paper into a company-wide handout.
+ */
+const VISIBILITY_RANK: Record<string, number> = {
+  own: 0, department: 1, management: 2, group: 3,
+}
+
+const RECORD_SCOPE_RANK: Record<RecordAccessLevel, number> = {
+  own: 0, department: 1, management: 2, group: 3,
+}
+
+/** Whether a reader's horizon reaches a document's visibility band. */
+export function visibilityAllowed(
+  visibilityScope: string,
+  recordScope: RecordAccessLevel,
+): boolean {
+  // An unrecognised band is treated as the most restricted, not the least.
+  const required = VISIBILITY_RANK[visibilityScope] ?? VISIBILITY_RANK['group']!
+  return RECORD_SCOPE_RANK[recordScope] >= required
+}
+
+/**
+ * The single boundary the list, the detail route and the API all enforce.
+ *
+ * §34: "List, detail route and API must agree." They previously did not — the
+ * list excluded `group`-visibility entries from a management-scope reader while
+ * this function returned true for anything a management reader asked for, so a
+ * document hidden from the list opened perfectly well by URL. The visibility
+ * band is now checked here, which is the one place all three call.
+ */
 export function knowledgeEntryInScope(entry: KnowledgeEntryRow, opts: {
   allowedBrands: string[] | null
   recordScope: RecordAccessLevel
@@ -140,14 +276,31 @@ export function knowledgeEntryInScope(entry: KnowledgeEntryRow, opts: {
   memberId: string | null
 }): boolean {
   if (opts.allowedBrands !== null && (!entry.brand_id || !opts.allowedBrands.includes(entry.brand_id))) return false
+
+  // The owner always reaches their own entry, whatever band it carries.
+  const isOwner = Boolean(opts.memberId) && opts.memberId === entry.owner_member_id
+  if (isOwner) return true
+
+  if (!visibilityAllowed(entry.visibility_scope, opts.recordScope)) return false
+
   if (opts.recordScope === 'group' || opts.recordScope === 'management') return true
-  if (opts.recordScope === 'department') return Boolean(opts.memberDepartment) && opts.memberDepartment === entry.department
-  return Boolean(opts.memberId) && opts.memberId === entry.owner_member_id
+  if (opts.recordScope === 'department') {
+    return Boolean(opts.memberDepartment) && opts.memberDepartment === entry.department
+  }
+  return false
 }
 
-/** Explicit "approve" authority (never inferred from edit access) is required to
- *  publish a draft as current knowledge — mirrors the server-side check the
- *  `publish` API action performs before calling publish_knowledge_version(). */
+/**
+ * Explicit "approve" authority (never inferred from edit access) is required to
+ * publish a draft as current knowledge.
+ *
+ * §36: a GROUP-level entry — `brand_id IS NULL` — is not a brand document with a
+ * blank field; it is company-wide policy. It therefore needs group-level
+ * authority, and a brand-specific approval grant does not confer it. Passing the
+ * entry's brand id (including null) through to hasAuthority is what makes that
+ * distinction, and `requiredScope: 'group'` is what stops an entity-scoped grant
+ * reaching it (§35).
+ */
 export async function canApproveKnowledgeForEntry(input: {
   isFoundingAdmin: boolean
   memberId: string | null
@@ -156,8 +309,35 @@ export async function canApproveKnowledgeForEntry(input: {
   if (input.isFoundingAdmin) return true
   if (!input.memberId) return false
   const { data } = await db().from('employee_authorities').select('*').eq('member_id', input.memberId).eq('active', true)
-  return hasAuthority((data as EmployeeAuthorityRow[] | null) ?? [], 'approve', {
-    brandId: input.brandId, operationalArea: 'knowledge',
+  const grants = (data as EmployeeAuthorityRow[] | null) ?? []
+  return hasAuthority(grants, 'approve', {
+    brandId: input.brandId,
+    operationalArea: 'knowledge',
+    requiredScope: input.brandId ? 'entity' : 'group',
   })
+}
+
+/** Per-record publish rights for a list of entries, resolved in ONE query so the
+ *  list can honour the same canPublish decision the reader does (§37). */
+export async function canApproveKnowledgeByEntry(
+  input: { isFoundingAdmin: boolean; memberId: string | null },
+  entries: Pick<KnowledgeEntryRow, 'id' | 'brand_id'>[],
+): Promise<Record<string, boolean>> {
+  if (entries.length === 0) return {}
+  if (input.isFoundingAdmin) return Object.fromEntries(entries.map((e) => [e.id, true]))
+  if (!input.memberId) return Object.fromEntries(entries.map((e) => [e.id, false]))
+
+  const { data } = await db().from('employee_authorities').select('*')
+    .eq('member_id', input.memberId).eq('active', true)
+  const grants = (data as EmployeeAuthorityRow[] | null) ?? []
+
+  return Object.fromEntries(entries.map((e) => [
+    e.id,
+    hasAuthority(grants, 'approve', {
+      brandId: e.brand_id,
+      operationalArea: 'knowledge',
+      requiredScope: e.brand_id ? 'entity' : 'group',
+    }),
+  ]))
 }
 

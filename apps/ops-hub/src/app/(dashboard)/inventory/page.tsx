@@ -4,14 +4,26 @@ import { listBrands } from '@/lib/brands'
 import { listItems, listMovements } from '@/lib/inventory'
 import { scopeBrands } from '@/lib/finance'
 import { requireSection } from '@/lib/server-auth'
+import { OperationalDocLinks } from '@/components/forms/OperationalDocLinks'
 
 export const dynamic = 'force-dynamic'
+
+/** The stock documents, in the order goods actually travel (§31). */
+const INVENTORY_DOCS = [
+  { pad: 'grn', label: 'Goods Received Note', hint: 'Goods in from a supplier' },
+  { pad: 'gin', label: 'Goods Issue Note', hint: 'Stock out to production or a job' },
+  { pad: 'gtn', label: 'Goods Transfer Note', hint: 'Stock moved between stores' },
+  { pad: 'delivery', label: 'Delivery Note', hint: 'Stock out to a sales team' },
+]
 
 // Inventory home: one card per brand (within the user's compartment), showing
 // stock value and low-stock warnings; each opens the brand's own register.
 export default async function InventoryPage() {
   const actor = await requireSection('inventory')
   const allowed = actor.allowedBrandIds('inventory')
+  // Each pad still sits behind the permission for the ledger it touches; this
+  // only decides whether to advertise them here.
+  const canRaiseDocs = actor.can('procurement', 'edit') || actor.can('inventory', 'edit')
   const [allBrands, items, movements] = await Promise.all([
     listBrands(),
     listItems(allowed),
@@ -58,6 +70,17 @@ export default async function InventoryPage() {
         </span>
         <ArrowUpRight size={16} className="shrink-0 text-gray-300" />
       </Link>
+
+      {/* §31: inventory transaction documents belong in Inventory, not behind a
+          generic "Forms" library. Same canonical components, reached from the
+          module whose ledger they post to. */}
+      {canRaiseDocs && (
+        <OperationalDocLinks
+          title="Inventory documents"
+          hint="The paper pads that move stock. Posting one updates the stock card immediately."
+          docs={INVENTORY_DOCS}
+        />
+      )}
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {perBrand.map(({ brand, count, totalValue, low }) => (

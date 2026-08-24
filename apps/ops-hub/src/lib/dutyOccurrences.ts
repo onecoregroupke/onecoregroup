@@ -7,7 +7,7 @@ import {
 } from './dutyModel'
 import type {
   OcgDailyDutyRow, OcgDailyDutyLogRow, OcgDutyChecklistItemRow,
-  OcgDutyChecklistResultRow, OcgHolidayRow,
+  OcgDutyChecklistResultRow, OcgHolidayRow, OpsTaskReviewRow,
 } from '@ocg/db'
 
 // =============================================================================
@@ -378,15 +378,30 @@ export async function coverDutyOccurrence(input: {
   return log
 }
 
-// ─── Manager review (§13) ───────────────────────────────────────────────────
+// ─── Manager review (§§13–14) ───────────────────────────────────────────────
 
+/**
+ * Record a countersign decision.
+ *
+ * The verdict is written twice, on purpose and to two different standards:
+ *
+ *   1. onto the occurrence log — the CURRENT state the employee sees;
+ *   2. into ops_task_reviews  — the append-only EVENT, carrying the immutable
+ *      reviewed_by_id (migration 057 §3).
+ *
+ * §14 forbids overwriting an earlier review event, so a reopen-then-accept
+ * leaves two rows and the history stays legible. No new table is introduced:
+ * ops_task_reviews already models exactly this and carries duty_log_id.
+ */
 export async function reviewDutyOccurrence(input: {
   log_id: string
   decision: 'accept' | 'reopen'
   comment?: string
   quality_rating?: number | null
   reviewed_by: string
+  reviewed_by_id?: string | null
 }): Promise<OcgDailyDutyLogRow> {
+  const reviewedAt = nowIso()
   const { data, error } = await db().from('ocg_daily_duty_logs').update({
     review_state: input.decision === 'accept' ? 'accepted' : 'reopened',
     // Reopening returns the occurrence to the assignee's list; accepting leaves
@@ -395,26 +410,98 @@ export async function reviewDutyOccurrence(input: {
     review_comment: input.comment ?? '',
     quality_rating: input.quality_rating ?? null,
     reviewed_by: input.reviewed_by,
-    reviewed_at: nowIso(),
+    reviewed_at: reviewedAt,
   }).eq('id', input.log_id).select('*').single()
   if (error) throw new Error(error.message)
+
+  // The countersign event. Best-effort by design: a failure to append must not
+  // roll back a decision the reviewer has already been told was recorded, and
+  // the log row above remains the authoritative current state either way.
+  try {
+    await db().from('ops_task_reviews').insert({
+      duty_log_id: input.log_id,
+      decision: input.decision === 'accept' ? 'accepted' : 'reopened',
+      comment: input.comment ?? '',
+      quality_rating: input.quality_rating ?? null,
+      reopen_reason: input.decision === 'reopen' ? (input.comment ?? '') : '',
+      reviewed_by: input.reviewed_by,
+      reviewed_by_id: input.reviewed_by_id ?? null,
+    })
+  } catch {
+    // Swallowed deliberately — see above.
+  }
+
   return data as OcgDailyDutyLogRow
 }
 
-/** Occurrences awaiting a manager decision. */
-export async function pendingReviews(scope: DutyScope): Promise<OcgDailyDutyLogRow[]> {
+/** Every countersign event recorded against an occurrence, newest first (§14). */
+export async function dutyReviewHistory(logId: string): Promise<OpsTaskReviewRow[]> {
+  const { data } = await db().from('ops_task_reviews').select('*')
+    .eq('duty_log_id', logId).order('created_at', { ascending: false })
+  return (data as OpsTaskReviewRow[] | null) ?? []
+}
+
+/** One pending occurrence, with everything a reviewer needs to decide (§16). */
+export interface PendingReview {
+  log: OcgDailyDutyLogRow
+  duty: OcgDailyDutyRow | null
+  /** The reservation: only this member may countersign. null = any eligible manager. */
+  reviewerId: string | null
+  brandId: string | null
+  submitterMemberId: string | null
+  submitterName: string
+}
+
+/**
+ * Occurrences awaiting a decision, joined to the duty template so the caller can
+ * apply the named-reviewer rule. Brand filtering still happens here — the scope
+ * narrows the candidate set before canReview() makes the per-item decision.
+ */
+export async function pendingReviews(scope: DutyScope): Promise<PendingReview[]> {
   if (scope.kind === 'own') return []
   const { data } = await db().from('ocg_daily_duty_logs').select('*')
     .eq('review_state', 'pending').order('duty_date', { ascending: false }).limit(200)
   const logs = (data as OcgDailyDutyLogRow[] | null) ?? []
-  if (scope.kind === 'all') return logs
+  if (logs.length === 0) return []
 
-  const { data: duties } = await db().from('ocg_daily_duties')
-    .select('id, brand_id').in('id', logs.map((l) => l.duty_id))
-  const inScope = new Set(
-    ((duties as { id: string; brand_id: string | null }[] | null) ?? [])
-      .filter((d) => d.brand_id && scope.brandIds.includes(d.brand_id))
-      .map((d) => d.id),
+  const { data: dutyRows } = await db().from('ocg_daily_duties')
+    .select('*').in('id', [...new Set(logs.map((l) => l.duty_id))])
+  const dutyById = new Map(
+    ((dutyRows as OcgDailyDutyRow[] | null) ?? []).map((d) => [d.id, d]),
   )
-  return logs.filter((l) => inScope.has(l.duty_id))
+
+  return logs
+    .map((log) => {
+      const duty = dutyById.get(log.duty_id) ?? null
+      return {
+        log,
+        duty,
+        reviewerId: duty?.reviewer_id ?? null,
+        brandId: duty?.brand_id ?? null,
+        submitterMemberId: log.assignee_id ?? null,
+        submitterName: log.completed_by ?? '',
+      }
+    })
+    .filter((r) => {
+      if (scope.kind === 'all') return true
+      return !!r.brandId && scope.brandIds.includes(r.brandId)
+    })
+}
+
+/** The one occurrence a review request names, resolved for authorization. */
+export async function pendingReviewByLogId(logId: string): Promise<PendingReview | null> {
+  const { data } = await db().from('ocg_daily_duty_logs').select('*').eq('id', logId).maybeSingle()
+  const log = (data as OcgDailyDutyLogRow | null) ?? null
+  if (!log) return null
+  const { data: dutyRow } = await db().from('ocg_daily_duties')
+    .select('*').eq('id', log.duty_id).maybeSingle()
+  const duty = (dutyRow as OcgDailyDutyRow | null) ?? null
+  return {
+    log,
+    duty,
+    reviewerId: duty?.reviewer_id ?? null,
+    brandId: duty?.brand_id ?? null,
+    submitterMemberId: log.assignee_id ?? null,
+    submitterName: log.completed_by ?? '',
+  }
 }

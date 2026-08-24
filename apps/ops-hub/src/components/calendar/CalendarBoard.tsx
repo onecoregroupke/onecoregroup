@@ -1,11 +1,12 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
-import { ChevronLeft, ChevronRight, Plus, Loader2, CalendarDays } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, Loader2, CalendarDays, ListTodo, CalendarPlus } from 'lucide-react'
 import { api } from '@/lib/apiClient'
 import { CALENDAR_SCOPE_LABELS, type CalendarScope } from '@/lib/calendarScope'
 import { EventComposer } from './EventComposer'
+import { TaskComposer, type ComposerProject, type ComposerPerson } from './TaskComposer'
 
 export interface FeedItem {
   id: string
@@ -76,13 +77,20 @@ export function CalendarBoard({
   today,
   scopes,
   canCreateEvents,
+  canAssignTasks,
   brands,
+  projects,
+  people,
 }: {
   initial: { from: string; to: string; items: FeedItem[] }
   today: string
   scopes: CalendarScope[]
   canCreateEvents: boolean
+  /** Resolved server-side from the SAME permission POST /api/tasks enforces (§23). */
+  canAssignTasks: boolean
   brands: { id: string; label: string }[]
+  projects: ComposerProject[]
+  people: ComposerPerson[]
 }) {
   const [view, setView] = useState<View>('week')
   const [anchor, setAnchor] = useState(today)
@@ -90,7 +98,8 @@ export function CalendarBoard({
   const [types, setTypes] = useState<string[]>([...ALL_TYPES])
   const [items, setItems] = useState<FeedItem[]>(initial.items)
   const [loading, setLoading] = useState(false)
-  const [composing, setComposing] = useState<string | null>(null)
+  /** What is being composed, and for which day. */
+  const [composing, setComposing] = useState<{ kind: 'event' | 'task'; date: string } | null>(null)
   const [error, setError] = useState('')
 
   const load = useCallback(async () => {
@@ -123,6 +132,11 @@ export function CalendarBoard({
   function step(dir: -1 | 1) {
     setAnchor((a) => (view === 'month' ? addMonths(a, dir) : addDays(a, view === 'week' ? 7 * dir : dir)))
   }
+
+  /** Clicking a specific day prefills that day (§24). */
+  const openDay = useCallback((kind: 'event' | 'task', date: string) => {
+    setComposing({ kind, date })
+  }, [])
 
   const heading = useMemo(() => {
     const d = parse(anchor)
@@ -169,10 +183,10 @@ export function CalendarBoard({
           </select>
         )}
 
-        <button onClick={() => setComposing(anchor)}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-ocg-navy px-3 py-2 text-xs font-medium text-white hover:bg-slate-800">
-          <Plus size={14} /> Event
-        </button>
+        <AddButton
+          canAssignTasks={canAssignTasks}
+          onPick={(kind) => setComposing({ kind, date: anchor })}
+        />
       </div>
 
       {/* ── Type filters ────────────────────────────────────────────── */}
@@ -193,16 +207,28 @@ export function CalendarBoard({
       {error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-600">{error}</p>}
 
       {/* ── Grid ────────────────────────────────────────────────────── */}
-      {view === 'month' && <MonthView anchor={anchor} today={today} byDate={byDate} onAdd={setComposing} />}
-      {view === 'week' && <WeekView anchor={anchor} today={today} byDate={byDate} onAdd={setComposing} />}
+      {view === 'month' && <MonthView anchor={anchor} today={today} byDate={byDate} onAdd={openDay} canAssignTasks={canAssignTasks} />}
+      {view === 'week' && <WeekView anchor={anchor} today={today} byDate={byDate} onAdd={openDay} canAssignTasks={canAssignTasks} />}
       {view === 'day' && <DayView date={anchor} today={today} items={byDate.get(anchor) ?? []} />}
 
-      {composing && (
+      {composing?.kind === 'event' && (
         <EventComposer
-          date={composing}
+          date={composing.date}
           brands={brands}
           canCreateShared={canCreateEvents}
           onClose={() => setComposing(null)}
+          onCreated={() => { setComposing(null); void load() }}
+        />
+      )}
+
+      {composing?.kind === 'task' && (
+        <TaskComposer
+          date={composing.date}
+          projects={projects}
+          people={people}
+          onClose={() => setComposing(null)}
+          // §26: the new task is a normal Ops Task, so simply reloading the feed
+          // brings it in — no local copy is spliced into state.
           onCreated={() => { setComposing(null); void load() }}
         />
       )}
@@ -210,10 +236,131 @@ export function CalendarBoard({
   )
 }
 
+/**
+ * §23: an ordinary user gets "Event"; someone with genuine task-assignment
+ * authority gets a "+ Add" menu offering Event or Assign Task.
+ *
+ * `canAssignTasks` is resolved on the SERVER from the same permission
+ * POST /api/tasks enforces — never from a client-side role string — so hiding
+ * the option is a courtesy, not the control (§40.12).
+ */
+function AddButton({
+  canAssignTasks, onPick,
+}: {
+  canAssignTasks: boolean
+  onPick: (kind: 'event' | 'task') => void
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const close = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [open])
+
+  if (!canAssignTasks) {
+    return (
+      <button onClick={() => onPick('event')}
+        className="inline-flex items-center gap-1.5 rounded-lg bg-ocg-navy px-3 py-2 text-xs font-medium text-white hover:bg-slate-800">
+        <Plus size={14} /> Event
+      </button>
+    )
+  }
+
+  return (
+    <div className="relative" ref={ref}>
+      <button onClick={() => setOpen((v) => !v)}
+        aria-haspopup="menu" aria-expanded={open}
+        className="inline-flex items-center gap-1.5 rounded-lg bg-ocg-navy px-3 py-2 text-xs font-medium text-white hover:bg-slate-800">
+        <Plus size={14} /> Add
+      </button>
+      {open && (
+        <div role="menu" className="absolute right-0 z-20 mt-1 w-52 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg">
+          <button role="menuitem"
+            onClick={() => { setOpen(false); onPick('event') }}
+            className="flex w-full items-start gap-2.5 px-3 py-2.5 text-left hover:bg-gray-50">
+            <CalendarPlus size={15} className="mt-0.5 shrink-0 text-blue-500" />
+            <span>
+              <span className="block text-sm font-medium text-gray-800">Event</span>
+              <span className="block text-[11px] text-gray-400">Something happening at a time</span>
+            </span>
+          </button>
+          <button role="menuitem"
+            onClick={() => { setOpen(false); onPick('task') }}
+            className="flex w-full items-start gap-2.5 border-t border-gray-100 px-3 py-2.5 text-left hover:bg-gray-50">
+            <ListTodo size={15} className="mt-0.5 shrink-0 text-slate-500" />
+            <span>
+              <span className="block text-sm font-medium text-gray-800">Assign Task</span>
+              <span className="block text-[11px] text-gray-400">Work for someone to do</span>
+            </span>
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** The per-day "+" in month/week views. Same choice as the toolbar (§23). */
+function DayAdd({
+  date, canAssignTasks, onAdd, size = 13,
+}: {
+  date: string
+  canAssignTasks: boolean
+  onAdd: (kind: 'event' | 'task', date: string) => void
+  size?: number
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLSpanElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const close = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [open])
+
+  if (!canAssignTasks) {
+    return (
+      <button onClick={() => onAdd('event', date)}
+        className="opacity-0 transition-opacity group-hover:opacity-100" aria-label={`Add on ${date}`}>
+        <Plus size={size} className="text-gray-300 hover:text-ocg-gold" />
+      </button>
+    )
+  }
+
+  return (
+    <span className="relative" ref={ref}>
+      <button onClick={() => setOpen((v) => !v)}
+        className={`transition-opacity ${open ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+        aria-haspopup="menu" aria-expanded={open} aria-label={`Add on ${date}`}>
+        <Plus size={size} className="text-gray-300 hover:text-ocg-gold" />
+      </button>
+      {open && (
+        <span role="menu" className="absolute right-0 z-30 mt-1 flex w-36 flex-col overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg">
+          <button role="menuitem" onClick={() => { setOpen(false); onAdd('event', date) }}
+            className="px-3 py-2 text-left text-xs text-gray-700 hover:bg-gray-50">Event</button>
+          <button role="menuitem" onClick={() => { setOpen(false); onAdd('task', date) }}
+            className="border-t border-gray-100 px-3 py-2 text-left text-xs text-gray-700 hover:bg-gray-50">Assign Task</button>
+        </span>
+      )}
+    </span>
+  )
+}
+
 // ─── Views ──────────────────────────────────────────────────────────────────
 
-function MonthView({ anchor, today, byDate, onAdd }: {
-  anchor: string; today: string; byDate: Map<string, FeedItem[]>; onAdd: (d: string) => void
+function MonthView({ anchor, today, byDate, onAdd, canAssignTasks }: {
+  anchor: string
+  today: string
+  byDate: Map<string, FeedItem[]>
+  onAdd: (kind: 'event' | 'task', date: string) => void
+  canAssignTasks: boolean
 }) {
   const days = monthGrid(anchor)
   const current = monthOf(anchor)
@@ -235,10 +382,7 @@ function MonthView({ anchor, today, byDate, onAdd }: {
                 <span className={`inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[11px] font-medium ${
                   day === today ? 'bg-ocg-navy text-white' : outside ? 'text-gray-300' : 'text-gray-600'
                 }`}>{Number(day.slice(8, 10))}</span>
-                <button onClick={() => onAdd(day)}
-                  className="opacity-0 transition-opacity group-hover:opacity-100" aria-label={`Add on ${day}`}>
-                  <Plus size={12} className="text-gray-300 hover:text-ocg-gold" />
-                </button>
+                <DayAdd date={day} canAssignTasks={canAssignTasks} onAdd={onAdd} size={12} />
               </div>
               <div className="space-y-0.5">
                 {list.slice(0, 3).map((i) => <Chip key={i.id} item={i} compact />)}
@@ -252,8 +396,12 @@ function MonthView({ anchor, today, byDate, onAdd }: {
   )
 }
 
-function WeekView({ anchor, today, byDate, onAdd }: {
-  anchor: string; today: string; byDate: Map<string, FeedItem[]>; onAdd: (d: string) => void
+function WeekView({ anchor, today, byDate, onAdd, canAssignTasks }: {
+  anchor: string
+  today: string
+  byDate: Map<string, FeedItem[]>
+  onAdd: (kind: 'event' | 'task', date: string) => void
+  canAssignTasks: boolean
 }) {
   const from = startOfWeek(anchor)
   const days = Array.from({ length: 7 }, (_, i) => addDays(from, i))
@@ -276,9 +424,7 @@ function WeekView({ anchor, today, byDate, onAdd }: {
                       : Number(day.slice(8, 10))}
                   </p>
                 </div>
-                <button onClick={() => onAdd(day)} className="opacity-0 transition-opacity group-hover:opacity-100" aria-label={`Add on ${day}`}>
-                  <Plus size={13} className="text-gray-300 hover:text-ocg-gold" />
-                </button>
+                <DayAdd date={day} canAssignTasks={canAssignTasks} onAdd={onAdd} />
               </div>
               <div className="space-y-1">
                 {list.length === 0

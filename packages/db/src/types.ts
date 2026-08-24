@@ -925,6 +925,21 @@ export interface OpsTaskRow {
   source_ref: string | null
   created_at: string
   updated_at: string
+  // ── Per-task completion requirements + review (migration 057 §2) ──
+  // All default false, so a task created before 057 behaves exactly as before
+  // and never enters a review queue.
+  requires_note: boolean
+  requires_evidence: boolean
+  requires_approval: boolean
+  requires_checklist: boolean
+  required_form_template_id: string | null
+  /** Named countersignatory. null = any eligible manager (see reviewAuthority). */
+  reviewer_id: string | null
+  /** Set when this task was materialised from a recurring duty occurrence. */
+  duty_id: string | null
+  duty_date: string | null
+  submitted_at: string | null
+  reopened_count: number
 }
 type OpsTaskInsert = Pick<OpsTaskRow, 'task_id' | 'project_id' | 'task_name'> & Partial<OpsTaskRow>
 
@@ -2361,6 +2376,34 @@ export interface OcgHolidayRow {
   created_at: string
 }
 type OcgHolidayInsert = Pick<OcgHolidayRow, 'holiday_date' | 'name'> & Partial<OcgHolidayRow>
+
+// ─── Review events (migration 057 §3) ───────────────────────────────────────
+/**
+ * The append-only countersign record, shared by task completions and duty
+ * occurrences — a review attaches to `task_id`, `duty_log_id`, or both. A later
+ * decision is a NEW row; an earlier one is never edited, which is what makes the
+ * review history a record rather than a status field.
+ *
+ * `reviewed_by_id` is the immutable identity of the countersignatory;
+ * `reviewed_by` is the display name captured at the time of signing.
+ */
+export interface OpsTaskReviewRow {
+  id: string
+  /** ops_tasks.task_id — TEXT, e.g. 'TASK-0001'. */
+  task_id: string | null
+  completion_id: string | null
+  duty_log_id: string | null
+  /** accepted | reopened | cancelled */
+  decision: string
+  comment: string
+  quality_rating: number | null
+  reopen_reason: string
+  follow_up_task_id: string | null
+  reviewed_by: string
+  reviewed_by_id: string | null
+  created_at: string
+}
+type OpsTaskReviewInsert = Pick<OpsTaskReviewRow, 'decision'> & Partial<OpsTaskReviewRow>
 
 // ─── Calendar (migration 056) ────────────────────────────────────────────────
 export interface OcgCalendarEventRow {
@@ -4700,6 +4743,7 @@ export interface Database {
       ocg_duty_checklist_items: DbTable<OcgDutyChecklistItemRow, OcgDutyChecklistItemInsert, Partial<OcgDutyChecklistItemRow>>
       ocg_duty_checklist_results: DbTable<OcgDutyChecklistResultRow, OcgDutyChecklistResultInsert, Partial<OcgDutyChecklistResultRow>>
       ocg_holidays: DbTable<OcgHolidayRow, OcgHolidayInsert, Partial<OcgHolidayRow>>
+      ops_task_reviews: DbTable<OpsTaskReviewRow, OpsTaskReviewInsert, Partial<OpsTaskReviewRow>>
       ocg_calendar_events: DbTable<OcgCalendarEventRow, OcgCalendarEventInsert, Partial<OcgCalendarEventRow>>
       ocg_calendar_event_attendees: DbTable<OcgCalendarEventAttendeeRow, OcgCalendarEventAttendeeInsert, Partial<OcgCalendarEventAttendeeRow>>
       ocg_calendar_reschedules: DbTable<OcgCalendarRescheduleRow, OcgCalendarRescheduleInsert, Partial<OcgCalendarRescheduleRow>>

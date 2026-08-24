@@ -9,7 +9,19 @@ import type { KnowledgeRecord } from '@/lib/knowledge'
 
 type BrandOption = { id: string; name: string }
 
-export function KnowledgeWorkspace({ records, brands, canEdit }: { records: KnowledgeRecord[]; brands: BrandOption[]; canEdit: boolean }) {
+/**
+ * §37: `canPublish` is a PER-RECORD decision keyed by entry id, resolved on the
+ * server from the same authority check the publish endpoint runs. Editing a
+ * document and being allowed to make it company policy are different rights, so
+ * a Publish button shown on `canEdit` alone advertises an action the server will
+ * refuse — and, worse, implies the person holds authority they do not.
+ */
+export function KnowledgeWorkspace({ records, brands, canEdit, canPublish = {} }: {
+  records: KnowledgeRecord[]
+  brands: BrandOption[]
+  canEdit: boolean
+  canPublish?: Record<string, boolean>
+}) {
   const router = useRouter()
   const [showCreate, setShowCreate] = useState(false)
   const [versionFor, setVersionFor] = useState<KnowledgeRecord | null>(null)
@@ -52,7 +64,8 @@ export function KnowledgeWorkspace({ records, brands, canEdit }: { records: Know
               <Link href={`/knowledge/${record.id}`} className="inline-flex items-center gap-1 text-xs font-medium text-ocg-navy hover:text-ocg-gold">Open & read <ChevronRight size={13} /></Link>
               <span className="inline-flex items-center gap-1 text-xs text-gray-400"><History size={13} /> {record.versions.length} version{record.versions.length === 1 ? '' : 's'}</span>
               {canEdit && <button onClick={() => setVersionFor(record)} className="ml-auto rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600">New version</button>}
-              {canEdit && draft && <button disabled={busy} onClick={() => publish(record, draft.id)} className="inline-flex items-center gap-1 rounded-lg bg-green-600 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-60"><ShieldCheck size={13} /> Publish draft</button>}
+              {canPublish[record.id] && draft && <button disabled={busy} onClick={() => publish(record, draft.id)} className="inline-flex items-center gap-1 rounded-lg bg-green-600 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-60"><ShieldCheck size={13} /> Publish draft</button>}
+              {canEdit && !canPublish[record.id] && draft && <span className="rounded-lg bg-gray-100 px-3 py-1.5 text-xs text-gray-500" title="Publishing needs explicit knowledge approval authority for this entity.">Draft awaiting approval</span>}
             </div>
           </article>
         })}</div>

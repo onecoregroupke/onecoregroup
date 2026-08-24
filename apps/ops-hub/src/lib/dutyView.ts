@@ -16,14 +16,26 @@ export async function toOccurrenceDtos(occurrences: DutyOccurrence[]): Promise<O
 
   const dutyIds = [...new Set(occurrences.map((o) => o.duty.id))]
   const logIds = occurrences.map((o) => o.log?.id).filter((id): id is string => !!id)
+  // Named reviewers, resolved once for the whole page so §15 can tell the
+  // employee WHO they are waiting on rather than just "a manager".
+  const reviewerIds = [...new Set(
+    occurrences.map((o) => o.duty.reviewer_id).filter((id): id is string => !!id),
+  )]
 
-  const [{ data: itemRows }, { data: resultRows }] = await Promise.all([
+  const [{ data: itemRows }, { data: resultRows }, { data: reviewerRows }] = await Promise.all([
     db().from('ocg_duty_checklist_items').select('*').in('duty_id', dutyIds).eq('active', true)
       .order('position', { ascending: true }),
     logIds.length > 0
       ? db().from('ocg_duty_checklist_results').select('*').in('log_id', logIds)
       : Promise.resolve({ data: [] as OcgDutyChecklistResultRow[] }),
+    reviewerIds.length > 0
+      ? db().from('ops_team_members').select('id, name').in('id', reviewerIds)
+      : Promise.resolve({ data: [] as { id: string; name: string }[] }),
   ])
+
+  const reviewerName = new Map(
+    ((reviewerRows as { id: string; name: string }[] | null) ?? []).map((m) => [m.id, m.name]),
+  )
 
   const itemsByDuty = new Map<string, OcgDutyChecklistItemRow[]>()
   for (const item of ((itemRows as OcgDutyChecklistItemRow[] | null) ?? [])) {
@@ -55,6 +67,13 @@ export async function toOccurrenceDtos(occurrences: DutyOccurrence[]): Promise<O
     onTime: o.onTime,
     reviewState: o.reviewState,
     reviewComment: o.log?.review_comment ?? '',
+    // §15: the employee should read "Awaiting review by Fatma" / "Reviewed by
+    // Fatma · 24 Aug 2026", not a bare state word.
+    reviewerName: o.duty.reviewer_id ? (reviewerName.get(o.duty.reviewer_id) ?? '') : '',
+    reviewedBy: o.log?.reviewed_by ?? '',
+    reviewedAt: o.log?.reviewed_at ?? null,
+    requiredFormTemplateId: o.duty.required_form_template_id ?? null,
+    formSubmissionId: o.log?.form_submission_id ?? null,
     note: o.log?.note ?? '',
     checklistDone: o.checklistDone,
     checklistTotal: o.checklistTotal,

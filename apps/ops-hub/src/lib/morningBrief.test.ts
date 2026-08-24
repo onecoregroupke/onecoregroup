@@ -3,7 +3,8 @@ import assert from 'node:assert/strict'
 import {
   briefTypeForDuty, dedupeBriefItems, sortBriefItems, buildPersonalBrief,
   buildManagerBrief, unnotifiedKeys, shouldSendAssignmentEmail,
-  BRIEF_TYPE_LABELS, type BriefItem,
+  buildWorkBrief, limitSection, BRIEF_SECTION_LIMIT,
+  BRIEF_TYPE_LABELS, type BriefItem, type BriefLine,
 } from './morningBrief'
 
 const item = (over: Partial<BriefItem>): BriefItem => ({
@@ -189,4 +190,128 @@ test('no assignment email for an unassigned, inactive or paused duty', () => {
   assert.equal(shouldSendAssignmentEmail({ assignee_id: null }), false)
   assert.equal(shouldSendAssignmentEmail({ assignee_id: 'm1', active: false }), false)
   assert.equal(shouldSendAssignmentEmail({ assignee_id: 'm1', paused: true }), false)
+})
+
+// ─── Morning Work Brief (§§18–21, §43) ──────────────────────────────────────
+
+const line = (key: string, title = key, detail = ''): BriefLine => ({ key, title, detail })
+
+test('a brief with only tasks lists them and nothing else', () => {
+  const brief = buildWorkBrief({
+    recipientName: 'Allan', recipientEmail: 'a@x.com', date: '2026-08-24',
+    duties: [], tasks: [line('task:T-1', 'Prepare supplier comparison')],
+  })
+  assert.equal(brief.counts.tasks, 1)
+  assert.equal(brief.counts.duties, 0)
+  assert.equal(brief.isEmpty, false)
+  assert.match(brief.headline, /1 task/)
+})
+
+test('a brief with only duties lists them and nothing else', () => {
+  const brief = buildWorkBrief({
+    recipientName: 'Allan', recipientEmail: 'a@x.com', date: '2026-08-24',
+    duties: [line('duty:d1:2026-08-24:m1', 'Opening stock check')], tasks: [],
+  })
+  assert.equal(brief.counts.duties, 1)
+  assert.equal(brief.counts.tasks, 0)
+  assert.match(brief.headline, /1 duty/)
+})
+
+test('a brief carries duties AND tasks together, still distinguishable', () => {
+  const brief = buildWorkBrief({
+    recipientName: 'Allan', recipientEmail: 'a@x.com', date: '2026-08-24',
+    duties: [line('duty:d1:2026-08-24:m1')], tasks: [line('task:T-1')],
+  })
+  assert.equal(brief.counts.total, 2)
+  assert.equal(brief.duties.length, 1)
+  assert.equal(brief.tasks.length, 1)
+  assert.match(brief.headline, /1 duty · 1 task/)
+})
+
+test('nothing actionable produces an empty brief so no email is sent', () => {
+  const brief = buildWorkBrief({
+    recipientName: 'Allan', recipientEmail: 'a@x.com', date: '2026-08-24',
+    duties: [], tasks: [],
+  })
+  assert.equal(brief.isEmpty, true)
+  assert.equal(brief.headline, 'Nothing outstanding')
+})
+
+test('an overdue item is chased once — never in Overdue AND in its own section', () => {
+  const late = line('duty:d1:2026-08-23:m1', 'Yesterday closing report')
+  const brief = buildWorkBrief({
+    recipientName: 'Allan', recipientEmail: 'a@x.com', date: '2026-08-24',
+    duties: [late, line('duty:d2:2026-08-24:m1')], tasks: [],
+    overdue: [late],
+  })
+  assert.equal(brief.overdue.length, 1)
+  assert.equal(brief.duties.length, 1)
+  assert.equal(brief.duties.some((l) => l.key === late.key), false)
+})
+
+test('overdue duties and overdue tasks both reach the brief', () => {
+  const brief = buildWorkBrief({
+    recipientName: 'Allan', recipientEmail: 'a@x.com', date: '2026-08-24',
+    duties: [], tasks: [],
+    overdue: [line('duty:d1:2026-08-22:m1'), line('task:T-9')],
+  })
+  assert.equal(brief.counts.overdue, 2)
+  assert.equal(brief.isEmpty, false)
+})
+
+test('one duty occurrence cannot appear twice in a brief', () => {
+  const key = 'duty:d1:2026-08-24:m1'
+  const brief = buildWorkBrief({
+    recipientName: 'Allan', recipientEmail: 'a@x.com', date: '2026-08-24',
+    // The same occurrence arriving from both the duty feed and a materialised task.
+    duties: [line(key, 'Opening stock check')], tasks: [line(key, 'Opening stock check')],
+  })
+  assert.equal(brief.counts.total, 1)
+})
+
+test('a repeated key within one section collapses too', () => {
+  const brief = buildWorkBrief({
+    recipientName: 'Allan', recipientEmail: 'a@x.com', date: '2026-08-24',
+    duties: [line('duty:d1:2026-08-24:m1'), line('duty:d1:2026-08-24:m1')], tasks: [],
+  })
+  assert.equal(brief.duties.length, 1)
+})
+
+test('reviews reach only the brief they were attributed to', () => {
+  const brief = buildWorkBrief({
+    recipientName: 'Fatma', recipientEmail: 'f@x.com', date: '2026-08-24',
+    duties: [], tasks: [], reviews: [line('review:l1', 'Staff Diary', 'Jane')],
+  })
+  assert.equal(brief.counts.reviews, 1)
+  assert.match(brief.headline, /1 to review/)
+})
+
+test('a review alone is enough to warrant an email', () => {
+  const brief = buildWorkBrief({
+    recipientName: 'Fatma', recipientEmail: 'f@x.com', date: '2026-08-24',
+    duties: [], tasks: [], reviews: [line('review:l1')],
+  })
+  assert.equal(brief.isEmpty, false)
+})
+
+test('appointments appear as their own section', () => {
+  const brief = buildWorkBrief({
+    recipientName: 'Allan', recipientEmail: 'a@x.com', date: '2026-08-24',
+    duties: [], tasks: [], appointments: [line('appointment:a1', 'Production planning', '10:00')],
+  })
+  assert.equal(brief.counts.appointments, 1)
+  assert.equal(brief.appointments[0]!.detail, '10:00')
+})
+
+test('sections are bounded and report what was trimmed', () => {
+  const many = Array.from({ length: 20 }, (_, i) => line(`k${i}`))
+  const { shown, more } = limitSection(many)
+  assert.equal(shown.length, BRIEF_SECTION_LIMIT)
+  assert.equal(more, 20 - BRIEF_SECTION_LIMIT)
+})
+
+test('a short section is not trimmed and reports nothing extra', () => {
+  const { shown, more } = limitSection([line('a'), line('b')])
+  assert.equal(shown.length, 2)
+  assert.equal(more, 0)
 })

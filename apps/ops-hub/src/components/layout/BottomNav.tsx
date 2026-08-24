@@ -5,13 +5,17 @@ import { usePathname } from 'next/navigation'
 import { MAIN_NAV } from './Sidebar'
 import { usePermissions } from '@/contexts/PermissionsContext'
 
-const MOBILE_HREFS = ['/', '/my-tasks', '/meetings', '/chat', '/tasks']
+// §27: for an ordinary employee the everyday path is My Work → Calendar → Chat.
+// The Task Board is management's surface and only appears for people who hold
+// the grant, so a storekeeper's phone shows the four things they actually use.
+const MOBILE_HREFS = ['/', '/my-work', '/calendar', '/chat', '/tasks']
 
 export function BottomNav() {
   const path = usePathname()
   const { can } = usePermissions()
-  const items = MAIN_NAV
-    .filter((item) => MOBILE_HREFS.includes(item.href))
+  const items = MOBILE_HREFS
+    .map((href) => MAIN_NAV.find((item) => item.href === href))
+    .filter((item): item is NonNullable<typeof item> => !!item)
     .filter((item) => item.section === null || can(item.section, 'view'))
 
   return (

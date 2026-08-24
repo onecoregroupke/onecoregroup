@@ -217,3 +217,124 @@ export function shouldSendAssignmentEmail(duty: {
   if (!duty.assignee_id) return false      // nobody to send to
   return !duty.assignment_email_sent_at
 }
+
+// ─── Morning Work Brief (§§18–21) ───────────────────────────────────────────
+//
+// ONE brief per person per weekday, extending the existing team-brief cron
+// rather than adding a second duty cron (§18). The sections mirror My Work, so
+// the email and the page cannot tell someone different things about their day.
+
+export interface BriefLine {
+  /** Occurrence identity — the dedupe key across duties and tasks. */
+  key: string
+  title: string
+  /** Short trailing context: "due 10:00", "TASK-0007 · High", "Jane". */
+  detail: string
+}
+
+export interface WorkBrief {
+  recipientName: string
+  recipientEmail: string
+  date: string
+  duties: BriefLine[]
+  tasks: BriefLine[]
+  appointments: BriefLine[]
+  overdue: BriefLine[]
+  /** Only what this person is genuinely authorised to countersign (§19). */
+  reviews: BriefLine[]
+  counts: {
+    duties: number
+    tasks: number
+    appointments: number
+    overdue: number
+    reviews: number
+    total: number
+  }
+  /** Nothing actionable → no email (§20). */
+  isEmpty: boolean
+  /** The in-app notification line (§21). */
+  headline: string
+}
+
+/** How many items of each kind an email lists before "+ N more" (§20). */
+export const BRIEF_SECTION_LIMIT = 8
+
+/** Trim a section to the display limit, reporting what was cut. */
+export function limitSection(lines: BriefLine[], limit = BRIEF_SECTION_LIMIT): {
+  shown: BriefLine[]
+  more: number
+} {
+  return { shown: lines.slice(0, limit), more: Math.max(0, lines.length - limit) }
+}
+
+function dedupeLines(lines: BriefLine[]): BriefLine[] {
+  const seen = new Set<string>()
+  return lines.filter((l) => (seen.has(l.key) ? false : (seen.add(l.key), true)))
+}
+
+/**
+ * Assemble one person's morning brief.
+ *
+ * Deduplication is GLOBAL across sections, not merely within each one, and runs
+ * in precedence order: Overdue, then Daily Duties, then Assigned Tasks. So a
+ * duty that has also been materialised into ops_tasks is chased exactly once,
+ * as the richer duty entry — §43's "no duplicated Duty occurrence" — and a late
+ * item is chased from Overdue rather than appearing twice in one email.
+ *
+ * Appointments and reviews use their own key prefixes and cannot collide with
+ * work items, so they are only deduplicated within themselves.
+ */
+export function buildWorkBrief(input: {
+  recipientName: string
+  recipientEmail: string
+  date: string
+  duties: BriefLine[]
+  tasks: BriefLine[]
+  appointments?: BriefLine[]
+  overdue?: BriefLine[]
+  reviews?: BriefLine[]
+}): WorkBrief {
+  const claimed = new Set<string>()
+  /** Take a section, dropping anything a higher-precedence section already has. */
+  const take = (lines: BriefLine[]): BriefLine[] => {
+    const out: BriefLine[] = []
+    for (const line of lines) {
+      if (claimed.has(line.key)) continue
+      claimed.add(line.key)
+      out.push(line)
+    }
+    return out
+  }
+
+  const overdue = take(input.overdue ?? [])
+  const duties = take(input.duties)
+  const tasks = take(input.tasks)
+  const appointments = dedupeLines(input.appointments ?? [])
+  const reviews = dedupeLines(input.reviews ?? [])
+
+  const counts = {
+    duties: duties.length,
+    tasks: tasks.length,
+    appointments: appointments.length,
+    overdue: overdue.length,
+    reviews: reviews.length,
+    total: duties.length + tasks.length + appointments.length + overdue.length + reviews.length,
+  }
+
+  const parts: string[] = []
+  if (counts.duties) parts.push(`${counts.duties} ${counts.duties === 1 ? 'duty' : 'duties'}`)
+  if (counts.tasks) parts.push(`${counts.tasks} ${counts.tasks === 1 ? 'task' : 'tasks'}`)
+  if (counts.overdue) parts.push(`${counts.overdue} overdue`)
+  if (counts.appointments) parts.push(`${counts.appointments} ${counts.appointments === 1 ? 'appointment' : 'appointments'}`)
+  if (counts.reviews) parts.push(`${counts.reviews} to review`)
+
+  return {
+    recipientName: input.recipientName,
+    recipientEmail: input.recipientEmail,
+    date: input.date,
+    duties, tasks, appointments, overdue, reviews,
+    counts,
+    isEmpty: counts.total === 0,
+    headline: parts.length > 0 ? parts.join(' · ') : 'Nothing outstanding',
+  }
+}

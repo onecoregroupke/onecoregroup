@@ -8,6 +8,8 @@ import { listStores, listRuns, listFgTransfers, productionSuggestions } from '@/
 import { periodBalances } from '@/lib/stockCards'
 import { todayInEat } from '@/lib/serverClient'
 import { ProductionRunPanel, type ItemOption } from '@/components/inventory/ProductionRunPanel'
+import { StorePanel, type StoreItem } from '@/components/inventory/StorePanel'
+import { OperationalDocLinks } from '@/components/forms/OperationalDocLinks'
 
 export const dynamic = 'force-dynamic'
 
@@ -69,6 +71,24 @@ export default async function ManufacturingPage({
     onHand: Number(i.quantity ?? 0),
   })
 
+  // Flatten to the serialisable shape the client panel renders. Stock figures
+  // are passed through untouched — the panel only decides how many rows to show.
+  const toStoreItem = (i: (typeof items)[number]): StoreItem => {
+    const bal = balanceByItem.get(i.id)
+    return {
+      id: i.id,
+      name: i.name,
+      sku: i.sku ?? '',
+      unit: i.unit,
+      quantity: Number(i.quantity ?? 0),
+      minimumStock: Number(i.minimum_stock ?? 0),
+      reorderLevel: Number(i.reorder_level ?? 0),
+      opening: bal ? bal.opening : null,
+      quantityIn: bal ? bal.quantity_in : null,
+      quantityOut: bal ? bal.quantity_out : null,
+    }
+  }
+
   const activeRuns = runs.filter((r) => !['completed', 'closed', 'cancelled'].includes(r.status))
   const producedThisMonth = balances
     .filter((b) => finishedItems.some((f) => f.id === b.item_id))
@@ -121,11 +141,27 @@ export default async function ManufacturingPage({
         </p>
       )}
 
+      {/* §31: Material Requisition is a production document, so it is reachable
+          from Production rather than only from a generic forms library. The
+          brand in view is carried through, so the pad opens already bound to it. */}
+      {actor.can('procurement', 'edit') && (
+        <OperationalDocLinks
+          title="Production documents"
+          hint="Request material, issue it to a run, and move finished goods — each posts straight to the stock ledger."
+          brand={params.brand}
+          docs={[
+            { pad: 'mrf', label: 'Material Requisition', hint: 'Request material for a production run' },
+            { pad: 'gin', label: 'Goods / Raw Material Issue Note', hint: 'Issue material out to production' },
+            { pad: 'gtn', label: 'Goods Transfer Note', hint: 'Move stock between stores' },
+          ]}
+        />
+      )}
+
       {/* ── The three stores, kept apart ───────────────────────────── */}
       <div className="grid gap-4 lg:grid-cols-3">
-        <StorePanel title="Raw material store" tone="raw" items={rawItems} balanceByItem={balanceByItem} />
-        <StorePanel title="Packaging store" tone="packaging" items={packagingItems} balanceByItem={balanceByItem} />
-        <StorePanel title="Finished goods store" tone="finished_goods" items={finishedItems} balanceByItem={balanceByItem} />
+        <StorePanel title="Raw material store" tone="raw" items={rawItems.map(toStoreItem)} />
+        <StorePanel title="Packaging store" tone="packaging" items={packagingItems.map(toStoreItem)} />
+        <StorePanel title="Finished goods store" tone="finished_goods" items={finishedItems.map(toStoreItem)} />
       </div>
 
       {suggestions.length > 0 && (
@@ -241,56 +277,6 @@ export default async function ManufacturingPage({
         </section>
       )}
     </div>
-  )
-}
-
-function StorePanel({
-  title, tone, items, balanceByItem,
-}: {
-  title: string
-  tone: string
-  items: Array<{ id: string; name: string; sku: string; unit: string; quantity: number; minimum_stock: number; reorder_level: number }>
-  balanceByItem: Map<string, { opening: number; quantity_in: number; quantity_out: number; closing: number }>
-}) {
-  return (
-    <section className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
-      <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-xs font-semibold uppercase tracking-wider text-ocg-gold">{title}</h2>
-        <span className={`rounded px-2 py-0.5 text-[10px] font-medium ${STORE_TONE[tone] ?? STORE_TONE['general']}`}>
-          {items.length} item{items.length === 1 ? '' : 's'}
-        </span>
-      </div>
-      {items.length === 0 ? (
-        <p className="rounded-lg bg-gray-50 p-3 text-xs text-gray-500">
-          Nothing classified into this store yet.
-        </p>
-      ) : (
-        <div className="space-y-1.5">
-          {items.slice(0, 12).map((i) => {
-            const bal = balanceByItem.get(i.id)
-            const threshold = Number(i.minimum_stock || i.reorder_level || 0)
-            const low = threshold > 0 && Number(i.quantity) <= threshold
-            return (
-              <div key={i.id} className="flex items-center justify-between gap-2 rounded-lg border border-gray-50 px-2.5 py-1.5 text-sm">
-                <span className="min-w-0">
-                  <span className="block truncate text-gray-800">{i.name}</span>
-                  {bal && (
-                    <span className="block text-[11px] tabular-nums text-gray-400">
-                      open {num(bal.opening)} · <span className="text-emerald-600">+{num(bal.quantity_in)}</span>
-                      {' · '}<span className="text-red-600">−{num(bal.quantity_out)}</span>
-                    </span>
-                  )}
-                </span>
-                <span className={`shrink-0 text-sm font-semibold tabular-nums ${low ? 'text-amber-600' : 'text-gray-900'}`}>
-                  {num(Number(i.quantity))} <span className="text-[10px] font-normal text-gray-400">{i.unit}</span>
-                </span>
-              </div>
-            )
-          })}
-          {items.length > 12 && <p className="px-1 text-[11px] text-gray-400">+{items.length - 12} more</p>}
-        </div>
-      )}
-    </section>
   )
 }
 

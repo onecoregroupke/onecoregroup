@@ -154,6 +154,84 @@ export async function sendTeamTaskBrief(p: {
   }
 }
 
+/**
+ * The Morning Work Brief (§§18–20).
+ *
+ * ONE email covering the whole of someone's day — recurring Daily Duties,
+ * management-assigned Tasks, appointments, anything overdue, and reviews only
+ * they can perform. It replaces the task-only brief rather than adding a second
+ * morning email, which is the repetitive stream §18 rules out.
+ *
+ * Sections with nothing in them are omitted entirely; an email of empty
+ * headings teaches people to stop opening it.
+ */
+export async function sendMorningWorkBrief(p: {
+  to: string
+  name: string
+  sections: {
+    label: string
+    items: { title: string; detail: string }[]
+    more: number
+    tone: string
+  }[]
+  headline: string
+  workUrl: string
+}): Promise<boolean> {
+  const resend = client()
+  if (!resend) return false
+
+  const section = (s: (typeof p.sections)[number]) => `
+    <div style="margin:18px 0 0">
+      <p style="margin:0 0 6px;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:${s.tone};font-weight:700">
+        ${escapeHtml(s.label)} · ${s.items.length + s.more}
+      </p>
+      <table style="border-collapse:collapse;width:100%;font-size:13px">
+        ${s.items.map((item) => `
+          <tr>
+            <td style="padding:6px 0;border-top:1px solid #f0f0f0;color:#1a1a2e">
+              <span style="color:${s.tone}">•</span>&nbsp; ${escapeHtml(item.title)}
+              ${item.detail ? `<span style="color:#888"> — ${escapeHtml(item.detail)}</span>` : ''}
+            </td>
+          </tr>`).join('')}
+        ${s.more > 0 ? `<tr><td style="padding:6px 0;border-top:1px solid #f0f0f0;color:#999">+ ${s.more} more</td></tr>` : ''}
+      </table>
+    </div>`
+
+  const html = `
+  <div style="font-family:Inter,Arial,sans-serif;max-width:600px;margin:0 auto;color:#1a1a2e">
+    <div style="background:${NAVY};padding:20px 24px;border-radius:12px 12px 0 0">
+      <span style="color:#fff;font-weight:700;font-size:18px">One Core Group</span>
+      <span style="color:${GOLD};font-size:13px;margin-left:6px">Morning work brief</span>
+    </div>
+    <div style="border:1px solid #eee;border-top:none;padding:24px;border-radius:0 0 12px 12px">
+      <p style="margin:0;font-size:16px">Good morning, ${escapeHtml(p.name)}</p>
+      <p style="margin:4px 0 0;color:#666;font-size:13px">Here is your work for today.</p>
+      ${p.sections.map(section).join('')}
+      <a href="${p.workUrl}"
+         style="display:inline-block;margin-top:22px;background:${GOLD};color:#fff;text-decoration:none;
+                padding:12px 20px;border-radius:8px;font-weight:600;font-size:14px">
+        Open My Work
+      </a>
+      <p style="color:#aaa;font-size:11px;margin-top:18px">
+        Daily Duties are the recurring responsibilities of your role. Assigned Tasks are specific work
+        given to you by management. Both are completed in My Work.
+      </p>
+    </div>
+  </div>`
+
+  try {
+    await resend.emails.send({
+      from: fromAddress(),
+      to: p.to,
+      subject: `OCG Morning Work Brief · ${p.headline}`,
+      html,
+    })
+    return true
+  } catch {
+    return false
+  }
+}
+
 export async function sendMeetingInvite(p: MeetingInviteParams): Promise<boolean> {
   const resend = client()
   if (!resend) return false

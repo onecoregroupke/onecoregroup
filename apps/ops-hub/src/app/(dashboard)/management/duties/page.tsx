@@ -6,6 +6,7 @@ import { listDuties } from '@/lib/duties'
 import { occurrencesOn, pendingReviews } from '@/lib/dutyOccurrences'
 import { toOccurrenceDtos } from '@/lib/dutyView'
 import { dutyScope, dutyCan, describeDutyTarget } from '@/lib/dutyModel'
+import { actionableReviews, reviewScope } from '@/lib/reviewAuthority'
 import { describeRecurrence } from '@/lib/recurrence'
 import { db, todayInEat } from '@/lib/serverClient'
 import { DutyBuilder } from '@/components/duties/DutyBuilder'
@@ -13,7 +14,7 @@ import { DutyRowControls } from '@/components/duties/DutyRowControls'
 import { DutyOccurrenceCard } from '@/components/duties/DutyOccurrenceCard'
 import { DutyReviewQueue, type ReviewRow } from '@/components/duties/DutyReviewQueue'
 import { requireSection } from '@/lib/server-auth'
-import type { OcgFormTemplateRow, OcgDailyDutyRow } from '@ocg/db'
+import type { OcgFormTemplateRow } from '@ocg/db'
 
 export const dynamic = 'force-dynamic'
 
@@ -39,18 +40,31 @@ export default async function DailyDutiesPage({
   const canEdit = dutyCan(dutyActor, 'edit')
   const canReview = dutyCan(dutyActor, 'review')
 
-  const [team, brands, allDuties, occurrences, reviews, { data: templateRows }] = await Promise.all([
+  // A NAMED reviewer sees work reserved for them even without a review grant, so
+  // the candidate set is loaded whenever the person could plausibly be one; the
+  // per-item predicate below is what actually decides.
+  const reviewer = {
+    teamMemberId: me?.id ?? null,
+    name: actor.name,
+    permissions: actor.permissions,
+    brandAccess: actor.brandAccess,
+  }
+  const candidateScope = canReview ? reviewScope(dutyActor) : ({ kind: 'all' } as const)
+
+  const [team, brands, allDuties, occurrences, reviewCandidates, { data: templateRows }] = await Promise.all([
     listTeam(),
     listBrands(),
     listDuties({ activeOnly: false }),
     occurrencesOn(date, { scope, teamMemberId: me?.id ?? null }),
-    canReview ? pendingReviews(scope) : Promise.resolve([]),
+    me ? pendingReviews(candidateScope) : Promise.resolve([]),
     db().from('ocg_form_templates').select('id, name').eq('active', true).limit(200),
   ])
 
+  // §16: another manager must not see a named reviewer's items as actionable.
+  const reviews = actionableReviews(reviewer, reviewCandidates)
+
   const items = await toOccurrenceDtos(occurrences)
   const memberById = new Map(team.map((m) => [m.id, m]))
-  const dutyById = new Map(allDuties.map((d) => [d.id, d]))
 
   // Templates within scope, so a brand-scoped manager sees only their own.
   const duties = allDuties.filter((d) =>
@@ -62,20 +76,21 @@ export default async function DailyDutiesPage({
   const outstanding = items.length - done
   const overdue = items.filter((i) => i.overdue).length
 
-  const reviewRows: ReviewRow[] = reviews.map((r) => {
-    const duty = dutyById.get(r.duty_id) as OcgDailyDutyRow | undefined
-    return {
-      logId: r.id,
-      dutyTitle: duty?.title ?? 'Duty',
-      date: r.duty_date,
-      assigneeName: r.assignee_id ? (memberById.get(r.assignee_id)?.name ?? '') : '',
-      completedBy: r.completed_by ?? '',
-      note: r.note ?? '',
-      checklistDone: r.checklist_done ?? 0,
-      checklistTotal: r.checklist_total ?? 0,
-      onTime: r.completed_on_time ?? null,
-    }
-  })
+  const reviewRows: ReviewRow[] = reviews.map((r) => ({
+    logId: r.log.id,
+    dutyTitle: r.duty?.title ?? 'Duty',
+    date: r.log.duty_date,
+    assigneeName: r.submitterMemberId ? (memberById.get(r.submitterMemberId)?.name ?? '') : '',
+    completedBy: r.log.completed_by ?? '',
+    completedAt: r.log.completed_at ?? null,
+    note: r.log.note ?? '',
+    checklistDone: r.log.checklist_done ?? 0,
+    checklistTotal: r.log.checklist_total ?? 0,
+    evidenceCount: r.log.attachment_count ?? 0,
+    onTime: r.log.completed_on_time ?? null,
+    // Shown so the reviewer knows this one is reserved for them by name.
+    namedReviewer: r.reviewerId ? (memberById.get(r.reviewerId)?.name ?? '') : '',
+  }))
 
   // Distinct free-text values already in use, offered as suggestions.
   const uniq = (vals: (string | null | undefined)[]) =>
@@ -124,11 +139,13 @@ export default async function DailyDutiesPage({
         <Stat label={overdue ? 'Overdue' : 'Outstanding'} value={overdue || outstanding} tone={overdue ? 'text-red-600' : 'text-amber-600'} />
       </div>
 
-      {canReview && (
+      {/* A named reviewer sees their reserved items here even without the
+          duties_review grant — being named IS the authority (§12). */}
+      {(canReview || reviewRows.length > 0) && (
         <section className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
           <div className="mb-3 flex items-center gap-2">
             <ShieldCheck size={15} className="text-amber-500" />
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-ocg-gold">Awaiting review</h2>
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-ocg-gold">Awaiting your review</h2>
             {reviewRows.length > 0 && (
               <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">{reviewRows.length}</span>
             )}

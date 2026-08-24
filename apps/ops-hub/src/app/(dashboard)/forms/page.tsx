@@ -26,29 +26,29 @@ export default async function FormsPage({
 
   return (
     <div className="space-y-5">
-      {canOperational && (
-        <Link
-          href="/forms/operations"
-          className="flex items-center justify-between gap-3 rounded-xl border border-gray-100 bg-white p-5 shadow-sm transition-colors hover:border-ocg-gold/40"
-        >
-          <span className="flex items-start gap-3">
-            <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-ocg-navy/5">
-              <FileSpreadsheet size={17} className="text-ocg-navy" />
-            </span>
-            <span>
-              <span className="block text-sm font-semibold text-gray-900">Operational forms</span>
-              <span className="mt-0.5 block text-sm text-gray-500">
-                Goods Received Note · Issue Note · Transfer Note · Material Requisition · Invoice ·
-                Delivery Note. Same fields as the paper pads, and posting one updates the stock card
-                immediately.
-              </span>
-            </span>
-          </span>
-          <ArrowUpRight size={16} className="shrink-0 text-gray-300" />
-        </Link>
-      )}
-
       <FormsWorkspace initialBrandSlug={sp.brand ?? ''} />
+
+      {/* §31: the transaction documents live in the modules whose ledgers they
+          post to — Inventory, Manufacturing, Procurement. This stays as a quiet
+          footnote rather than a headline card, so the pads stop reading like
+          another custom forms library, while the route keeps working for the
+          links and components that already use it. */}
+      {canOperational && (
+        <p className="flex flex-wrap items-center gap-1.5 rounded-xl border border-gray-100 bg-white px-4 py-3 text-xs text-gray-500 shadow-sm">
+          <FileSpreadsheet size={13} className="shrink-0 text-gray-400" />
+          <span>
+            Stock and purchasing documents (Goods Received · Issue · Transfer · Material Requisition ·
+            Invoice · Delivery Note) are raised from{' '}
+            <Link href="/inventory" className="font-medium text-ocg-gold hover:underline">Inventory</Link>,{' '}
+            <Link href="/manufacturing" className="font-medium text-ocg-gold hover:underline">Manufacturing</Link>{' '}
+            and{' '}
+            <Link href="/procurement" className="font-medium text-ocg-gold hover:underline">Procurement</Link>, or{' '}
+            <Link href="/forms/operations" className="font-medium text-ocg-gold hover:underline">
+              directly here <ArrowUpRight size={11} className="inline" />
+            </Link>.
+          </span>
+        </p>
+      )}
     </div>
   )
 }

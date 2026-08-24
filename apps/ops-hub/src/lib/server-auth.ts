@@ -194,12 +194,12 @@ export async function requireActor(): Promise<Actor> {
 }
 
 /** Require a signed-in actor with the given section permission; otherwise send
- *  them to /my-tasks (always available to any signed-in user). */
+ *  them to /my-work (always available to any signed-in user). */
 export async function requireSection(
   section: SectionKey,
   level: AccessLevel = 'view',
 ): Promise<Actor> {
   const actor = await requireActor()
-  if (!actor.can(section, level)) redirect('/my-tasks')
+  if (!actor.can(section, level)) redirect('/my-work')
   return actor
 }

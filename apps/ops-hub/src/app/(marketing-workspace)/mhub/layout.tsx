@@ -68,7 +68,7 @@ export default function MarketingWorkspaceLayout({ children }: { children: React
         // in this workspace — send them to their tasks rather than an empty shell.
         const hasMhubAccess = MHUB_SECTIONS.some((key) => can(data.permissions, key, 'view'))
         if (!hasMhubAccess) {
-          router.replace('/my-tasks')
+          router.replace('/my-work')
           return
         }
         setPermissions(data.permissions)

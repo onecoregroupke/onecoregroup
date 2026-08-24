@@ -4,9 +4,10 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   CheckCircle2, Circle, AlertTriangle, Clock, ClipboardList,
-  ShieldCheck, Paperclip, ChevronDown, ChevronUp, SkipForward,
+  ShieldCheck, Paperclip, ChevronDown, ChevronUp, SkipForward, FileText,
 } from 'lucide-react'
 import { api } from '@/lib/apiClient'
+import { describeReviewState } from '@/lib/reviewAuthority'
 
 export interface ChecklistItem {
   id: string
@@ -33,6 +34,14 @@ export interface OccurrenceDto {
   onTime: boolean | null
   reviewState: string
   reviewComment: string
+  /** The named countersignatory, when the duty reserves one (§12). */
+  reviewerName: string
+  /** Who actually signed, captured at the time of signing. */
+  reviewedBy: string
+  reviewedAt: string | null
+  /** Set when the duty cannot be completed without a specific form (§8). */
+  requiredFormTemplateId: string | null
+  formSubmissionId: string | null
   note: string
   checklistDone: number
   checklistTotal: number
@@ -78,9 +87,13 @@ export function DutyOccurrenceCard({
 
   const done = occurrence.status === 'done'
   const ticked = occurrence.checklist.filter((i) => checked[i.id]).length
+  // A duty that demands a note, a checklist, evidence or a specific form is
+  // never satisfiable by the one-click tick (§6B) — the panel is the only route.
   const needsPanel =
     occurrence.requiresNote || occurrence.requiresChecklist || occurrence.requiresProof ||
+    !!occurrence.requiredFormTemplateId ||
     occurrence.checklist.length > 0 || occurrence.instructions.length > 0
+  const review = describeReviewState(occurrence)
 
   async function submit(status: 'done' | 'skipped' | 'pending') {
     setBusy(true)
@@ -138,16 +151,18 @@ export function DutyOccurrenceCard({
                 {occurrence.dutyKind}
               </span>
             )}
-            {occurrence.reviewState === 'pending' && (
+            {review.tone === 'pending' && (
               <span className="inline-flex items-center gap-1 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">
-                <ShieldCheck size={10} /> Awaiting review
+                <ShieldCheck size={10} /> {review.label}
               </span>
             )}
-            {occurrence.reviewState === 'accepted' && (
-              <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">Accepted</span>
+            {review.tone === 'accepted' && (
+              <span className="inline-flex items-center gap-1 rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">
+                <ShieldCheck size={10} /> {review.label}
+              </span>
             )}
-            {occurrence.reviewState === 'reopened' && (
-              <span className="rounded bg-red-50 px-1.5 py-0.5 text-[10px] font-semibold text-red-600">Reopened</span>
+            {review.tone === 'reopened' && (
+              <span className="rounded bg-red-50 px-1.5 py-0.5 text-[10px] font-semibold text-red-600">{review.label}</span>
             )}
           </div>
 
@@ -168,9 +183,15 @@ export function DutyOccurrenceCard({
             {occurrence.description && <span className="truncate">· {occurrence.description}</span>}
           </p>
 
-          {occurrence.reviewComment && (
-            <p className="mt-1.5 rounded bg-white/70 px-2 py-1 text-xs text-gray-600">
-              <span className="font-medium">Reviewer:</span> {occurrence.reviewComment}
+          {/* §15: the employee must be able to read what happened and what to
+              do next, without decoding a state word. */}
+          {review.detail && (
+            <p className={`mt-1.5 rounded px-2 py-1 text-xs ${
+              review.tone === 'reopened' ? 'bg-red-50 text-red-700'
+                : review.tone === 'accepted' ? 'bg-emerald-50/70 text-emerald-800'
+                  : 'bg-white/70 text-gray-600'
+            }`}>
+              {review.detail}
             </p>
           )}
         </div>
@@ -240,6 +261,26 @@ export function DutyOccurrenceCard({
               />
               <span>Evidence attached (photo or document handed to the manager)</span>
             </label>
+          )}
+
+          {/* §8: a duty that requires a specific form (a Teacher Daily Diary,
+              say) is not satisfiable by a generic tick. The server refuses the
+              completion; this states the requirement up front rather than
+              letting the person discover it by being rejected. */}
+          {occurrence.requiredFormTemplateId && !occurrence.formSubmissionId && (
+            <p className="flex items-start gap-2 rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-800">
+              <FileText size={13} className="mt-0.5 shrink-0" />
+              <span>
+                This duty is completed by submitting its form.{' '}
+                <a
+                  href={`/forms?template=${occurrence.requiredFormTemplateId}&duty=${occurrence.dutyId}&date=${occurrence.date}`}
+                  className="font-medium underline"
+                >
+                  Open the form
+                </a>{' '}
+                — the duty is marked done once the form is in.
+              </span>
+            </p>
           )}
 
           {problems.length > 0 && (

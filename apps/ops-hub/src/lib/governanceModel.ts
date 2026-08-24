@@ -31,24 +31,71 @@ export interface AuthorityGrant {
   active: boolean
   effective_from: string
   effective_until: string | null
+  /** own | department | entity | group (migration 067). */
+  authority_scope?: string | null
 }
 
-/** Capability is deliberately absent from this signature: skill never grants
- * approval/posting authority. */
+/** How far an authority reaches, weakest first (§35). */
+export type AuthorityScope = 'own' | 'department' | 'entity' | 'group'
+
+const AUTHORITY_SCOPE_RANK: Record<AuthorityScope, number> = {
+  own: 0, department: 1, entity: 2, group: 3,
+}
+
+function scopeRank(value: string | null | undefined): number {
+  return AUTHORITY_SCOPE_RANK[(value ?? 'own') as AuthorityScope] ?? 0
+}
+
+/**
+ * Whether an actor holds `action` authority.
+ *
+ * Capability is deliberately absent from this signature: skill never grants
+ * approval/posting authority.
+ *
+ * §35: `authority_scope` is stored on every grant and must not be persisted and
+ * then ignored. Pass `requiredScope` when the decision has an organisational
+ * reach — a group-level document needs group-level authority, and a grant
+ * scoped to one entity does not reach it.
+ *
+ * §36: a grant with `brand_id = NULL` is unrestricted and reaches any brand. A
+ * grant naming a brand reaches THAT brand only. Crucially, a brand-specific
+ * grant no longer satisfies a request with no brand: the old form asked
+ * `!opts.brandId || grant.brand_id === opts.brandId`, so a group-level entry
+ * (brand_id NULL) was approvable by every brand approver in the company.
+ */
 export function hasAuthority(
   grants: AuthorityGrant[],
   action: string,
-  opts: { brandId?: string | null; operationalArea?: string; onDate?: string } = {},
+  opts: {
+    brandId?: string | null
+    operationalArea?: string
+    onDate?: string
+    /** The organisational reach this decision needs. Omitted → not checked. */
+    requiredScope?: AuthorityScope
+  } = {},
 ): boolean {
   const date = opts.onDate ?? new Date().toISOString().slice(0, 10)
-  return grants.some((grant) =>
-    grant.active &&
-    grant.authority_action === action &&
-    (!grant.brand_id || !opts.brandId || grant.brand_id === opts.brandId) &&
-    (!grant.operational_area || !opts.operationalArea || grant.operational_area === opts.operationalArea) &&
-    grant.effective_from <= date &&
-    (!grant.effective_until || grant.effective_until >= date),
-  )
+  // `undefined` = the caller does not care about brand. `null` = the subject is
+  // explicitly group-level, which only an unrestricted grant reaches.
+  const brandChecked = opts.brandId !== undefined
+
+  return grants.some((grant) => {
+    if (!grant.active) return false
+    if (grant.authority_action !== action) return false
+    if (grant.effective_from > date) return false
+    if (grant.effective_until && grant.effective_until < date) return false
+    if (grant.operational_area && opts.operationalArea && grant.operational_area !== opts.operationalArea) return false
+
+    if (brandChecked && grant.brand_id) {
+      // A brand-scoped grant reaches only its own brand — and never group level.
+      if (grant.brand_id !== opts.brandId) return false
+    }
+
+    if (opts.requiredScope && scopeRank(grant.authority_scope) < scopeRank(opts.requiredScope)) {
+      return false
+    }
+    return true
+  })
 }
 
 export type KnowledgeSourceClass = 'live' | 'historical' | 'legacy' | 'reference'

@@ -8,6 +8,7 @@ import { requireSection } from '@/lib/server-auth'
 import { ProcurementForms } from '@/components/procurement/ProcurementForms'
 import { ReceiveButton } from '@/components/procurement/ReceiveButton'
 import { VendorBlacklistButton } from '@/components/procurement/VendorBlacklistButton'
+import { OperationalDocLinks } from '@/components/forms/OperationalDocLinks'
 
 export const dynamic = 'force-dynamic'
 
@@ -52,6 +53,20 @@ export default async function ProcurementPage() {
         <Stat label="Awaiting delivery" value={openOrders.length} tone={openOrders.length ? 'text-amber-600' : 'text-gray-900'} />
         <Stat label="Total spend" value={totalSpend} money />
       </div>
+
+      {/* §31: purchasing documents surface from Procurement. Same canonical
+          components as /forms/operations — one implementation, several doors. */}
+      {canEdit && (
+        <OperationalDocLinks
+          title="Purchasing documents"
+          hint="Raise a requisition, then receive the goods against it. Receiving posts straight to the brand's stock."
+          docs={[
+            { pad: 'mrf', label: 'Material Requisition', hint: 'Request what needs buying' },
+            { pad: 'grn', label: 'Goods Received Note', hint: 'Book in what the supplier delivered' },
+            { pad: 'gtn', label: 'Goods Transfer Note', hint: 'Move received stock between stores' },
+          ]}
+        />
+      )}
 
       {canEdit && (
         <ProcurementForms
