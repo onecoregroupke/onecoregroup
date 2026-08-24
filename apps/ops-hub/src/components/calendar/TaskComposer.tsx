@@ -53,6 +53,20 @@ export function TaskComposer({
     [projects, form.project_id],
   )
 
+  /** Plain-language echo of what the two dates actually mean together. */
+  const summary = useMemo(() => {
+    if (!form.schedule_date) {
+      return form.target_date ? `Due ${form.target_date}, no scheduled time.` : ''
+    }
+    const when = form.all_day
+      ? `${form.schedule_date}, all day`
+      : `${form.schedule_date}, ${form.start_time}–${form.end_time}`
+    if (form.target_date && form.target_date !== form.schedule_date) {
+      return `Scheduled ${when} · due ${form.target_date}.`
+    }
+    return `Scheduled ${when}.`
+  }, [form.schedule_date, form.all_day, form.start_time, form.end_time, form.target_date])
+
   async function submit() {
     setError('')
     setNotice('')
@@ -116,7 +130,7 @@ export function TaskComposer({
         </p>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Priority">
           <select className="input" value={form.priority} onChange={(e) => set('priority', e.target.value)}>
             {TASK_PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}
@@ -127,10 +141,64 @@ export function TaskComposer({
             {TASK_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
         </Field>
-        <Field label="Due">
-          <input type="date" className="input" value={form.target_date} onChange={(e) => set('target_date', e.target.value)} />
-        </Field>
       </div>
+
+      {/* ── Schedule: WHEN the work happens (§42) ─────────────────── */}
+      <fieldset className="rounded-lg border border-gray-100 p-3">
+        <legend className="px-1 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
+          When should this be done?
+        </legend>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Schedule date">
+            <input type="date" className="input" value={form.schedule_date}
+              onChange={(e) => set('schedule_date', e.target.value)} />
+          </Field>
+          <label className="flex items-end gap-2 pb-2 text-sm text-gray-600">
+            <input type="checkbox" checked={form.all_day}
+              onChange={(e) => set('all_day', e.target.checked)}
+              className="h-4 w-4 accent-[#1a1a2e]" />
+            All day
+          </label>
+        </div>
+
+        {form.schedule_date && !form.all_day && (
+          <div className="mt-2 grid gap-3 sm:grid-cols-2">
+            <Field label="Starts">
+              <input type="time" className="input" value={form.start_time}
+                onChange={(e) => set('start_time', e.target.value)} />
+            </Field>
+            <Field label="Ends">
+              <input type="time" className="input" value={form.end_time}
+                onChange={(e) => set('end_time', e.target.value)} />
+            </Field>
+          </div>
+        )}
+
+        <div className="mt-2">
+          <Field label="Location">
+            <input className="input" value={form.location}
+              onChange={(e) => set('location', e.target.value)}
+              placeholder="Optional — where the work happens" />
+          </Field>
+        </div>
+
+        {!form.schedule_date && (
+          <p className="mt-2 text-xs text-gray-400">
+            No scheduled time — the person decides when to fit it in before the deadline.
+          </p>
+        )}
+      </fieldset>
+
+      {/* ── Deadline: a SEPARATE concept from the schedule (§41) ───── */}
+      <Field label="Deadline (due date)">
+        <input type="date" className="input" value={form.target_date}
+          onChange={(e) => set('target_date', e.target.value)} />
+      </Field>
+      <p className="-mt-1 text-xs text-gray-400">
+        The deadline is when the work must be finished, which can be later than the day it is
+        scheduled. Scheduled Wednesday, due Friday is a normal combination.
+      </p>
 
       <Field label="Instructions">
         <textarea
@@ -144,6 +212,7 @@ export function TaskComposer({
       <p className="rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-800">
         This creates a normal Ops Task. It will appear on the Task Board, in the
         assignee&rsquo;s My Work, and on this calendar — one task, not three.
+        {summary && <><br /><strong>{summary}</strong></>}
       </p>
 
       {error && <p className="rounded-lg bg-red-50 p-2.5 text-sm text-red-600">{error}</p>}

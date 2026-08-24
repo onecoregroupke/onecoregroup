@@ -110,6 +110,8 @@ export const NAV_GROUPS: NavGroup[] = [
     key: 'company',
     heading: 'Company',
     items: [
+      // How the business runs, then the documents that support it (§3).
+      { href: '/operating-system', label: 'Operating System', icon: BookMarked, section: 'knowledge' },
       { href: '/knowledge', label: 'Knowledge', icon: BookOpen, section: 'knowledge' },
     ],
   },

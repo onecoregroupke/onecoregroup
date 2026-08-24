@@ -6,6 +6,7 @@ import {
   type CalendarViewer, type CalendarView, type CalendarItemType,
 } from './calendarModel'
 import { dueDatesBetween } from './recurrence'
+import { nairobiDateOf } from './calendarTasks'
 import type {
   OcgCalendarEventRow, OcgCalendarEventAttendeeRow, OcgLeaveRequestRow,
   OpsTaskRow, OcgPersonalTaskRow, OcgDailyDutyRow,
@@ -81,15 +82,38 @@ async function visibleMemberIds(viewer: CalendarViewer): Promise<string[] | null
 
 // ─── Sources ────────────────────────────────────────────────────────────────
 
+/**
+ * Tasks in the window (§43).
+ *
+ * A task can reach the calendar two ways, and they are different facts:
+ *   • its SCHEDULE — when the work should be performed, placed at its time;
+ *   • its DEADLINE — target_date, shown as an all-day marker.
+ *
+ * A scheduled task is placed by its schedule. An unscheduled task with a
+ * deadline keeps behaving exactly as it did before this existed, which is what
+ * keeps every task created to date on the calendar.
+ */
 async function tasksIn(from: string, to: string, memberIds: string[] | null, viewer: CalendarViewer): Promise<CalendarItem[]> {
-  const q = db().from('ops_tasks').select('*')
-    .gte('target_date', from).lte('target_date', to).limit(2000)
-  const { data } = await q
-  const rows = (data as OpsTaskRow[] | null) ?? []
+  // Two windows, one union: tasks due in the range, and tasks scheduled in it.
+  // A task scheduled Wednesday but due next month must still appear on Wednesday.
+  const [byDeadline, bySchedule] = await Promise.all([
+    db().from('ops_tasks').select('*').gte('target_date', from).lte('target_date', to).limit(2000),
+    db().from('ops_tasks').select('*')
+      .gte('scheduled_start_at', `${from}T00:00:00+03:00`)
+      .lte('scheduled_start_at', `${to}T23:59:59+03:00`)
+      .limit(2000),
+  ])
+
+  const rows = new Map<string, OpsTaskRow>()
+  for (const row of [
+    ...((byDeadline.data as OpsTaskRow[] | null) ?? []),
+    ...((bySchedule.data as OpsTaskRow[] | null) ?? []),
+  ]) rows.set(row.task_id, row)
+
   const team = await listTeam()
   const byName = new Map(team.map((m) => [m.name, m.id]))
 
-  return rows
+  return [...rows.values()]
     .filter((t) => {
       if (memberIds === null) return true
       const id = byName.get(t.assigned_to ?? '')
@@ -97,12 +121,17 @@ async function tasksIn(from: string, to: string, memberIds: string[] | null, vie
     })
     .map((t) => {
       const assigneeId = byName.get(t.assigned_to ?? '') ?? null
+      const scheduled = !!t.scheduled_start_at
+      const timed = scheduled && !t.scheduled_all_day
       return {
         id: `task:${t.task_id}`,
         type: 'task' as const,
         title: t.task_name,
-        date: t.target_date,
-        startsAt: null, endsAt: null, allDay: true,
+        // Placed by schedule where one exists, else by deadline.
+        date: scheduled ? nairobiDateOf(t.scheduled_start_at!) : t.target_date,
+        startsAt: timed ? t.scheduled_start_at : null,
+        endsAt: timed ? t.scheduled_end_at : null,
+        allDay: !timed,
         status: t.current_status,
         brandId: t.brand_id ?? null,
         assigneeId,
@@ -110,7 +139,16 @@ async function tasksIn(from: string, to: string, memberIds: string[] | null, vie
         createdById: null,
         href: `/tasks/${t.task_id}`,
         canMove: canReschedule(viewer, { type: 'task', assigneeId }),
-        meta: { taskId: t.task_id, priority: t.priority, project: t.project_name },
+        meta: {
+          taskId: t.task_id,
+          priority: t.priority,
+          project: t.project_name,
+          scheduled,
+          // The deadline stays visible even when the chip is placed by schedule,
+          // so "scheduled Wednesday, due Friday" is readable on the calendar.
+          dueDate: t.target_date || null,
+          location: t.scheduled_location || '',
+        },
       }
     })
 }

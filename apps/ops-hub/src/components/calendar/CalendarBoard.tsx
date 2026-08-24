@@ -470,12 +470,31 @@ function DayView({ date, today, items }: { date: string; today: string; items: F
 
 // ─── Item renderers ─────────────────────────────────────────────────────────
 
+/** "10:00–12:00" where the item has a window, else its start time (§43). */
+function rangeOf(item: FeedItem): string {
+  if (!item.startsAt) return ''
+  const t = (iso: string) => new Date(iso).toLocaleTimeString('en-KE', {
+    hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Africa/Nairobi',
+  })
+  return item.endsAt ? `${t(item.startsAt)}–${t(item.endsAt)}` : t(item.startsAt)
+}
+
 function Chip({ item, compact = false }: { item: FeedItem; compact?: boolean }) {
   const s = styleFor(item.type)
   const done = item.status === 'done' || item.status === 'Completed'
   const overdue = item.meta?.['overdue'] === true
+  const due = item.meta?.['dueDate']
+  // A scheduled task shows where it sits AND when it is actually due, so
+  // "scheduled Wednesday, due Friday" is legible from the calendar itself.
+  const title = [
+    `${s.label}: ${item.title}`,
+    item.assigneeName || '',
+    rangeOf(item),
+    typeof due === 'string' && due && due !== item.date ? `due ${due}` : '',
+  ].filter(Boolean).join(' · ')
+
   return (
-    <Link href={item.href} title={`${s.label}: ${item.title}${item.assigneeName ? ` · ${item.assigneeName}` : ''}`}
+    <Link href={item.href} title={title}
       className={`flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] leading-tight transition-colors hover:brightness-95 ${s.chip} ${
         done ? 'opacity-50' : ''} ${overdue ? 'ring-1 ring-red-300' : ''}`}>
       <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${s.dot}`} />
@@ -488,15 +507,21 @@ function Chip({ item, compact = false }: { item: FeedItem; compact?: boolean }) 
 function Row({ item }: { item: FeedItem }) {
   const s = styleFor(item.type)
   const done = item.status === 'done' || item.status === 'Completed'
+  const range = rangeOf(item)
+  const due = item.meta?.['dueDate']
+  const location = item.meta?.['location']
   return (
     <Link href={item.href}
       className="flex items-center gap-3 rounded-lg border border-gray-100 px-3 py-2 transition-colors hover:border-ocg-gold/40">
-      <span className="w-14 shrink-0 text-xs font-medium tabular-nums text-gray-500">{timeOf(item) || '—'}</span>
+      {/* Day and week views show the full window, not just the start (§43). */}
+      <span className="w-24 shrink-0 text-xs font-medium tabular-nums text-gray-500">{range || '—'}</span>
       <span className={`h-2 w-2 shrink-0 rounded-full ${s.dot}`} />
       <span className="min-w-0 flex-1">
         <span className={`block truncate text-sm ${done ? 'text-gray-400 line-through' : 'text-gray-800'}`}>{item.title}</span>
         <span className="block truncate text-xs text-gray-400">
           {s.label}{item.assigneeName ? ` · ${item.assigneeName}` : ''}
+          {typeof location === 'string' && location ? ` · ${location}` : ''}
+          {typeof due === 'string' && due && due !== item.date ? ` · due ${due}` : ''}
           {item.meta?.['overdue'] === true ? ' · overdue' : ''}
         </span>
       </span>

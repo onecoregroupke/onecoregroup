@@ -393,6 +393,14 @@ export async function coverDutyOccurrence(input: {
  * leaves two rows and the history stays legible. No new table is introduced:
  * ops_task_reviews already models exactly this and carries duty_log_id.
  */
+/** Raised when the occurrence is not in a state that can receive a decision. */
+export class DutyReviewStateError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'DutyReviewStateError'
+  }
+}
+
 export async function reviewDutyOccurrence(input: {
   log_id: string
   decision: 'accept' | 'reopen'
@@ -401,36 +409,30 @@ export async function reviewDutyOccurrence(input: {
   reviewed_by: string
   reviewed_by_id?: string | null
 }): Promise<OcgDailyDutyLogRow> {
-  const reviewedAt = nowIso()
-  const { data, error } = await db().from('ocg_daily_duty_logs').update({
-    review_state: input.decision === 'accept' ? 'accepted' : 'reopened',
-    // Reopening returns the occurrence to the assignee's list; accepting leaves
-    // the recorded completion untouched.
-    status: input.decision === 'reopen' ? 'pending' : undefined,
-    review_comment: input.comment ?? '',
-    quality_rating: input.quality_rating ?? null,
-    reviewed_by: input.reviewed_by,
-    reviewed_at: reviewedAt,
-  }).eq('id', input.log_id).select('*').single()
-  if (error) throw new Error(error.message)
-
-  // The countersign event. Best-effort by design: a failure to append must not
-  // roll back a decision the reviewer has already been told was recorded, and
-  // the log row above remains the authoritative current state either way.
-  try {
-    await db().from('ops_task_reviews').insert({
-      duty_log_id: input.log_id,
-      decision: input.decision === 'accept' ? 'accepted' : 'reopened',
-      comment: input.comment ?? '',
-      quality_rating: input.quality_rating ?? null,
-      reopen_reason: input.decision === 'reopen' ? (input.comment ?? '') : '',
-      reviewed_by: input.reviewed_by,
-      reviewed_by_id: input.reviewed_by_id ?? null,
-    })
-  } catch {
-    // Swallowed deliberately — see above.
+  // §47: ONE database call, so the verdict and its immutable audit event commit
+  // together or not at all. The previous form wrote the verdict and then
+  // appended the event best-effort — which meant a failed append left the portal
+  // saying "Countersigned by Fatma" with nothing recording that she signed it.
+  //
+  // §48: the state check lives inside the same function, under FOR UPDATE, so
+  // knowing a log id is not enough to accept work twice or reopen something
+  // nobody submitted.
+  const { data, error } = await db().rpc('review_duty_occurrence', {
+    p_log_id: input.log_id,
+    p_decision: input.decision,
+    p_comment: input.comment ?? '',
+    p_quality_rating: input.quality_rating ?? null,
+    p_reviewed_by: input.reviewed_by,
+    p_reviewed_by_id: input.reviewed_by_id ?? null,
+  })
+  if (error) {
+    // The transition guard raises invalid_parameter_value; surface it as a
+    // client error rather than a server fault.
+    if (/not awaiting review/i.test(error.message)) {
+      throw new DutyReviewStateError(error.message)
+    }
+    throw new Error(error.message)
   }
-
   return data as OcgDailyDutyLogRow
 }
 

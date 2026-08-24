@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { getApiActor } from '@/lib/api-auth'
 import { memberForEmail, listTeam } from '@/lib/team'
 import {
-  reviewDutyOccurrence, pendingReviews, pendingReviewByLogId,
+  reviewDutyOccurrence, pendingReviews, pendingReviewByLogId, DutyReviewStateError,
 } from '@/lib/dutyOccurrences'
 import { canReview, reviewScope, actionableReviews, validateReopenComment } from '@/lib/reviewAuthority'
 import { dutyCan } from '@/lib/dutyModel'
@@ -74,6 +74,16 @@ export async function POST(req: NextRequest) {
     const subject = await pendingReviewByLogId(String(body.log_id))
     if (!subject) return NextResponse.json({ ok: false, error: 'Occurrence not found' }, { status: 404 })
 
+    // §48: only work actually awaiting a decision can receive one. Checked here
+    // for a clear message, and again inside the transaction under FOR UPDATE,
+    // which is the check that is actually race-free.
+    if (subject.log.review_state !== 'pending') {
+      return NextResponse.json(
+        { ok: false, error: `This occurrence is not awaiting review (${subject.log.review_state}).` },
+        { status: 409 },
+      )
+    }
+
     const me = await memberForEmail(actor.email)
     const verdict = canReview(
       {
@@ -121,6 +131,10 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ ok: true, row })
   } catch (e) {
+    // A state conflict is the caller's problem, not a server fault.
+    if (e instanceof DutyReviewStateError) {
+      return NextResponse.json({ ok: false, error: e.message }, { status: 409 })
+    }
     return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 400 })
   }
 }

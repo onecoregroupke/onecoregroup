@@ -11,12 +11,18 @@ export interface AssignedTask {
   taskId: string
   name: string
   projectName: string
+  /** The DEADLINE. */
   targetDate: string
   priority: string
   status: string
   overdue: boolean
   /** True when a manager must sign this off — the assignee cannot self-close it. */
   requiresApproval: boolean
+  /** "10:00–12:00" / "All day" when the task is scheduled, else '' (§44). */
+  scheduleRange: string
+  /** The day the work is scheduled, when different from the deadline. */
+  scheduleDate: string
+  location: string
 }
 
 /**
@@ -82,8 +88,17 @@ function TaskRow({ task }: { task: AssignedTask }) {
             )}
           </p>
           <p className="truncate text-xs text-gray-400">
+            {/* The schedule leads, because it answers "when am I doing this?".
+                The deadline follows, because it answers a different question. */}
+            {task.scheduleRange && (
+              <span className="font-medium text-gray-600">
+                {task.scheduleDate && task.scheduleDate !== task.targetDate ? `${task.scheduleDate} ` : ''}
+                {task.scheduleRange} ·{' '}
+              </span>
+            )}
             {task.taskId} · {task.projectName}
             {task.targetDate ? ` · due ${task.targetDate}` : ''}
+            {task.location ? ` · ${task.location}` : ''}
             {task.requiresApproval ? ' · manager sign-off required' : ''}
           </p>
         </div>

@@ -5,7 +5,10 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { BookOpenCheck, ChevronRight, History, Plus, ShieldCheck } from 'lucide-react'
 import { api } from '@/lib/apiClient'
-import type { KnowledgeRecord } from '@/lib/knowledge'
+import {
+  KNOWLEDGE_FILTERS, KNOWLEDGE_FILTER_LABELS, filterKnowledge, knowledgeFilterCounts,
+  type KnowledgeFilter, type KnowledgeRecord,
+} from '@/lib/knowledge'
 
 type BrandOption = { id: string; name: string }
 
@@ -22,6 +25,9 @@ export function KnowledgeWorkspace({ records, brands, canEdit, canPublish = {} }
   canEdit: boolean
   canPublish?: Record<string, boolean>
 }) {
+  const [filter, setFilter] = useState<KnowledgeFilter>('active')
+  const counts = useMemo(() => knowledgeFilterCounts(records), [records])
+  const shown = useMemo(() => filterKnowledge(records, filter), [records, filter])
   const router = useRouter()
   const [showCreate, setShowCreate] = useState(false)
   const [versionFor, setVersionFor] = useState<KnowledgeRecord | null>(null)
@@ -45,12 +51,52 @@ export function KnowledgeWorkspace({ records, brands, canEdit, canPublish = {} }
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-ocg-gold">OCG Group Operating System</p><h1 className="mt-1 text-2xl font-semibold text-gray-900">Knowledge</h1><p className="mt-1 max-w-3xl text-sm text-gray-500">Policies, SOPs, routines, training and institutional memory—with current and legacy material kept visibly distinct.</p></div>
+        <div>
+          {/* §3: this is the Knowledge LIBRARY. The Operating System is now a
+              real, separate area, so calling this page by its name is misleading. */}
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-ocg-gold">OCG Knowledge Library</p>
+          <h1 className="mt-1 text-2xl font-semibold text-gray-900">Knowledge</h1>
+          <p className="mt-1 max-w-3xl text-sm text-gray-500">
+            Policies, SOPs, routines, training and institutional memory—with current and legacy material kept visibly distinct.
+            How it all fits together is described in the{' '}
+            <Link href="/operating-system" className="font-medium text-ocg-gold hover:underline">Operating System</Link>.
+          </p>
+        </div>
         {canEdit && <button onClick={() => setShowCreate(true)} className="inline-flex items-center gap-2 rounded-lg bg-ocg-navy px-4 py-2 text-sm font-medium text-white"><Plus size={15} /> New knowledge entry</button>}
       </div>
+
+      {/* §36: archived records are history, not library. They stay reachable
+          under an explicit view instead of cluttering the working list. */}
+      <div className="flex flex-wrap gap-1.5">
+        {KNOWLEDGE_FILTERS.map((key) => {
+          const active = key === filter
+          return (
+            <button
+              key={key}
+              onClick={() => setFilter(key)}
+              className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
+                active ? 'border-ocg-navy bg-ocg-navy text-white' : 'border-gray-200 bg-white text-gray-600 hover:border-ocg-gold/40'
+              }`}
+            >
+              {KNOWLEDGE_FILTER_LABELS[key]}
+              {counts[key] > 0 && (
+                <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${active ? 'bg-white/20' : 'bg-gray-100 text-gray-500'}`}>
+                  {counts[key]}
+                </span>
+              )}
+            </button>
+          )
+        })}
+      </div>
+
       {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
-      {records.length === 0 ? <div className="rounded-xl border border-dashed border-gray-200 bg-white p-10 text-center"><BookOpenCheck className="mx-auto text-gray-300" size={36} /><p className="mt-3 font-medium text-gray-700">No knowledge entries in your scope</p><p className="mt-1 text-sm text-gray-500">Legacy documents will remain legacy until deliberately reviewed and replaced by an approved current version.</p></div> : (
-        <div className="grid gap-4 xl:grid-cols-2">{records.map((record) => {
+      {filter === 'archived' && shown.length > 0 && (
+        <p className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-500">
+          Archived history. These are kept for the record and are not part of the working library.
+        </p>
+      )}
+      {shown.length === 0 ? <div className="rounded-xl border border-dashed border-gray-200 bg-white p-10 text-center"><BookOpenCheck className="mx-auto text-gray-300" size={36} /><p className="mt-3 font-medium text-gray-700">{records.length === 0 ? 'No knowledge entries in your scope' : `Nothing under ${KNOWLEDGE_FILTER_LABELS[filter]}`}</p><p className="mt-1 text-sm text-gray-500">Legacy documents will remain legacy until deliberately reviewed and replaced by an approved current version.</p></div> : (
+        <div className="grid gap-4 xl:grid-cols-2">{shown.map((record) => {
           const shown = record.currentVersion ?? record.versions[0] ?? null
           const draft = record.versions.find((version) => version.status === 'draft')
           return <article key={record.id} className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm transition hover:border-ocg-gold/40 hover:shadow-md">

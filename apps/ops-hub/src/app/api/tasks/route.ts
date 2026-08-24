@@ -7,6 +7,7 @@ import { getProject } from '@/lib/projects'
 import { listTeam, lookupAssigneeEmail } from '@/lib/team'
 import { resolveBrand } from '@/lib/brands'
 import { sendTaskAssignment } from '@/lib/email'
+import { canAssignToMember } from '@/lib/calendarTasks'
 import { completionUrl } from '@/lib/completion'
 import { auditEvent } from '@/lib/audit'
 import { createNotification } from '@/lib/notifications'
@@ -57,7 +58,7 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       )
     }
-    // Brand managers may only create tasks under their own brands' projects.
+    // Brand managers may only create tasks under their own brands' projects...
     if (actor.taskScope.kind === 'brands') {
       const project = await getProject(body.project_id)
       if (!project || !project.brand_id || !actor.taskScope.brandIds.includes(project.brand_id)) {
@@ -65,6 +66,23 @@ export async function POST(req: NextRequest) {
           { ok: false, error: 'You can only create tasks within your own brand.' },
           { status: 403 },
         )
+      }
+
+      // ...and only to people within those brands (§46). Checking the project
+      // alone let a scoped manager name any employee in the company as the
+      // assignee, simply by POSTing past the filtered dropdown.
+      const assignee = String(body.assigned_to ?? '').trim()
+      if (assignee) {
+        const team = await listTeam()
+        const member = team.find(
+          (m) => m.name.trim().toLowerCase() === assignee.toLowerCase(),
+        )
+        if (!canAssignToMember(actor.taskScope, member ? (member.brand_ids ?? []) : null)) {
+          return NextResponse.json(
+            { ok: false, error: 'You can only assign work to people within your own brand.' },
+            { status: 403 },
+          )
+        }
       }
     }
     const task = await createTask({ ...body, created_by: actor.email ?? 'admin' })

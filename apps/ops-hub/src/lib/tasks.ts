@@ -63,6 +63,7 @@ export interface CreateTaskInput {
   category?: string
   priority?: string
   start_date?: string
+  /** The DEADLINE — the date the work must be finished by. */
   target_date?: string
   notes?: string
   agent_eligible?: 'Yes' | 'No'
@@ -71,6 +72,13 @@ export interface CreateTaskInput {
    *  so an approval can return the deliverable to the source. */
   source_kind?: string
   source_ref?: string
+  // ── Schedule (migration 070) — WHEN the work should be performed. ──
+  // Distinct from target_date: a task may be scheduled Wednesday 10:00–12:00
+  // and due Friday. Omitted → an unscheduled task, exactly as before.
+  scheduled_start_at?: string | null
+  scheduled_end_at?: string | null
+  scheduled_all_day?: boolean
+  scheduled_location?: string
 }
 
 /** Create a task under a project. Inherits brand + client from the project and
@@ -108,6 +116,10 @@ export async function createTask(input: CreateTaskInput): Promise<OpsTaskRow> {
     agent_eligible: input.agent_eligible ?? 'Yes',
     source_kind: input.source_kind ?? null,
     source_ref: input.source_ref ?? null,
+    scheduled_start_at: input.scheduled_start_at ?? null,
+    scheduled_end_at: input.scheduled_end_at ?? null,
+    scheduled_all_day: input.scheduled_all_day ?? false,
+    scheduled_location: input.scheduled_location ?? '',
     updated_at: nowIso(),
   }
   const { data, error } = await supabase.from('ops_tasks').insert(row).select('*').single()

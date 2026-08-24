@@ -7,6 +7,71 @@ export interface KnowledgeRecord extends KnowledgeEntryRow {
   currentVersion: KnowledgeVersionRow | null
 }
 
+// ─── Library status filtering (§36) ─────────────────────────────────────────
+
+export const KNOWLEDGE_FILTERS = ['active', 'drafts', 'legacy', 'archived'] as const
+export type KnowledgeFilter = (typeof KNOWLEDGE_FILTERS)[number]
+
+export const KNOWLEDGE_FILTER_LABELS: Record<KnowledgeFilter, string> = {
+  active: 'Active',
+  drafts: 'Drafts',
+  legacy: 'Legacy / reference',
+  archived: 'Archived',
+}
+
+export function parseKnowledgeFilter(value: string | null | undefined): KnowledgeFilter {
+  const v = (value ?? '').toLowerCase()
+  return (KNOWLEDGE_FILTERS as readonly string[]).includes(v) ? (v as KnowledgeFilter) : 'active'
+}
+
+/**
+ * The status a record presents as: the status of its current version, or of its
+ * newest version when nothing has been published yet.
+ */
+export function recordStatus(record: KnowledgeRecord): string {
+  return (record.currentVersion ?? record.versions[0])?.status ?? 'draft'
+}
+
+/**
+ * §36: the default library shows usable company knowledge, not tombstones.
+ *
+ * A record whose only versions are archived is history. It stays reachable —
+ * deliberately, because archived business history sometimes has to be inspected
+ * — but under an explicit Archived view rather than mixed into the working
+ * library, where it competes for attention with current policy.
+ */
+export function matchesKnowledgeFilter(record: KnowledgeRecord, filter: KnowledgeFilter): boolean {
+  const statuses = record.versions.map((v) => v.status)
+  const archivedOnly = statuses.length > 0 && statuses.every((s) => s === 'archived')
+
+  switch (filter) {
+    case 'archived':
+      return archivedOnly || statuses.includes('archived')
+    case 'drafts':
+      return !archivedOnly && recordStatus(record) === 'draft'
+    case 'legacy':
+      return !archivedOnly && recordStatus(record) === 'legacy'
+    case 'active':
+      // Everything still in use: published current knowledge, plus drafts and
+      // legacy material that has not been archived away.
+      return !archivedOnly
+  }
+}
+
+export function filterKnowledge(records: KnowledgeRecord[], filter: KnowledgeFilter): KnowledgeRecord[] {
+  return records.filter((r) => matchesKnowledgeFilter(r, filter))
+}
+
+/** How many records each filter would show, for the tab counts. */
+export function knowledgeFilterCounts(records: KnowledgeRecord[]): Record<KnowledgeFilter, number> {
+  return {
+    active: filterKnowledge(records, 'active').length,
+    drafts: filterKnowledge(records, 'drafts').length,
+    legacy: filterKnowledge(records, 'legacy').length,
+    archived: filterKnowledge(records, 'archived').length,
+  }
+}
+
 /**
  * Entries this reader may see.
  *
@@ -277,17 +342,24 @@ export function knowledgeEntryInScope(entry: KnowledgeEntryRow, opts: {
 }): boolean {
   if (opts.allowedBrands !== null && (!entry.brand_id || !opts.allowedBrands.includes(entry.brand_id))) return false
 
-  // The owner always reaches their own entry, whatever band it carries.
-  const isOwner = Boolean(opts.memberId) && opts.memberId === entry.owner_member_id
-  if (isOwner) return true
-
+  // §51: visibility_scope is a SECURITY band, and ownership does not bypass it.
+  // Being recorded as the owner of a document means stewardship — you are the
+  // person responsible for keeping it right — not clearance. A low-scope account
+  // named as owner of a management-band document must not be able to read it by
+  // virtue of that name; the correct fix for that situation is to raise the
+  // person's record horizon, deliberately, not to leak the document.
   if (!visibilityAllowed(entry.visibility_scope, opts.recordScope)) return false
 
   if (opts.recordScope === 'group' || opts.recordScope === 'management') return true
   if (opts.recordScope === 'department') {
+    // Within the band they may reach, a department reader sees their department
+    // — and anything they personally own, which is ordinary owner semantics
+    // operating INSIDE the visibility they are allowed.
+    if (Boolean(opts.memberId) && opts.memberId === entry.owner_member_id) return true
     return Boolean(opts.memberDepartment) && opts.memberDepartment === entry.department
   }
-  return false
+  // 'own' horizon: only what this person owns, and only within its band.
+  return Boolean(opts.memberId) && opts.memberId === entry.owner_member_id
 }
 
 /**

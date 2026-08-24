@@ -71,6 +71,8 @@ export type {
   OcgDutyChecklistResultRow,
   OcgHolidayRow,
   OpsTaskReviewRow,
+  OcgOperatingSystemManualRow,
+  OcgOperatingSystemVersionRow,
   OcgCalendarEventRow,
   OcgCalendarEventAttendeeRow,
   OcgCalendarRescheduleRow,

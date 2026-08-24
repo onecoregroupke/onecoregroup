@@ -940,6 +940,14 @@ export interface OpsTaskRow {
   duty_date: string | null
   submitted_at: string | null
   reopened_count: number
+  // ── Scheduled work (migration 070) ──
+  // WHEN the work should be performed, as distinct from `target_date`, which is
+  // the DEADLINE. A task may be scheduled Wednesday 10:00–12:00 and due Friday.
+  // All nullable: an unscheduled task keeps behaving exactly as before.
+  scheduled_start_at: string | null
+  scheduled_end_at: string | null
+  scheduled_all_day: boolean
+  scheduled_location: string
 }
 type OpsTaskInsert = Pick<OpsTaskRow, 'task_id' | 'project_id' | 'task_name'> & Partial<OpsTaskRow>
 
@@ -2404,6 +2412,55 @@ export interface OpsTaskReviewRow {
   created_at: string
 }
 type OpsTaskReviewInsert = Pick<OpsTaskReviewRow, 'decision'> & Partial<OpsTaskReviewRow>
+
+// ─── Operating System (migration 070) ───────────────────────────────────────
+/**
+ * A company operating manual — the group's, or one entity's.
+ *
+ * Deliberately NOT stored in ocg_knowledge_entries. Knowledge is an atomic,
+ * versioned document library ("what is the procurement policy?"); the Operating
+ * System is a connected manual ("how does this company actually run?"). Two
+ * purposes, two models, two lifecycles.
+ */
+export interface OcgOperatingSystemManualRow {
+  id: string
+  slug: string
+  /** group | brand */
+  scope_type: string
+  /** null for the group manual; required for an entity manual. */
+  brand_id: string | null
+  title: string
+  summary: string
+  sort_order: number
+  current_version_id: string | null
+  active: boolean
+  created_at: string
+  updated_at: string
+}
+type OcgOperatingSystemManualInsert =
+  Pick<OcgOperatingSystemManualRow, 'slug' | 'title'> & Partial<OcgOperatingSystemManualRow>
+
+export interface OcgOperatingSystemVersionRow {
+  id: string
+  manual_id: string
+  version_no: number
+  /** working_draft | current | superseded | archived */
+  status: string
+  /** Structured chapters. Empty array = resolve from the repository baseline. */
+  content: unknown[]
+  /** Names the vetted baseline in apps/ops-hub/src/lib/operatingSystem/manuals. */
+  content_ref: string
+  source_summary: string
+  effective_from: string | null
+  review_date: string | null
+  generated_by: string
+  approved_by: string
+  approved_at: string | null
+  change_summary: string
+  created_at: string
+}
+type OcgOperatingSystemVersionInsert =
+  Pick<OcgOperatingSystemVersionRow, 'manual_id' | 'version_no'> & Partial<OcgOperatingSystemVersionRow>
 
 // ─── Calendar (migration 056) ────────────────────────────────────────────────
 export interface OcgCalendarEventRow {
@@ -4744,6 +4801,8 @@ export interface Database {
       ocg_duty_checklist_results: DbTable<OcgDutyChecklistResultRow, OcgDutyChecklistResultInsert, Partial<OcgDutyChecklistResultRow>>
       ocg_holidays: DbTable<OcgHolidayRow, OcgHolidayInsert, Partial<OcgHolidayRow>>
       ops_task_reviews: DbTable<OpsTaskReviewRow, OpsTaskReviewInsert, Partial<OpsTaskReviewRow>>
+      ocg_operating_system_manuals: DbTable<OcgOperatingSystemManualRow, OcgOperatingSystemManualInsert, Partial<OcgOperatingSystemManualRow>>
+      ocg_operating_system_versions: DbTable<OcgOperatingSystemVersionRow, OcgOperatingSystemVersionInsert, Partial<OcgOperatingSystemVersionRow>>
       ocg_calendar_events: DbTable<OcgCalendarEventRow, OcgCalendarEventInsert, Partial<OcgCalendarEventRow>>
       ocg_calendar_event_attendees: DbTable<OcgCalendarEventAttendeeRow, OcgCalendarEventAttendeeInsert, Partial<OcgCalendarEventAttendeeRow>>
       ocg_calendar_reschedules: DbTable<OcgCalendarRescheduleRow, OcgCalendarRescheduleInsert, Partial<OcgCalendarRescheduleRow>>
@@ -4917,6 +4976,31 @@ export interface Database {
       post_finance_journal: {
         Args: { p_journal_id: string; p_posted_by: string }
         Returns: FinanceJournalRow
+      }
+      // Atomic countersignatures (migration 070). Each writes the verdict AND
+      // its immutable review event in one transaction, and refuses a decision
+      // on work that is not in a reviewable state.
+      review_duty_occurrence: {
+        Args: {
+          p_log_id: string
+          p_decision: string
+          p_comment: string
+          p_quality_rating: number | null
+          p_reviewed_by: string
+          p_reviewed_by_id: string | null
+        }
+        Returns: OcgDailyDutyLogRow
+      }
+      review_task_completion: {
+        Args: {
+          p_task_id: string
+          p_status: string
+          p_note: string
+          p_reviewed_by: string
+          p_reviewed_by_id: string | null
+          p_expected_status: string | null
+        }
+        Returns: OpsTaskRow
       }
     }
   }

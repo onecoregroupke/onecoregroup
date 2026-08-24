@@ -4,6 +4,7 @@ import { listTasksForAssignee } from './tasks'
 import { occurrencesOn, overdueOccurrences, type DutyOccurrence } from './dutyOccurrences'
 import { toOccurrenceDtos } from './dutyView'
 import { isTaskClosed, type WorkItem } from './myWorkModel'
+import { nairobiDateOf } from './calendarTasks'
 import type { OccurrenceDto } from '@/components/duties/DutyOccurrenceCard'
 import type { OpsTaskRow, NptAppointmentRow, NptCustomerRow, OpsTeamMemberRow } from '@ocg/db'
 
@@ -50,10 +51,26 @@ export interface MyWorkData {
   reviewerNameByDuty: Record<string, string>
 }
 
+/**
+ * The occurrence identity used to collapse a duty and its materialised task
+ * into one displayed item (§49).
+ *
+ * `(duty_id, duty_date)` and nothing else. Everything that calls this is
+ * already working within ONE employee's context — their My Work page, their
+ * section of the morning brief — so the person is implicit and including their
+ * id only creates a difference where there is none. The previous keys did
+ * exactly that: the duty side appended the assignee id and the task side
+ * appended an empty string, so a materialised duty task never matched its own
+ * occurrence and both were shown.
+ */
+export function dutyOccurrenceKey(dutyId: string, date: string): string {
+  return `duty:${dutyId}:${date}`
+}
+
 /** The flat item used only for bucketing and ordering (see myWorkModel). */
 export function dutyToWorkItem(o: OccurrenceDto): WorkItem {
   return {
-    key: `duty:${o.dutyId}:${o.date}:${o.assigneeId ?? ''}`,
+    key: dutyOccurrenceKey(o.dutyId, o.date),
     kind: 'duty',
     title: o.title,
     dueDate: o.date,
@@ -68,11 +85,14 @@ export function taskToWorkItem(t: OpsTaskRow): WorkItem {
   return {
     // A task materialised FROM a duty carries the duty's occurrence identity, so
     // the pair dedupes to one item (§2). Everything else keys on its own id.
-    key: t.duty_id && t.duty_date ? `duty:${t.duty_id}:${t.duty_date}:` : t.task_id,
+    key: t.duty_id && t.duty_date ? dutyOccurrenceKey(t.duty_id, t.duty_date) : t.task_id,
     kind: 'task',
     title: t.task_name,
-    dueDate: t.target_date || '',
-    dueAt: null,
+    // A scheduled task is relevant on the day it is SCHEDULED, even when its
+    // deadline is later (§44). Falling back to the deadline keeps every
+    // unscheduled task behaving exactly as before.
+    dueDate: t.scheduled_start_at ? nairobiDateOf(t.scheduled_start_at) : (t.target_date || ''),
+    dueAt: t.scheduled_start_at && !t.scheduled_all_day ? t.scheduled_start_at : null,
     priority: t.priority || 'Medium',
     status: t.current_status,
     overdue: false,
@@ -111,7 +131,8 @@ export async function loadMyWork(
       scope: { kind: 'own' }, teamMemberId: member.id, date, lookbackDays: OVERDUE_LOOKBACK_DAYS,
     }),
     listTasksForAssignee(member.name),
-    listUpcomingAppointments(member.id),
+    // §50: Today shows TODAY. The forward schedule lives in the Calendar.
+    appointmentsOnDate(member.id, date),
     recentSettledOccurrences(member.id, date),
   ])
 
@@ -193,22 +214,51 @@ async function recentSettledOccurrences(memberId: string, date: string): Promise
 }
 
 /**
- * Today's and upcoming scheduled engagements (§6D). Reads the EXISTING NPT
- * appointment records — no new appointment system is introduced.
+ * Appointments on ONE day (§50).
+ *
+ * My Work → Today shows today. Listing the next thirty appointments under a
+ * heading that says "Today" is simply wrong, and it buries the two that
+ * actually matter this morning under a month of future ones. The forward
+ * schedule belongs to the Calendar.
+ */
+export async function appointmentsOnDate(
+  technicianId: string,
+  date: string,
+): Promise<MyAppointment[]> {
+  const { data } = await openAppointments(technicianId)
+    .gte('start_at', `${date}T00:00:00+03:00`)
+    .lte('start_at', `${date}T23:59:59+03:00`)
+    .order('start_at', { ascending: true })
+    .limit(30)
+  return decorate((data as NptAppointmentRow[] | null) ?? [])
+}
+
+/**
+ * Upcoming engagements from now forward. Retained for callers that genuinely
+ * want a forward view (the /api/my-tasks compatibility route).
  */
 export async function listUpcomingAppointments(technicianId: string): Promise<MyAppointment[]> {
-  const supabase = db()
   const since = new Date(Date.parse(nowIso()) - 24 * 60 * 60 * 1000).toISOString()
-  const { data } = await supabase
+  const { data } = await openAppointments(technicianId)
+    .gte('start_at', since)
+    .order('start_at', { ascending: true })
+    .limit(30)
+  return decorate((data as NptAppointmentRow[] | null) ?? [])
+}
+
+/** Appointments still needing attention, before any time window is applied. */
+function openAppointments(technicianId: string) {
+  return db()
     .from('npt_appointments')
     .select('*')
     .eq('technician_id', technicianId)
-    .gte('start_at', since)
     .neq('status', 'Completed')
     .neq('status', 'Cancelled')
-    .order('start_at', { ascending: true })
-    .limit(30)
-  const appointments = (data as NptAppointmentRow[] | null) ?? []
+}
+
+/** Attach customer names in one lookup rather than one per appointment. */
+async function decorate(appointments: NptAppointmentRow[]): Promise<MyAppointment[]> {
+  const supabase = db()
   if (appointments.length === 0) return []
 
   const customerIds = [...new Set(appointments.map((a) => a.customer_id).filter(Boolean))] as string[]

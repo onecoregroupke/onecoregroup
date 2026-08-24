@@ -1,6 +1,10 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { knowledgeEntryInScope, visibilityAllowed } from './knowledge'
+import {
+  knowledgeEntryInScope, visibilityAllowed, matchesKnowledgeFilter, filterKnowledge,
+  knowledgeFilterCounts, parseKnowledgeFilter, recordStatus,
+  type KnowledgeRecord,
+} from './knowledge'
 import { hasAuthority, type AuthorityGrant } from './governanceModel'
 import type { KnowledgeEntryRow } from '@ocg/db'
 
@@ -35,10 +39,12 @@ test('department scope only opens entries in the same department', () => {
   assert.equal(knowledgeEntryInScope(entry({ department: 'Stores', visibility_scope: 'department' }), opts), false)
 })
 
-test('own scope only opens entries this member owns', () => {
+test('own scope only opens entries this member owns, within a band they can reach', () => {
+  // §51 changed this: ownership no longer lifts the visibility band, so the
+  // entry must ALSO be in a band an own-scope reader can reach.
   const opts = { allowedBrands: null, recordScope: 'own' as const, memberDepartment: null, memberId: 'member-1' }
-  assert.equal(knowledgeEntryInScope(entry({ owner_member_id: 'member-1' }), opts), true)
-  assert.equal(knowledgeEntryInScope(entry({ owner_member_id: 'member-2' }), opts), false)
+  assert.equal(knowledgeEntryInScope(entry({ owner_member_id: 'member-1', visibility_scope: 'own' }), opts), true)
+  assert.equal(knowledgeEntryInScope(entry({ owner_member_id: 'member-2', visibility_scope: 'own' }), opts), false)
 })
 
 test('a group-scoped (no brand) entry stays outside a brand-restricted user\'s reach', () => {
@@ -92,10 +98,42 @@ test('an own-visibility document is not opened by a colleague in the same depart
   }), false)
 })
 
-test('the owner always reaches their own entry, whatever band it carries', () => {
+// ─── §51: ownership is stewardship, not clearance ───────────────────────────
+
+test('an owner does NOT bypass a higher visibility band', () => {
+  // The corrected rule. Being named as the owner of a group-band document does
+  // not give an own-scope account clearance to read it — the fix for that
+  // situation is to raise the person's record horizon deliberately.
   assert.equal(knowledgeEntryInScope(entry({ visibility_scope: 'group', owner_member_id: 'member-1' }), {
     allowedBrands: null, recordScope: 'own', memberDepartment: null, memberId: 'member-1',
+  }), false)
+})
+
+test('an owner does not bypass a management band either', () => {
+  assert.equal(knowledgeEntryInScope(entry({ visibility_scope: 'management', owner_member_id: 'member-1' }), {
+    allowedBrands: null, recordScope: 'own', memberDepartment: null, memberId: 'member-1',
+  }), false)
+})
+
+test('an owner reaches their entry INSIDE a band they are allowed', () => {
+  // Ordinary owner semantics still operate within the visibility they can reach.
+  assert.equal(knowledgeEntryInScope(entry({ visibility_scope: 'own', owner_member_id: 'member-1' }), {
+    allowedBrands: null, recordScope: 'own', memberDepartment: null, memberId: 'member-1',
   }), true)
+})
+
+test('a department reader reaches a document they own in another department', () => {
+  assert.equal(knowledgeEntryInScope(
+    entry({ visibility_scope: 'department', owner_member_id: 'member-1', department: 'Stores' }),
+    { allowedBrands: null, recordScope: 'department', memberDepartment: 'Finance', memberId: 'member-1' },
+  ), true)
+})
+
+test('ownership never overrides the BRAND boundary', () => {
+  assert.equal(knowledgeEntryInScope(
+    entry({ brand_id: 'brand-b', owner_member_id: 'member-1', visibility_scope: 'own' }),
+    { allowedBrands: ['brand-a'], recordScope: 'group', memberDepartment: null, memberId: 'member-1' },
+  ), false)
 })
 
 test('the list filter and the detail gate are the same predicate', () => {
@@ -187,4 +225,85 @@ test('a "review" grant is not an "approve" grant', () => {
 test('an editor holding no approval grant cannot publish anything', () => {
   assert.equal(hasAuthority([], 'approve', { brandId: 'brand-a', operationalArea: 'knowledge' }), false)
   assert.equal(hasAuthority([], 'approve', { brandId: null, operationalArea: 'knowledge' }), false)
+})
+
+// ─── §36: archived Knowledge is history, not library ───────────────────
+
+function version(status: string, no = 1) {
+  return {
+    id: `v${no}-${status}`, entry_id: 'entry-1', version_no: no, status,
+    content_body: '', file_url: '', file_hash: '', source_title: '', source_type: '',
+    source_date: null, source_reference: '', effective_from: null, effective_until: null,
+    review_date: null, approved_by: '', approved_at: null, change_summary: '',
+    supersedes_version_id: null, created_by: '', created_at: '',
+  }
+}
+
+function record(statuses: string[], current?: string): KnowledgeRecord {
+  const versions = statuses.map((s, i) => version(s, statuses.length - i))
+  return {
+    ...entry(),
+    versions,
+    currentVersion: current ? versions.find((v) => v.status === current) ?? null : null,
+  } as KnowledgeRecord
+}
+
+test('the default library shows current, draft and legacy knowledge', () => {
+  assert.equal(matchesKnowledgeFilter(record(['current'], 'current'), 'active'), true)
+  assert.equal(matchesKnowledgeFilter(record(['draft']), 'active'), true)
+  assert.equal(matchesKnowledgeFilter(record(['legacy']), 'active'), true)
+})
+
+test('an archived-only record is excluded from the default library', () => {
+  // The exact defect: two archived smoke records rendered in the working list.
+  assert.equal(matchesKnowledgeFilter(record(['archived']), 'active'), false)
+  assert.equal(matchesKnowledgeFilter(record(['archived', 'archived']), 'active'), false)
+})
+
+test('archived business history remains reachable under the Archived view', () => {
+  assert.equal(matchesKnowledgeFilter(record(['archived']), 'archived'), true)
+})
+
+test('a record with a live current version is not hidden by an old archived one', () => {
+  const mixed = record(['current', 'archived'], 'current')
+  assert.equal(matchesKnowledgeFilter(mixed, 'active'), true)
+  // It still appears under Archived, because it does have archived history.
+  assert.equal(matchesKnowledgeFilter(mixed, 'archived'), true)
+})
+
+test('the Drafts view shows drafts and excludes archived-only records', () => {
+  assert.equal(matchesKnowledgeFilter(record(['draft']), 'drafts'), true)
+  assert.equal(matchesKnowledgeFilter(record(['current'], 'current'), 'drafts'), false)
+  assert.equal(matchesKnowledgeFilter(record(['archived']), 'drafts'), false)
+})
+
+test('the Legacy view shows legacy reference material only', () => {
+  assert.equal(matchesKnowledgeFilter(record(['legacy']), 'legacy'), true)
+  assert.equal(matchesKnowledgeFilter(record(['draft']), 'legacy'), false)
+})
+
+test('filtering a library keeps archived-only records out by default', () => {
+  const records = [record(['current'], 'current'), record(['archived']), record(['draft'])]
+  assert.equal(filterKnowledge(records, 'active').length, 2)
+  assert.equal(filterKnowledge(records, 'archived').length, 1)
+})
+
+test('filter counts describe what each view would actually show', () => {
+  const records = [record(['current'], 'current'), record(['archived']), record(['draft'])]
+  const counts = knowledgeFilterCounts(records)
+  assert.equal(counts.active, 2)
+  assert.equal(counts.archived, 1)
+  assert.equal(counts.drafts, 1)
+})
+
+test('an unknown filter value falls back to the working library', () => {
+  assert.equal(parseKnowledgeFilter('archived'), 'archived')
+  assert.equal(parseKnowledgeFilter('ARCHIVED'), 'archived')
+  assert.equal(parseKnowledgeFilter(null), 'active')
+  assert.equal(parseKnowledgeFilter('nonsense'), 'active')
+})
+
+test('a record presents the status of its current version, else its newest', () => {
+  assert.equal(recordStatus(record(['current', 'draft'], 'current')), 'current')
+  assert.equal(recordStatus(record(['draft'])), 'draft')
 })

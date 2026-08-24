@@ -11,6 +11,7 @@ import {
   type MyWorkData,
 } from '@/lib/myWork'
 import { buildToday, parseTab, isOverdue, type MyWorkTab } from '@/lib/myWorkModel'
+import { formatScheduleRange, nairobiDateOf } from '@/lib/calendarTasks'
 import { DutyOccurrenceCard, type OccurrenceDto } from '@/components/duties/DutyOccurrenceCard'
 import { AssignedTaskList, type AssignedTask } from '@/components/tasks/AssignedTaskList'
 import type { OpsTaskRow } from '@ocg/db'
@@ -108,15 +109,20 @@ function toAssignedTask(t: OpsTaskRow, today: string): AssignedTask {
     targetDate: t.target_date,
     priority: t.priority,
     status: t.current_status,
+    // Overdue is a DEADLINE question. A task scheduled for a past slot but not
+    // yet due has slipped its booking, not its commitment (§44).
     overdue: isOverdue(
       { kind: 'task', status: t.current_status, dueDate: t.target_date || '', dueAt: null },
       today,
     ),
     requiresApproval: t.requires_approval === true,
+    scheduleRange: formatScheduleRange(t.scheduled_start_at, t.scheduled_end_at, t.scheduled_all_day),
+    scheduleDate: t.scheduled_start_at ? nairobiDateOf(t.scheduled_start_at) : '',
+    location: t.scheduled_location ?? '',
   }
 }
 
-/** Duty occurrences, most urgent first, keyed uniquely across duty × date × person. */
+/** Duty occurrences, keyed uniquely across duty × date × person. */
 function dutyKey(o: OccurrenceDto): string {
   return `${o.dutyId}:${o.date}:${o.assigneeId ?? ''}`
 }
@@ -227,8 +233,14 @@ function TodayView({ data, today }: { data: MyWorkData; today: string }) {
 
 const TASK_PRIORITY_RANK: Record<string, number> = { Urgent: 0, High: 1, Medium: 2, Low: 3 }
 
-/** Due today first, then priority, then anything undated (§6C). */
+/**
+ * Scheduled-for-today first, then due today, then priority, then undated (§6C).
+ *
+ * A task booked for 10:00 this morning is the most relevant item on the page
+ * even if its deadline is next week — that is the whole point of scheduling it.
+ */
 function rankTask(t: AssignedTask, today: string): number {
+  if (t.scheduleDate === today) return -10 + (TASK_PRIORITY_RANK[t.priority] ?? 2)
   const dueToday = t.targetDate === today ? 0 : t.targetDate ? 1 : 2
   return dueToday * 10 + (TASK_PRIORITY_RANK[t.priority] ?? 2)
 }

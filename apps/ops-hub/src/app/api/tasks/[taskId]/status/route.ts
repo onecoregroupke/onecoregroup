@@ -6,7 +6,7 @@ import { canReview, isReviewDecision, validateReopenComment } from '@/lib/review
 import { memberForEmail, listTeam } from '@/lib/team'
 import { notifyMarketingOnApproval } from '@/lib/marketingSync'
 import { auditEvent } from '@/lib/audit'
-import { db, nowIso } from '@/lib/serverClient'
+import { db } from '@/lib/serverClient'
 
 export async function POST(
   req: NextRequest,
@@ -69,30 +69,30 @@ export async function POST(
       }
     }
 
-    const task = await setTaskStatus(taskId, status, {
-      note: body?.note,
-      by: actor.email ?? 'admin',
-    })
-
-    // The append-only countersign event, in the same table duty reviews use.
+    let task
     if (reviewing) {
-      try {
-        await db().from('ops_task_reviews').insert({
-          task_id: taskId,
-          decision: status === 'Reopened' ? 'reopened' : 'accepted',
-          comment: String(body?.note ?? ''),
-          reopen_reason: status === 'Reopened' ? String(body?.note ?? '') : '',
-          reviewed_by: actor.name || actor.email || actor.userId,
-          reviewed_by_id: reviewerMemberId,
-        })
-      } catch {
-        // Best-effort: the decision above is already recorded on the task.
+      // §47: a task countersignature and its immutable event commit together.
+      // The RPC also guards on the status we authorised against, so a task that
+      // moved while this reviewer was deciding is refused rather than
+      // overwritten.
+      const { data, error } = await db().rpc('review_task_completion', {
+        p_task_id: taskId,
+        p_status: status,
+        p_note: String(body?.note ?? ''),
+        p_reviewed_by: actor.name || actor.email || actor.userId,
+        p_reviewed_by_id: reviewerMemberId,
+        p_expected_status: task0.current_status,
+      })
+      if (error) {
+        const conflict = /has moved on since/i.test(error.message)
+        return NextResponse.json({ ok: false, error: error.message }, { status: conflict ? 409 : 500 })
       }
-      if (status === 'Reopened') {
-        await db().from('ops_tasks')
-          .update({ reopened_count: (task0.reopened_count ?? 0) + 1, updated_at: nowIso() })
-          .eq('task_id', taskId)
-      }
+      task = data as typeof task0
+    } else {
+      task = await setTaskStatus(taskId, status, {
+        note: body?.note,
+        by: actor.email ?? 'admin',
+      })
     }
 
     await auditEvent({

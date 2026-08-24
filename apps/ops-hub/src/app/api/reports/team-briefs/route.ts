@@ -7,6 +7,8 @@ import { createNotification } from '@/lib/notifications'
 import { occurrencesOn, overdueOccurrences, pendingReviews, type DutyOccurrence } from '@/lib/dutyOccurrences'
 import { buildWorkBrief, limitSection, type BriefLine, type WorkBrief } from '@/lib/morningBrief'
 import { isTaskClosed } from '@/lib/myWorkModel'
+import { dutyOccurrenceKey } from '@/lib/myWork'
+import { formatScheduleRange } from '@/lib/calendarTasks'
 import { db, todayInEat } from '@/lib/serverClient'
 import type { OpsTaskRow, NptAppointmentRow, OpsTeamMemberRow } from '@ocg/db'
 
@@ -152,6 +154,8 @@ function briefFor(member: OpsTeamMemberRow, date: string, b: Buckets): WorkBrief
   const myTasks = (b.tasksByName.get(member.name.trim().toLowerCase()) ?? [])
     .filter((t) => !isTaskClosed(t.current_status) && isActiveStatus(t.current_status))
 
+  // Overdue is about the DEADLINE. A task scheduled for a past day but not yet
+  // due is simply work that slipped its slot, not late work.
   const overdueTasks = myTasks.filter((t) => t.target_date && t.target_date < date)
   const dueTasks = myTasks.filter((t) => !overdueTasks.includes(t))
 
@@ -173,22 +177,30 @@ function briefFor(member: OpsTeamMemberRow, date: string, b: Buckets): WorkBrief
 
 function dutyLine(o: DutyOccurrence): BriefLine {
   return {
-    // The occurrence identity — duty × date × person, the same triple the log
-    // is keyed on, so one occurrence can never be listed twice (§43).
-    key: `duty:${o.duty.id}:${o.date}:${o.assignee.id ?? ''}`,
+    // The occurrence identity. Each brief section is already scoped to ONE
+    // person, so (duty, date) identifies the occurrence and the assignee adds
+    // nothing but a way for the two sides to disagree (§49).
+    key: dutyOccurrenceKey(o.duty.id, o.date),
     title: o.duty.title,
     detail: o.dueAt ? `due ${time(o.dueAt)}` : o.date,
   }
 }
 
 function taskLine(t: OpsTaskRow): BriefLine {
+  // §44: a scheduled task leads with its working window — "10:00–12:00" is what
+  // the person needs at 07:00, not a task reference.
+  const window = formatScheduleRange(t.scheduled_start_at, t.scheduled_end_at, t.scheduled_all_day)
   return {
     // A task materialised from a duty shares the duty's key so the pair
     // collapses to the richer duty entry (§43 "no duplicated Duty occurrence").
-    key: t.duty_id && t.duty_date ? `duty:${t.duty_id}:${t.duty_date}:` : `task:${t.task_id}`,
+    key: t.duty_id && t.duty_date ? dutyOccurrenceKey(t.duty_id, t.duty_date) : `task:${t.task_id}`,
     title: t.task_name,
-    detail: [t.task_id, t.priority !== 'Medium' ? t.priority : '', t.target_date ? `due ${t.target_date}` : '']
-      .filter(Boolean).join(' · '),
+    detail: [
+      window,
+      t.task_id,
+      t.priority !== 'Medium' ? t.priority : '',
+      t.target_date ? `due ${t.target_date}` : '',
+    ].filter(Boolean).join(' · '),
   }
 }
 
