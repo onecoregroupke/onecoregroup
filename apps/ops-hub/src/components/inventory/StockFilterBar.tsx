@@ -17,12 +17,20 @@ export function StockFilterBar({
   brands,
   stores,
   items,
+  categories = [],
+  subcategories = [],
+  families = [],
+  packs = [],
   showItem = true,
   showPeriod = true,
 }: {
   brands: FilterOption[]
   stores: FilterOption[]
   items?: FilterOption[]
+  categories?: FilterOption[]
+  subcategories?: FilterOption[]
+  families?: FilterOption[]
+  packs?: FilterOption[]
   showItem?: boolean
   showPeriod?: boolean
 }) {
@@ -31,8 +39,9 @@ export function StockFilterBar({
   const params = useSearchParams()
 
   const set = useCallback(
-    (key: string, value: string) => {
+    (key: string, value: string, clear: string[] = []) => {
       const next = new URLSearchParams(params.toString())
+      clear.forEach((name) => next.delete(name))
       if (value) next.set(key, value)
       else next.delete(key)
       router.push(`${pathname}?${next.toString()}`)
@@ -41,7 +50,7 @@ export function StockFilterBar({
   )
 
   const get = (key: string) => params.get(key) ?? ''
-  const active = ['brand', 'store', 'item', 'type', 'from', 'to'].filter((k) => params.get(k))
+  const active = ['brand', 'store', 'item', 'type', 'category', 'subcategory', 'family', 'pack', 'from', 'to'].filter((k) => params.get(k))
 
   return (
     <div className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
@@ -57,10 +66,10 @@ export function StockFilterBar({
         )}
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         {brands.length > 1 && (
           <Field label="Brand">
-            <select className="input" value={get('brand')} onChange={(e) => set('brand', e.target.value)}>
+            <select className="input" value={get('brand')} onChange={(e) => set('brand', e.target.value, ['store', 'category', 'subcategory', 'family', 'pack', 'item'])}>
               <option value="">All brands</option>
               {brands.map((b) => <option key={b.value} value={b.value}>{b.label}</option>)}
             </select>
@@ -68,7 +77,7 @@ export function StockFilterBar({
         )}
 
         <Field label="Item type">
-          <select className="input" value={get('type')} onChange={(e) => set('type', e.target.value)}>
+          <select className="input" value={get('type')} onChange={(e) => set('type', e.target.value, ['category', 'subcategory', 'family', 'pack', 'item'])}>
             <option value="">All types</option>
             {ITEM_TYPES.map((t) => (
               <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>
@@ -78,9 +87,45 @@ export function StockFilterBar({
 
         {stores.length > 0 && (
           <Field label="Store">
-            <select className="input" value={get('store')} onChange={(e) => set('store', e.target.value)}>
+            <select className="input" value={get('store')} onChange={(e) => set('store', e.target.value, ['category', 'subcategory', 'family', 'pack', 'item'])}>
               <option value="">All stores</option>
               {stores.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+            </select>
+          </Field>
+        )}
+
+        {categories.length > 1 && (
+          <Field label="Category">
+            <select className="input" value={get('category')} onChange={(e) => set('category', e.target.value, ['subcategory', 'family', 'pack', 'item'])}>
+              <option value="">All categories</option>
+              {categories.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+          </Field>
+        )}
+
+        {subcategories.length > 1 && (
+          <Field label="Subcategory">
+            <select className="input" value={get('subcategory')} onChange={(e) => set('subcategory', e.target.value, ['family', 'pack', 'item'])}>
+              <option value="">All subcategories</option>
+              {subcategories.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+          </Field>
+        )}
+
+        {families.length > 1 && (
+          <Field label="Product family">
+            <select className="input" value={get('family')} onChange={(e) => set('family', e.target.value, ['pack', 'item'])}>
+              <option value="">All product families</option>
+              {families.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+          </Field>
+        )}
+
+        {packs.length > 1 && (
+          <Field label="Pack / size">
+            <select className="input" value={get('pack')} onChange={(e) => set('pack', e.target.value, ['item'])}>
+              <option value="">All packs / sizes</option>
+              {packs.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
           </Field>
         )}

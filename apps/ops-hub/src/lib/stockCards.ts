@@ -97,12 +97,23 @@ function normalise(r: StockCardRow): StockCardRow {
 }
 
 export interface PeriodBalance {
+  id: string
+  name: string
   item_id: string
   item_name: string
   sku: string
   unit: string
   item_type: string
   brand_id: string | null
+  store_id: string | null
+  canonical_name: string
+  category: string
+  product_family: string
+  size_label: string
+  package_config: string
+  pack_size: number
+  base_unit: string
+  packaging_role: string
   opening: number
   quantity_in: number
   quantity_out: number
@@ -142,16 +153,32 @@ export async function periodBalances(filter: StockCardFilter): Promise<PeriodBal
   const items = (itemRows as InventoryItemRow[] | null) ?? []
 
   const byItem = new Map<string, PeriodBalance>()
-  const ensure = (r: { item_id: string; item_name?: string; sku?: string; unit?: string; item_type?: string; brand_id?: string | null }) => {
+  const ensure = (r: {
+    item_id: string; item_name?: string; sku?: string; unit?: string; item_type?: string
+    brand_id?: string | null; store_id?: string | null; canonical_name?: string; category?: string
+    product_family?: string; size_label?: string; package_config?: string; pack_size?: number
+    base_unit?: string; packaging_role?: string
+  }) => {
     let bal = byItem.get(r.item_id)
     if (!bal) {
       bal = {
+        id: r.item_id,
+        name: r.item_name ?? '',
         item_id: r.item_id,
         item_name: r.item_name ?? '',
         sku: r.sku ?? '',
         unit: r.unit ?? '',
         item_type: r.item_type ?? '',
         brand_id: r.brand_id ?? null,
+        store_id: r.store_id ?? null,
+        canonical_name: r.canonical_name ?? '',
+        category: r.category ?? '',
+        product_family: r.product_family ?? '',
+        size_label: r.size_label ?? '',
+        package_config: r.package_config ?? '',
+        pack_size: Number(r.pack_size ?? 1),
+        base_unit: r.base_unit ?? r.unit ?? '',
+        packaging_role: r.packaging_role ?? '',
         opening: 0, quantity_in: 0, quantity_out: 0, closing: 0,
         current: 0, drift: 0, movements: 0, last_movement: null,
         unit_value_ksh: 0, value_ksh: 0,
@@ -166,7 +193,11 @@ export async function periodBalances(filter: StockCardFilter): Promise<PeriodBal
   for (const item of items) {
     const bal = ensure({
       item_id: item.id, item_name: item.name, sku: item.sku,
-      unit: item.unit, item_type: (item as { item_type?: string }).item_type, brand_id: item.brand_id,
+      unit: item.base_unit || item.unit, item_type: item.item_type, brand_id: item.brand_id,
+      store_id: item.store_id, canonical_name: item.canonical_name, category: item.category,
+      product_family: item.product_family, size_label: item.size_label,
+      package_config: item.package_config, pack_size: Number(item.pack_size ?? 1),
+      base_unit: item.base_unit || item.unit, packaging_role: item.packaging_role,
     })
     bal.current = Number(item.quantity ?? 0)
     bal.unit_value_ksh = Number(item.unit_value_ksh ?? 0)

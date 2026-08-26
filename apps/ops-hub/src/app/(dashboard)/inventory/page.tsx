@@ -5,6 +5,7 @@ import { listItems, listMovements } from '@/lib/inventory'
 import { scopeBrands } from '@/lib/finance'
 import { requireSection } from '@/lib/server-auth'
 import { OperationalDocLinks } from '@/components/forms/OperationalDocLinks'
+import { finishedGoodsQuantity } from '@/lib/finishedGoodsQuantity'
 
 export const dynamic = 'force-dynamic'
 
@@ -123,8 +124,13 @@ export default async function InventoryPage() {
                     <p className="truncate font-medium text-gray-800">{item?.name ?? 'Item'}</p>
                     <p className="text-xs text-gray-400">{m.movement_date} · {m.reason || m.source} · {m.recorded_by || '—'}</p>
                   </div>
-                  <span className={`shrink-0 font-semibold ${m.direction === 'in' ? 'text-emerald-600' : 'text-red-600'}`}>
-                    {m.direction === 'in' ? '+' : '−'}{Number(m.quantity).toLocaleString()} {item?.unit ?? ''}
+                  <span className={`shrink-0 text-right font-semibold ${m.direction === 'in' ? 'text-emerald-600' : 'text-red-600'}`}>
+                    {m.direction === 'in' ? '+' : '−'}{item?.item_type === 'finished_good'
+                      ? finishedGoodsQuantity(Number(m.quantity), Number(item.pack_size ?? 1)).totalLabel
+                      : `${Number(m.quantity).toLocaleString()} ${item?.base_unit || item?.unit || ''}`}
+                    {item?.item_type === 'finished_good' && finishedGoodsQuantity(Number(m.quantity), Number(item.pack_size ?? 1)).cartonLabel && (
+                      <span className="block text-[10px] font-normal text-gray-400">{finishedGoodsQuantity(Number(m.quantity), Number(item.pack_size ?? 1)).cartonLabel}</span>
+                    )}
                   </span>
                 </div>
               )

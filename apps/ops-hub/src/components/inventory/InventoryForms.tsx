@@ -4,8 +4,9 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowDownToLine, ArrowUpFromLine, CheckCircle2, PackagePlus } from 'lucide-react'
 import { api } from '@/lib/apiClient'
+import { finishedGoodsOptionLabel } from '@/lib/finishedGoodsQuantity'
 
-type ItemOption = { id: string; label: string; unit: string; quantity: number }
+type ItemOption = { id: string; label: string; unit: string; quantity: number; itemType: string; packSize: number }
 type Mode = 'in' | 'out' | 'item'
 
 const ITEM_TYPE_OPTIONS = [
@@ -101,7 +102,9 @@ export function InventoryForms({ brandId, items, categories = [] }: { brandId: s
           <Field label="Item *">
             <select className="input" value={values.item_id ?? ''} onChange={(e) => set('item_id', e.target.value)}>
               <option value="">Choose item</option>
-              {items.map((i) => <option key={i.id} value={i.id}>{i.label} — {i.quantity.toLocaleString()} {i.unit} in stock</option>)}
+              {items.map((i) => <option key={i.id} value={i.id}>
+                {i.label} — {i.itemType === 'finished_good' ? finishedGoodsOptionLabel(i.quantity, i.packSize) : `${i.quantity.toLocaleString()} ${i.unit}`} in stock
+              </option>)}
             </select>
           </Field>
           <Field label="Quantity *"><input type="number" min="0" step="0.01" className="input" value={values.quantity ?? ''} onChange={(e) => set('quantity', e.target.value)} /></Field>

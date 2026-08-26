@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Truck } from 'lucide-react'
 import { api } from '@/lib/apiClient'
+import { inventoryOptionStockLabel } from '@/lib/finishedGoodsQuantity'
 import { Pad, PadHeader, PadField, PadLines, PadRow, PadCell, PadFooter, StockEffectNotice } from './PadForm'
 import type { ItemOption, Identity } from './GoodsReceivedNoteForm'
 
@@ -195,7 +196,7 @@ export function DeliveryNoteForm({
                     }}>
                     <option value="">Select…</option>
                     {items.map((i) => (
-                      <option key={i.id} value={i.id}>{i.label}{i.onHand != null ? ` · ${i.onHand} ${i.unit}` : ''}</option>
+                      <option key={i.id} value={i.id}>{i.label}{i.onHand != null ? ` · ${inventoryOptionStockLabel(i)}` : ''}</option>
                     ))}
                   </select>
                 </PadCell>

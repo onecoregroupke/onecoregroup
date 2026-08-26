@@ -6,6 +6,9 @@ import { inventoryCategories } from '@/lib/brandCategories'
 import { listItems, listMovements } from '@/lib/inventory'
 import { requireSection } from '@/lib/server-auth'
 import { InventoryForms } from '@/components/inventory/InventoryForms'
+import { FinishedGoodsQuantity } from '@/components/inventory/FinishedGoodsQuantity'
+import { inventoryBreadcrumb, inventoryTaxonomy } from '@/lib/inventoryTaxonomy'
+import { finishedGoodsQuantity } from '@/lib/finishedGoodsQuantity'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,18 +35,18 @@ export default async function BrandInventoryPage({
   const canEdit = actor.can('inventory', 'edit')
   const categories = inventoryCategories(brand.slug)
 
-  // Classification summary: the brand's preset categories first, then any
-  // custom categories already in use, then uncategorised.
-  const byCategory = [...categories, ...new Set(items.map((i) => i.category).filter((c) => c && !categories.includes(c)))]
+  // The same normalized taxonomy used by Manufacturing and Stock Cards.
+  const taxonomyCategories = [...new Set(items.map((item) => inventoryTaxonomy(item).category))]
+  const byCategory = taxonomyCategories
     .map((category) => {
-      const catItems = items.filter((i) => i.category === category)
+      const catItems = items.filter((item) => inventoryTaxonomy(item).category === category)
       return {
         category,
         count: catItems.length,
         value: catItems.reduce((sum, i) => sum + Number(i.quantity) * Number(i.unit_value_ksh), 0),
       }
     })
-  const uncategorised = items.filter((i) => !i.category).length
+  const uncategorised = items.filter((item) => inventoryTaxonomy(item).category === 'Other / Unclassified').length
 
   return (
     <div className="space-y-6">
@@ -62,7 +65,10 @@ export default async function BrandInventoryPage({
       {canEdit && (
         <InventoryForms
           brandId={brand.id}
-          items={items.map((i) => ({ id: i.id, label: `${i.name}${i.sku ? ` (${i.sku})` : ''}`, unit: i.unit, quantity: Number(i.quantity) }))}
+          items={items.map((i) => ({
+            id: i.id, label: `${i.name}${i.sku ? ` (${i.sku})` : ''}`, unit: i.unit,
+            quantity: Number(i.quantity), itemType: i.item_type, packSize: Number(i.pack_size ?? 1),
+          }))}
           categories={categories}
         />
       )}
@@ -111,9 +117,11 @@ export default async function BrandInventoryPage({
                         <p className="font-medium text-gray-800">{item.name}</p>
                         {item.sku && <p className="text-xs text-gray-400">{item.sku}</p>}
                       </td>
-                      <td className="px-3 py-2.5 text-gray-500">{item.category || '—'}</td>
+                      <td className="px-3 py-2.5 text-xs text-gray-500">{inventoryBreadcrumb(item)}</td>
                       <td className="px-3 py-2.5 text-right font-medium text-gray-800">
-                        {Number(item.quantity).toLocaleString()} {item.unit}
+                        {item.item_type === 'finished_good' ? (
+                          <FinishedGoodsQuantity totalPieces={Number(item.quantity)} packSize={Number(item.pack_size ?? 1)} />
+                        ) : `${Number(item.quantity).toLocaleString()} ${item.base_unit || item.unit}`}
                       </td>
                       <td className="px-3 py-2.5 text-right text-gray-600">KSh {Number(item.unit_value_ksh).toLocaleString()}</td>
                       <td className="px-3 py-2.5 text-right text-gray-800">KSh {(Number(item.quantity) * Number(item.unit_value_ksh)).toLocaleString()}</td>
@@ -159,9 +167,9 @@ export default async function BrandInventoryPage({
                     <tr key={m.id} className="hover:bg-gray-50">
                       <td className="px-3 py-2.5 whitespace-nowrap text-gray-600">{m.movement_date}</td>
                       <td className="px-3 py-2.5 text-gray-800">{item?.name ?? '—'}</td>
-                      <td className="px-3 py-2.5 text-right font-medium text-emerald-700">{m.direction === 'in' ? Number(m.quantity).toLocaleString() : ''}</td>
-                      <td className="px-3 py-2.5 text-right font-medium text-red-700">{m.direction === 'out' ? Number(m.quantity).toLocaleString() : ''}</td>
-                      <td className="px-3 py-2.5 text-right text-gray-700">{m.quantity_after != null ? Number(m.quantity_after).toLocaleString() : '—'}</td>
+                      <td className="px-3 py-2.5 text-right font-medium text-emerald-700">{m.direction === 'in' ? quantityCell(item, Number(m.quantity)) : ''}</td>
+                      <td className="px-3 py-2.5 text-right font-medium text-red-700">{m.direction === 'out' ? quantityCell(item, Number(m.quantity)) : ''}</td>
+                      <td className="px-3 py-2.5 text-right text-gray-700">{m.quantity_after != null ? quantityCell(item, Number(m.quantity_after)) : '—'}</td>
                       <td className="px-3 py-2.5 max-w-[220px] truncate text-gray-500" title={m.reason}>{m.reason || m.source}</td>
                       <td className="px-3 py-2.5 whitespace-nowrap text-gray-500">{m.recorded_by || '—'}</td>
                     </tr>
@@ -174,4 +182,10 @@ export default async function BrandInventoryPage({
       </section>
     </div>
   )
+}
+
+function quantityCell(item: Awaited<ReturnType<typeof listItems>>[number] | undefined, quantity: number) {
+  if (item?.item_type !== 'finished_good') return quantity.toLocaleString()
+  const view = finishedGoodsQuantity(quantity, Number(item.pack_size ?? 1))
+  return <span>{view.totalLabel}{view.cartonLabel && <span className="block text-[10px] font-normal text-gray-400">{view.cartonLabel}</span>}</span>
 }

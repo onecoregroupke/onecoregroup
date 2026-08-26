@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Receipt } from 'lucide-react'
 import { api } from '@/lib/apiClient'
+import { inventoryOptionStockLabel } from '@/lib/finishedGoodsQuantity'
 import { Pad, PadHeader, PadField, PadLines, PadRow, PadCell, StockEffectNotice } from './PadForm'
 import type { ItemOption, Identity } from './GoodsReceivedNoteForm'
 
@@ -252,7 +253,7 @@ export function SalesInvoiceForm({
                     }}>
                     <option value="">No stock</option>
                     {items.map((i) => (
-                      <option key={i.id} value={i.id}>{i.label}{i.onHand != null ? ` · ${i.onHand}` : ''}</option>
+                      <option key={i.id} value={i.id}>{i.label}{i.onHand != null ? ` · ${inventoryOptionStockLabel(i)}` : ''}</option>
                     ))}
                   </select>
                 </div>

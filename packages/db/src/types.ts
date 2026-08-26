@@ -2816,6 +2816,8 @@ export interface InventoryItemRow {
   canonical_name: string
   base_unit: string
   pack_size: number
+  /** Canonical packaging function used by inventory taxonomy and BOM display (071). */
+  packaging_role: string
   purchasable: boolean
   producible: boolean
   sellable: boolean
@@ -4009,6 +4011,10 @@ export interface ProductionBomLineRow {
   wastage_percent: number
   notes: string
   active: boolean
+  /** Lines in one one_of group are alternatives; all_required lines remain mandatory. */
+  requirement_group: string
+  selection_mode: 'all_required' | 'one_of'
+  compatibility_status: 'compatible' | 'preferred' | 'approved_alternative'
   created_at: string
 }
 export type ProductionBomLineInsert =

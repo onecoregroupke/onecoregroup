@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ClipboardList } from 'lucide-react'
 import { api } from '@/lib/apiClient'
+import { inventoryOptionStockLabel } from '@/lib/finishedGoodsQuantity'
 import { Pad, PadHeader, PadField, PadLines, PadRow, PadCell, PadFooter, StockEffectNotice } from './PadForm'
 import type { ItemOption, Identity } from './GoodsReceivedNoteForm'
 
@@ -157,7 +158,7 @@ export function MaterialRequisitionForm({
                 <option value="">Not in the register</option>
                 {items.map((i) => (
                   <option key={i.id} value={i.id}>
-                    {i.label}{i.onHand != null ? ` · ${i.onHand} ${i.unit}` : ''}
+                    {i.label}{i.onHand != null ? ` · ${inventoryOptionStockLabel(i)}` : ''}
                   </option>
                 ))}
               </select>

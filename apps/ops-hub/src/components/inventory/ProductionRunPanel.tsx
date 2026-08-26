@@ -4,6 +4,8 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Plus, Factory, PackageCheck, X } from 'lucide-react'
 import { api } from '@/lib/apiClient'
+import { finishedGoodsQuantity, formatPackageConfiguration } from '@/lib/finishedGoodsQuantity'
+import type { PackagingRequirementSummary } from './StorePanel'
 
 export interface ItemOption {
   id: string
@@ -11,6 +13,9 @@ export interface ItemOption {
   unit: string
   itemType: string
   onHand: number
+  packSize: number
+  packageConfig: string
+  requirements: PackagingRequirementSummary[]
 }
 
 interface Line { item_id: string; quantity: string }
@@ -53,6 +58,12 @@ export function ProductionRunPanel({
   })
 
   const product = products.find((p) => p.id === run.product_item_id)
+  const planned = Number(run.planned_quantity || 0)
+  const requirementGroups = product?.requirements.reduce<Record<string, PackagingRequirementSummary[]>>((groups, requirement) => {
+    const key = requirement.requirementGroup || requirement.id
+    groups[key] = [...(groups[key] ?? []), requirement]
+    return groups
+  }, {}) ?? {}
 
   function reset() {
     setStep('run'); setRunId(null); setRunRef('')
@@ -186,6 +197,39 @@ export function ProductionRunPanel({
           <Field label="Notes">
             <input className="input" value={run.notes} onChange={(e) => setRun({ ...run, notes: e.target.value })} />
           </Field>
+          {product && (
+            <div className="lg:col-span-3 rounded-lg border border-emerald-100 bg-emerald-50/40 p-3">
+              <p className="text-xs font-semibold text-emerald-800">
+                {product.packageConfig ? formatPackageConfiguration(product.packageConfig) : product.unit}
+                {' · '}{finishedGoodsQuantity(product.onHand, product.packSize).totalLabel} on hand
+              </p>
+              {finishedGoodsQuantity(product.onHand, product.packSize).cartonLabel && (
+                <p className="text-[11px] text-emerald-700">{finishedGoodsQuantity(product.onHand, product.packSize).cartonLabel}</p>
+              )}
+              <p className="mt-2 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Packaging requirements</p>
+              {Object.keys(requirementGroups).length === 0 ? (
+                <p className="mt-1 text-xs text-amber-700">No active packaging compatibility has been mapped for this SKU.</p>
+              ) : (
+                <div className="mt-1 grid gap-1 sm:grid-cols-2">
+                  {Object.entries(requirementGroups).map(([group, options]) => {
+                    const oneOf = options[0]?.selectionMode === 'one_of'
+                    const capacities = options.map((option) => option.onHand / Math.max(option.quantityPerUnit, 0.00001))
+                    const available = oneOf
+                      ? capacities.reduce((sum, capacity) => sum + capacity, 0)
+                      : Math.min(...capacities)
+                    const short = planned > 0 && available < planned
+                    return (
+                      <div key={group} className={`rounded border px-2 py-1.5 text-xs ${short ? 'border-red-200 bg-red-50 text-red-700' : 'border-white bg-white/80 text-gray-600'}`}>
+                        <span className="font-medium">{options[0]?.role}</span>{oneOf ? ' · choose one compatible option' : ' · required'}
+                        <span className="block text-[11px]">{options.map((option) => `${option.componentName} (${option.onHand} ${option.unit})`).join(oneOf ? ' OR ' : ' + ')}</span>
+                        {planned > 0 && <span className="block text-[10px]">supports {Math.floor(available).toLocaleString()} finished pieces</span>}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 

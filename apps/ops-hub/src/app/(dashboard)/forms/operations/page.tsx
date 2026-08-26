@@ -118,6 +118,9 @@ export default async function OperationalFormsPage({
     label: `${i.name}${i.sku ? ` (${i.sku})` : ''}`,
     unit: i.unit,
     onHand: Number(i.quantity ?? 0),
+    itemType: i.item_type,
+    packSize: Number(i.pack_size ?? 1),
+    packageConfig: i.package_config,
   })
   const allItems = items.map(toOption)
   const finishedGoods = items.filter((i) => i.item_type === 'finished_good').map(toOption)

@@ -5,6 +5,7 @@ import {
   validateFgTransfer, expectedFromBom, reconcileMaterial, suggestProduction,
   type ProductionSuggestion,
 } from './manufacturingModel'
+import { evaluateRequirementGroups } from './packagingCompatibility'
 import type {
   InventoryItemRow, InventoryStoreRow, ProductionRunRow, ProductionRunMaterialRow,
   ProductionFgTransferRow, ProductionBomLineRow,
@@ -67,6 +68,14 @@ export async function listBom(productItemId: string): Promise<ProductionBomLineR
   return (data as ProductionBomLineRow[] | null) ?? []
 }
 
+export async function listBomForProducts(productItemIds: string[]): Promise<ProductionBomLineRow[]> {
+  if (productItemIds.length === 0) return []
+  const { data, error } = await db().from('production_bom_lines').select('*')
+    .in('product_item_id', productItemIds).eq('active', true)
+  if (error) throw new Error(error.message)
+  return (data as ProductionBomLineRow[] | null) ?? []
+}
+
 export async function setBomLine(input: {
   product_item_id: string
   component_item_id: string
@@ -74,6 +83,9 @@ export async function setBomLine(input: {
   unit?: string
   wastage_percent?: number
   notes?: string
+  requirement_group?: string
+  selection_mode?: 'all_required' | 'one_of'
+  compatibility_status?: 'compatible' | 'preferred' | 'approved_alternative'
 }): Promise<ProductionBomLineRow> {
   if (input.product_item_id === input.component_item_id) {
     throw new Error('A product cannot be a component of itself.')
@@ -95,6 +107,9 @@ export async function setBomLine(input: {
     unit: input.unit ?? '',
     wastage_percent: Number(input.wastage_percent ?? 0),
     notes: input.notes ?? '',
+    requirement_group: input.requirement_group || `component-${input.component_item_id}`,
+    selection_mode: input.selection_mode ?? 'all_required',
+    compatibility_status: input.compatibility_status ?? 'compatible',
     active: true,
   }
   const q = existing
@@ -447,7 +462,7 @@ export async function bomRequirement(productItemId: string, quantity: number) {
     Number(quantity),
   )
 
-  return lines.map((line, idx) => {
+  const lineViews = lines.map((line, idx) => {
     const component = byId.get(line.component_item_id)
     const need = expected[idx] ?? 0
     const onHand = Number(component?.quantity ?? 0)
@@ -461,4 +476,27 @@ export async function bomRequirement(productItemId: string, quantity: number) {
       shortfall: Number((onHand - need).toFixed(3)),
     }
   })
+
+  return {
+    lines: lineViews,
+    groups: evaluateRequirementGroups(
+      lines.map((line) => ({
+        ...line,
+        quantity_per_unit: Number(line.quantity_per_unit),
+        wastage_percent: Number(line.wastage_percent ?? 0),
+        requirement_group: line.requirement_group || `line:${line.id}`,
+        selection_mode: line.selection_mode || 'all_required',
+        compatibility_status: line.compatibility_status || 'compatible',
+      })),
+      [...byId.values()].map((component) => ({
+        id: component.id,
+        name: component.name,
+        quantity: Number(component.quantity ?? 0),
+        unit: component.base_unit || component.unit,
+        packaging_role: component.packaging_role,
+        is_active: component.is_active,
+      })),
+      Number(quantity),
+    ),
+  }
 }

@@ -6,7 +6,15 @@ import { PackageCheck } from 'lucide-react'
 import { api } from '@/lib/apiClient'
 import { Pad, PadHeader, PadField, PadLines, PadRow, PadCell, PadFooter, StockEffectNotice } from './PadForm'
 
-export interface ItemOption { id: string; label: string; unit: string; onHand?: number }
+export interface ItemOption {
+  id: string
+  label: string
+  unit: string
+  onHand?: number
+  itemType?: string
+  packSize?: number
+  packageConfig?: string
+}
 export interface VendorOption { id: string; label: string }
 export interface Identity { name: string; lines: string[] }
 

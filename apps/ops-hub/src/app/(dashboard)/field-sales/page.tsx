@@ -6,6 +6,7 @@ import { listTeam } from '@/lib/team'
 import { listItems } from '@/lib/inventory'
 import { scopeBrands } from '@/lib/finance'
 import { listAllocations, listDailyReturns, custodyBalances, reconcileAllocation } from '@/lib/fieldSales'
+import { finishedGoodsQuantity } from '@/lib/finishedGoodsQuantity'
 
 export const dynamic = 'force-dynamic'
 
@@ -85,7 +86,7 @@ export default async function FieldSalesPage({
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Stat label="Open delivery notes" value={String(openAllocations.length)} />
         <Stat label="Items in custody" value={String(custody.filter((c) => c.balance > 0).length)} />
-        <Stat label="Units held" value={num(custody.reduce((s, c) => s + c.balance, 0))} />
+        <Stat label="Pieces held" value={num(custody.reduce((s, c) => s + c.balance, 0))} />
         <Stat label="Value in custody" value={ksh(heldValue)} />
       </div>
 
@@ -139,14 +140,14 @@ export default async function FieldSalesPage({
                 {reconciliation.lines.map((l) => (
                   <tr key={l.itemId} className="border-b border-gray-50 last:border-0">
                     <td className="px-3 py-2 text-gray-800">{itemById.get(l.itemId)?.name ?? 'Item'}</td>
-                    <td className="px-3 py-2 text-right tabular-nums text-gray-600">{num(l.issued)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums text-gray-600">{num(l.sold)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums text-gray-600">{l.damaged ? num(l.damaged) : '—'}</td>
-                    <td className="px-3 py-2 text-right tabular-nums text-gray-600">{l.sampled ? num(l.sampled) : '—'}</td>
-                    <td className="px-3 py-2 text-right tabular-nums text-gray-600">{l.returned ? num(l.returned) : '—'}</td>
-                    <td className="px-3 py-2 text-right tabular-nums font-medium text-gray-900">{num(l.inCustody)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-gray-600">{packQuantity(itemById.get(l.itemId), l.issued)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-gray-600">{packQuantity(itemById.get(l.itemId), l.sold)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-gray-600">{l.damaged ? packQuantity(itemById.get(l.itemId), l.damaged) : '—'}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-gray-600">{l.sampled ? packQuantity(itemById.get(l.itemId), l.sampled) : '—'}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-gray-600">{l.returned ? packQuantity(itemById.get(l.itemId), l.returned) : '—'}</td>
+                    <td className="px-3 py-2 text-right tabular-nums font-medium text-gray-900">{packQuantity(itemById.get(l.itemId), l.inCustody)}</td>
                     <td className={`px-3 py-2 text-right tabular-nums font-semibold ${Math.abs(l.unaccounted) > 0.001 ? 'text-red-600' : 'text-gray-300'}`}>
-                      {Math.abs(l.unaccounted) > 0.001 ? num(l.unaccounted) : '—'}
+                      {Math.abs(l.unaccounted) > 0.001 ? packQuantity(itemById.get(l.itemId), l.unaccounted) : '—'}
                     </td>
                   </tr>
                 ))}
@@ -215,7 +216,7 @@ export default async function FieldSalesPage({
                       {' · '}issued {num(c.issued)} · sold {num(c.sold)}
                     </span>
                   </span>
-                  <span className="shrink-0 text-sm font-semibold tabular-nums text-gray-900">{num(c.balance)}</span>
+                  <span className="shrink-0 text-right text-sm font-semibold tabular-nums text-gray-900">{packQuantity(itemById.get(c.itemId), c.balance)}</span>
                 </div>
               ))}
             </div>
@@ -249,6 +250,12 @@ export default async function FieldSalesPage({
       </section>
     </div>
   )
+}
+
+function packQuantity(item: Awaited<ReturnType<typeof listItems>>[number] | undefined, quantity: number) {
+  if (item?.item_type !== 'finished_good') return num(quantity)
+  const view = finishedGoodsQuantity(quantity, Number(item.pack_size ?? 1))
+  return <span>{view.totalLabel}{view.cartonLabel && <span className="block text-[10px] font-normal text-gray-400">{view.cartonLabel}</span>}</span>
 }
 
 function Stat({ label, value, tone = 'text-gray-900', small = false }: {

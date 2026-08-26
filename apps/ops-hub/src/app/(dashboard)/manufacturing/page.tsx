@@ -4,11 +4,15 @@ import { requireSection } from '@/lib/server-auth'
 import { listBrands } from '@/lib/brands'
 import { listItems } from '@/lib/inventory'
 import { scopeBrands } from '@/lib/finance'
-import { listStores, listRuns, listFgTransfers, productionSuggestions } from '@/lib/manufacturing'
+import { listStores, listRuns, listFgTransfers, productionSuggestions, listBomForProducts } from '@/lib/manufacturing'
 import { periodBalances } from '@/lib/stockCards'
+import { inventoryHealthReport } from '@/lib/inventoryHealth'
+import { PACKAGING_ROLE_LABELS } from '@/lib/inventoryTaxonomy'
+import { finishedGoodsQuantity, formatPackageConfiguration } from '@/lib/finishedGoodsQuantity'
 import { todayInEat } from '@/lib/serverClient'
 import { ProductionRunPanel, type ItemOption } from '@/components/inventory/ProductionRunPanel'
 import { StorePanel, type StoreItem } from '@/components/inventory/StorePanel'
+import { FinishedGoodsQuantity } from '@/components/inventory/FinishedGoodsQuantity'
 import { OperationalDocLinks } from '@/components/forms/OperationalDocLinks'
 
 export const dynamic = 'force-dynamic'
@@ -62,6 +66,27 @@ export default async function ManufacturingPage({
   const rawItems = byType('raw_material')
   const packagingItems = byType('packaging')
   const finishedItems = byType('finished_good')
+  const bomLines = await listBomForProducts(finishedItems.map((item) => item.id))
+  const health = inventoryHealthReport(items, stores, bomLines)
+  const usedBy = new Map<string, string[]>()
+  const requirements = new Map<string, StoreItem['requirements']>()
+  for (const line of bomLines) {
+    const product = itemById.get(line.product_item_id)
+    const component = itemById.get(line.component_item_id)
+    if (!product || !component || component.item_type !== 'packaging') continue
+    const productLabel = `${product.product_family || product.name}${product.package_config ? ` · ${formatPackageConfiguration(product.package_config)}` : ''}`
+    usedBy.set(component.id, [...new Set([...(usedBy.get(component.id) ?? []), productLabel])])
+    requirements.set(product.id, [...(requirements.get(product.id) ?? []), {
+      id: line.id,
+      componentName: component.name,
+      role: PACKAGING_ROLE_LABELS[component.packaging_role] ?? 'Other Packaging',
+      selectionMode: line.selection_mode || 'all_required',
+      requirementGroup: line.requirement_group || line.id,
+      onHand: Number(component.quantity ?? 0),
+      unit: component.base_unit || component.unit,
+      quantityPerUnit: Number(line.quantity_per_unit ?? 1),
+    }])
+  }
 
   const toOption = (i: (typeof items)[number]): ItemOption => ({
     id: i.id,
@@ -69,6 +94,9 @@ export default async function ManufacturingPage({
     unit: i.unit,
     itemType: i.item_type,
     onHand: Number(i.quantity ?? 0),
+    packSize: Number(i.pack_size ?? 1),
+    packageConfig: i.package_config,
+    requirements: requirements.get(i.id) ?? [],
   })
 
   // Flatten to the serialisable shape the client panel renders. Stock figures
@@ -78,14 +106,26 @@ export default async function ManufacturingPage({
     return {
       id: i.id,
       name: i.name,
+      canonical_name: i.canonical_name,
       sku: i.sku ?? '',
       unit: i.unit,
+      base_unit: i.base_unit || i.unit,
+      item_type: i.item_type,
+      category: i.category,
+      product_family: i.product_family,
+      size_label: i.size_label,
+      package_config: i.package_config,
+      pack_size: Number(i.pack_size ?? 1),
+      packaging_role: i.packaging_role,
+      store_id: i.store_id,
       quantity: Number(i.quantity ?? 0),
       minimumStock: Number(i.minimum_stock ?? 0),
       reorderLevel: Number(i.reorder_level ?? 0),
       opening: bal ? bal.opening : null,
       quantityIn: bal ? bal.quantity_in : null,
       quantityOut: bal ? bal.quantity_out : null,
+      usedBy: usedBy.get(i.id) ?? [],
+      requirements: requirements.get(i.id) ?? [],
     }
   }
 
@@ -125,7 +165,7 @@ export default async function ManufacturingPage({
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Stat label="Active runs" value={String(activeRuns.length)} />
-        <Stat label="Produced this month" value={num(producedThisMonth)} tone="text-emerald-600" />
+        <Stat label="Produced this month" value={`${num(producedThisMonth)} pcs`} tone="text-emerald-600" />
         <Stat label="Finished SKUs" value={String(finishedItems.length)} />
         <Stat label="Production suggestions" value={String(suggestions.length)} tone={suggestions.length ? 'text-amber-600' : 'text-gray-900'} />
       </div>
@@ -137,6 +177,18 @@ export default async function ManufacturingPage({
             <strong>{unclassified}</strong> item{unclassified === 1 ? ' is' : 's are'} still unclassified
             (item type &ldquo;consumable&rdquo;). Classify them as raw material, packaging or finished
             good so they appear in the right store and in production planning.
+          </span>
+        </p>
+      )}
+
+      {(health.problems.packagingWithoutRole.length > 0 || health.problems.wrongStore.length > 0
+        || health.problems.invalidPackSize.length > 0) && (
+        <p className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+          <TriangleAlert size={15} className="mt-0.5 shrink-0" />
+          <span>
+            Inventory health check: {health.problems.packagingWithoutRole.length} packaging role issue(s),{' '}
+            {health.problems.wrongStore.length} store assignment issue(s), and{' '}
+            {health.problems.invalidPackSize.length} pack-size issue(s). Unclassified records stay visible for controlled cleanup.
           </span>
         </p>
       )}
@@ -158,7 +210,7 @@ export default async function ManufacturingPage({
       )}
 
       {/* ── The three stores, kept apart ───────────────────────────── */}
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid gap-4 xl:grid-cols-3">
         <StorePanel title="Raw material store" tone="raw" items={rawItems.map(toStoreItem)} />
         <StorePanel title="Packaging store" tone="packaging" items={packagingItems.map(toStoreItem)} />
         <StorePanel title="Finished goods store" tone="finished_goods" items={finishedItems.map(toStoreItem)} />
@@ -180,7 +232,10 @@ export default async function ManufacturingPage({
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium text-gray-800">{s.name}</p>
                   <p className="text-xs text-gray-400">
-                    {num(s.usableStock)} usable · shortfall {num(s.shortfall)}
+                    {(() => {
+                      const quantity = finishedGoodsQuantity(s.usableStock, Number(s.item.pack_size ?? 1))
+                      return `${quantity.totalLabel}${quantity.cartonLabel ? ` · ${quantity.cartonLabel}` : ''}`
+                    })()} usable · shortfall {num(s.shortfall)} pieces
                     {s.blocked && <span className="text-red-600"> · blocked on materials</span>}
                   </p>
                 </div>
@@ -215,11 +270,12 @@ export default async function ManufacturingPage({
                         {r.run_ref}{item ? ` · ${item.name}` : ''}
                       </p>
                       <p className="text-xs text-gray-400">
-                        planned {num(r.planned_quantity)}
-                        {r.actual_quantity > 0 && ` · made ${num(r.actual_quantity)}`}
-                        {r.rejected_quantity > 0 && ` · rejected ${num(r.rejected_quantity)}`}
+                        planned {num(r.planned_quantity)} pieces
+                        {r.actual_quantity > 0 && ` · made ${num(r.actual_quantity)} pieces`}
+                        {r.rejected_quantity > 0 && ` · rejected ${num(r.rejected_quantity)} pieces`}
                         {r.batch_number && ` · batch ${r.batch_number}`}
                       </p>
+                      {item && <FinishedGoodsQuantity totalPieces={Number(r.planned_quantity)} packSize={Number(item.pack_size ?? 1)} compact className="mt-0.5 text-[11px] text-gray-500" />}
                     </div>
                     <span className={`shrink-0 rounded px-2 py-0.5 text-[10px] font-medium capitalize ${
                       r.status === 'completed' ? 'bg-emerald-50 text-emerald-700'
@@ -246,9 +302,10 @@ export default async function ManufacturingPage({
                     <div className="min-w-0">
                       <p className="truncate font-medium text-gray-800">{t.transfer_ref}{item ? ` · ${item.name}` : ''}</p>
                       <p className="text-xs text-gray-400">
-                        made {num(t.produced_quantity)} · accepted {num(t.accepted_quantity)}
-                        {t.rejected_quantity > 0 && ` · rejected ${num(t.rejected_quantity)}`}
+                        made {num(t.produced_quantity)} pieces · accepted {num(t.accepted_quantity)} pieces
+                        {t.rejected_quantity > 0 && ` · rejected ${num(t.rejected_quantity)} pieces`}
                       </p>
+                      {item && <FinishedGoodsQuantity totalPieces={Number(t.accepted_quantity)} packSize={Number(item.pack_size ?? 1)} compact className="mt-0.5 text-[11px] text-gray-500" />}
                     </div>
                     <span className={`shrink-0 rounded px-2 py-0.5 text-[10px] font-medium ${
                       t.status === 'posted' ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'
