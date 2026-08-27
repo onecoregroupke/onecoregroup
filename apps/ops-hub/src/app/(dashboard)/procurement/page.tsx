@@ -1,8 +1,9 @@
 import Link from 'next/link'
-import { ArrowUpRight, Ban, Contact, ShoppingCart } from 'lucide-react'
+import { ArrowUpRight, Ban, ClipboardList, Contact, ShoppingCart } from 'lucide-react'
 import { listBrands } from '@/lib/brands'
 import { listItems } from '@/lib/inventory'
 import { listPurchases, listVendors } from '@/lib/procurement'
+import { listRequisitions } from '@/lib/procurementChain'
 import { scopeBrands } from '@/lib/finance'
 import { requireSection } from '@/lib/server-auth'
 import { ProcurementForms } from '@/components/procurement/ProcurementForms'
@@ -13,6 +14,10 @@ import { OperationalDocLinks } from '@/components/forms/OperationalDocLinks'
 export const dynamic = 'force-dynamic'
 
 const STATUS_STYLES: Record<string, string> = {
+  approved: 'bg-blue-50 text-blue-700',
+  partially_issued: 'bg-amber-50 text-amber-700',
+  fully_issued: 'bg-emerald-50 text-emerald-700',
+  draft: 'bg-gray-100 text-gray-500',
   ordered: 'bg-blue-50 text-blue-700',
   received: 'bg-emerald-50 text-emerald-700',
   cancelled: 'bg-red-50 text-red-500',
@@ -22,19 +27,21 @@ export default async function ProcurementPage() {
   const actor = await requireSection('procurement')
   const allowed = actor.allowedBrandIds('procurement')
   const canEdit = actor.can('procurement', 'edit')
-  const [allBrands, vendors, purchases, inventoryItems] = await Promise.all([
+  const [allBrands, vendors, purchases, inventoryItems, requisitions] = await Promise.all([
     listBrands(),
     listVendors(),
     listPurchases(allowed),
     // Inventory items feed the purchase line item picker; scope with the same
     // brand compartment so a scoped buyer only links their brand's stock.
     listItems(allowed),
+    listRequisitions({ brandIds: allowed, limit: 20 }),
   ])
   const brands = scopeBrands(allBrands, allowed)
   const brandById = new Map(allBrands.map((b) => [b.id, b]))
   const vendorById = new Map(vendors.map((v) => [v.id, v]))
 
   const openOrders = purchases.filter((p) => p.status === 'ordered')
+  const outstandingRequisitions = requisitions.filter((r) => ['approved', 'ready_for_issue', 'partially_issued'].includes(r.status))
   const totalSpend = purchases.filter((p) => p.status !== 'cancelled').reduce((sum, p) => sum + Number(p.total_cost_ksh), 0)
 
   return (
@@ -48,9 +55,10 @@ export default async function ProcurementPage() {
         </p>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-4">
         <Stat label="Purchases recorded" value={purchases.length} />
         <Stat label="Awaiting delivery" value={openOrders.length} tone={openOrders.length ? 'text-amber-600' : 'text-gray-900'} />
+        <Stat label="MRFs awaiting issue" value={outstandingRequisitions.length} tone={outstandingRequisitions.length ? 'text-amber-600' : 'text-gray-900'} />
         <Stat label="Total spend" value={totalSpend} money />
       </div>
 
@@ -75,6 +83,47 @@ export default async function ProcurementPage() {
           inventoryItems={inventoryItems.map((i) => ({ id: i.id, brandId: i.brand_id, label: `${i.name}${i.sku ? ` (${i.sku})` : ''}` }))}
         />
       )}
+
+      <section className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-ocg-gold">Material requisitions</h2>
+            <p className="mt-1 text-sm text-gray-500">Open an approved MRF to raise or continue its goods/raw material issue note.</p>
+          </div>
+          <ClipboardList size={18} className="text-gray-400" />
+        </div>
+        {requisitions.length === 0 ? (
+          <p className="rounded-lg bg-gray-50 p-3 text-sm text-gray-500">No material requisitions raised yet.</p>
+        ) : (
+          <div className="grid gap-2 lg:grid-cols-2">
+            {requisitions.map((req) => {
+              const brand = brandById.get(req.brand_id)
+              return (
+                <Link
+                  key={req.id}
+                  href={`/procurement/requisitions/${req.id}`}
+                  className="rounded-lg border border-gray-100 p-3 transition-colors hover:border-ocg-gold/40"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <p className="font-medium text-gray-900">
+                        <span className="mr-1.5 inline-block h-2 w-2 rounded-full" style={{ backgroundColor: brand?.color_hex ?? '#ccc' }} />
+                        {req.reference ?? 'MRF draft'}
+                      </p>
+                      <p className="mt-0.5 text-xs text-gray-400">
+                        {brand?.short_name ?? 'Brand'} · {req.department || 'No department'} · {req.requested_by_name || req.requested_by}
+                      </p>
+                    </div>
+                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${STATUS_STYLES[req.status] ?? 'bg-gray-100 text-gray-500'}`}>
+                      {req.status.replace(/_/g, ' ')}
+                    </span>
+                  </div>
+                </Link>
+              )
+            })}
+          </div>
+        )}
+      </section>
 
       <div className="grid gap-6 xl:grid-cols-[1.25fr_0.75fr]">
         <section className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">

@@ -2,9 +2,11 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   canApproveRequisition,
+  canCreateIssueForRequisition,
   canPostToStock,
   deriveRequisitionStatus,
   isRequisitionEditable,
+  requisitionRemaining,
   receiptLineVariance,
   stockableReceiptQuantity,
   validateIssueLine,
@@ -98,6 +100,41 @@ test('issuing part then all moves through partially_issued to fully_issued', () 
   )
 })
 
+test('50 approved, issue 30 leaves 20 and partially issued', () => {
+  assert.equal(requisitionRemaining({ approved: 50, issued: 30 }), 20)
+  assert.equal(
+    deriveRequisitionStatus([{ requested: 50, approved: 50, issued: 30 }], 'issue'),
+    'partially_issued',
+  )
+})
+
+test('second issue 20 leaves 0 and fully issued', () => {
+  assert.equal(requisitionRemaining({ approved: 50, issued: 50 }), 0)
+  assert.equal(
+    deriveRequisitionStatus([{ requested: 50, approved: 50, issued: 50 }], 'issue'),
+    'fully_issued',
+  )
+})
+
+test('a fully issued requisition cannot generate a further issue', () => {
+  const result = canCreateIssueForRequisition({
+    status: 'fully_issued',
+    lines: [{ requested: 50, approved: 50, issued: 50 }],
+  })
+  assert.equal(result.ok, false)
+  assert.match(result.reason ?? '', /approved requisition/)
+})
+
+test('an approved requisition with remaining material can generate an issue note', () => {
+  assert.equal(
+    canCreateIssueForRequisition({
+      status: 'approved',
+      lines: [{ requested: 50, approved: 50, issued: 30 }],
+    }).ok,
+    true,
+  )
+})
+
 // ─── Receipt quantities ─────────────────────────────────────────────────────
 
 test('delivered must equal accepted plus rejected', () => {
@@ -160,6 +197,12 @@ test('cannot issue more than was approved', () => {
   assert.match(result.reason ?? '', /only 10 was approved/)
 })
 
+test('cannot issue more than remains on the requisition', () => {
+  const result = validateIssueLine({ quantity_approved: 50, quantity_issued: 21, remaining: 20 })
+  assert.equal(result.ok, false)
+  assert.match(result.reason ?? '', /only 20 remains/)
+})
+
 test('cannot issue more than is physically in stock', () => {
   const result = validateIssueLine({ quantity_approved: 10, quantity_issued: 8, available: 5 })
   assert.equal(result.ok, false)
@@ -168,6 +211,10 @@ test('cannot issue more than is physically in stock', () => {
 
 test('issuing exactly what was approved and available is fine', () => {
   assert.equal(validateIssueLine({ quantity_approved: 10, quantity_issued: 10, available: 10 }).ok, true)
+})
+
+test('zero issue quantity is invalid', () => {
+  assert.equal(validateIssueLine({ quantity_approved: 10, quantity_issued: 0, available: 10 }).ok, false)
 })
 
 // ─── Once-only posting ──────────────────────────────────────────────────────

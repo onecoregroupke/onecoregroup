@@ -70,6 +70,22 @@ export interface RequisitionLineTotals {
   issued: number
 }
 
+export function requisitionRemaining(line: { approved: number; issued: number }): number {
+  return Math.max(0, round2(line.approved - line.issued))
+}
+
+export function canCreateIssueForRequisition(input: {
+  status: string
+  lines: RequisitionLineTotals[]
+}): { ok: boolean; reason?: string } {
+  if (!['approved', 'ready_for_issue', 'partially_issued'].includes(input.status)) {
+    return { ok: false, reason: 'Only an approved requisition with outstanding material can be issued.' }
+  }
+  const outstanding = input.lines.some((line) => requisitionRemaining({ approved: line.approved, issued: line.issued }) > 0)
+  if (!outstanding) return { ok: false, reason: 'This requisition has already been fully issued.' }
+  return { ok: true }
+}
+
 /**
  * Derive the requisition's status from its lines after an approval or issue.
  * Nothing here touches stock — that is the point.
@@ -143,12 +159,19 @@ export interface IssueLineQuantities {
   quantity_issued: number
   /** Stock on hand for this item at the moment of issue. */
   available?: number
+  remaining?: number
 }
 
 /** Issued may never exceed what was approved, nor what is physically in stock. */
 export function validateIssueLine(line: IssueLineQuantities): { ok: boolean; reason?: string } {
-  if (!Number.isFinite(line.quantity_issued) || line.quantity_issued < 0) {
-    return { ok: false, reason: 'Issued quantity cannot be negative.' }
+  if (!Number.isFinite(line.quantity_issued) || line.quantity_issued <= 0) {
+    return { ok: false, reason: 'Issued quantity must be greater than zero.' }
+  }
+  if (line.remaining !== undefined && round2(line.quantity_issued) > round2(line.remaining)) {
+    return {
+      ok: false,
+      reason: `Cannot issue ${line.quantity_issued} — only ${line.remaining} remains on the requisition.`,
+    }
   }
   if (line.quantity_approved > 0 && round2(line.quantity_issued) > round2(line.quantity_approved)) {
     return {

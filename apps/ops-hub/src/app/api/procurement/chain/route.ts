@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { getApiActor } from '@/lib/api-auth'
 import {
   approveRequisition,
+  createIssueFromRequisition,
   createGoodsIssue,
   createGoodsReceipt,
   createRequisition,
@@ -10,6 +11,7 @@ import {
   getGoodsReceipt,
   getGoodsReceiptItems,
   getRequisition,
+  getRequisitionIssueDetail,
   getRequisitionItems,
   listGoodsIssues,
   listGoodsReceipts,
@@ -17,6 +19,7 @@ import {
   postGoodsIssue,
   postGoodsReceipt,
   submitRequisition,
+  updateGoodsIssue,
   updateGoodsReceipt,
   updateRequisition,
   type ChainActor,
@@ -63,6 +66,14 @@ export async function GET(req: NextRequest) {
           return NextResponse.json({ ok: false, error: 'not found' }, { status: 404 })
         }
         return NextResponse.json({ ok: true, requisition, items: await getRequisitionItems(requisition.id) })
+      }
+
+      case 'requisition-issue-detail': {
+        const detail = await getRequisitionIssueDetail(id)
+        if (!detail || !inScope(detail.requisition.brand_id, brandIds)) {
+          return NextResponse.json({ ok: false, error: 'not found' }, { status: 404 })
+        }
+        return NextResponse.json({ ok: true, ...detail })
       }
 
       case 'receipts':
@@ -130,12 +141,15 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: true, requisition: await createRequisition(values, me) }, { status: 201 })
 
       case 'update-requisition':
+        await assertRequisitionScope(String(body?.id ?? ''), brandIds)
         return NextResponse.json({ ok: true, requisition: await updateRequisition(String(body?.id ?? ''), values) })
 
       case 'submit-requisition':
+        await assertRequisitionScope(String(body?.id ?? ''), brandIds)
         return NextResponse.json({ ok: true, requisition: await submitRequisition(String(body?.id ?? ''), me) })
 
       case 'approve-requisition':
+        await assertRequisitionScope(String(body?.id ?? ''), brandIds)
         return NextResponse.json({
           ok: true,
           requisition: await approveRequisition({
@@ -164,7 +178,25 @@ export async function POST(req: NextRequest) {
       case 'create-issue':
         return NextResponse.json({ ok: true, issue: await createGoodsIssue(values, me) }, { status: 201 })
 
+      case 'create-issue-from-requisition': {
+        await assertRequisitionScope(String(body?.id ?? values.requisition_id ?? ''), brandIds)
+        return NextResponse.json({
+          ok: true,
+          issue: await createIssueFromRequisition({
+            requisition_id: String(body?.id ?? values.requisition_id ?? ''),
+            source_store_id: values.source_store_id ? String(values.source_store_id) : null,
+            issue_date: values.issue_date ? String(values.issue_date) : undefined,
+            actor: me,
+          }),
+        }, { status: 201 })
+      }
+
+      case 'update-issue':
+        await assertIssueScope(String(body?.id ?? ''), brandIds)
+        return NextResponse.json({ ok: true, issue: await updateGoodsIssue(String(body?.id ?? ''), values) })
+
       case 'post-issue': {
+        await assertIssueScope(String(body?.id ?? ''), brandIds)
         const result = await postGoodsIssue(String(body?.id ?? ''), me)
         return NextResponse.json({ ok: true, issue: result.issue, movements: result.movementsCreated })
       }
@@ -181,4 +213,14 @@ function inScope(brandId: string | null, brandIds: string[] | null): boolean {
   if (brandIds === null) return true
   if (!brandId) return true
   return brandIds.includes(brandId)
+}
+
+async function assertRequisitionScope(id: string, brandIds: string[] | null) {
+  const requisition = await getRequisition(id)
+  if (!requisition || !inScope(requisition.brand_id, brandIds)) throw new Error('Requisition not found or outside your scope.')
+}
+
+async function assertIssueScope(id: string, brandIds: string[] | null) {
+  const issue = await getGoodsIssue(id)
+  if (!issue || !inScope(issue.brand_id, brandIds)) throw new Error('Issue note not found or outside your scope.')
 }

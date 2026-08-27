@@ -3,9 +3,11 @@ import { auditEvent } from './audit'
 import { recordStockMovement } from './inventory'
 import {
   canApproveRequisition,
+  canCreateIssueForRequisition,
   canPostToStock,
   deriveRequisitionStatus,
   isRequisitionEditable,
+  requisitionRemaining,
   stockableReceiptQuantity,
   validateIssueLine,
   validateReceiptLine,
@@ -18,6 +20,7 @@ import type {
   ProcurementGoodsReceiptRow,
   ProcurementRequisitionItemRow,
   ProcurementRequisitionRow,
+  InventoryStoreRow,
 } from '@ocg/db'
 
 // =============================================================================
@@ -53,6 +56,56 @@ export async function getRequisitionItems(requisitionId: string): Promise<Procur
     .eq('requisition_id', requisitionId)
     .order('sort_order', { ascending: true })
   return (data as ProcurementRequisitionItemRow[] | null) ?? []
+}
+
+export interface RequisitionIssueLine extends ProcurementRequisitionItemRow {
+  issued_to_date: number
+  remaining_to_issue: number
+  inventory_item: InventoryItemRow | null
+}
+
+export interface RequisitionIssueDetail {
+  requisition: ProcurementRequisitionRow
+  items: RequisitionIssueLine[]
+  issues: ProcurementGoodsIssueRow[]
+  issueItems: ProcurementGoodsIssueItemRow[]
+}
+
+export async function getRequisitionIssueDetail(requisitionId: string): Promise<RequisitionIssueDetail | null> {
+  const requisition = await getRequisition(requisitionId)
+  if (!requisition) return null
+  const [items, issues] = await Promise.all([
+    getRequisitionItems(requisition.id),
+    listGoodsIssues({ requisitionId: requisition.id, limit: 200 }),
+  ])
+  const issueIds = issues.map((issue) => issue.id)
+  const issueItems = issueIds.length > 0
+    ? await getGoodsIssueItemsForIssues(issueIds)
+    : []
+  const issuedByLine = issuedToDateByRequisitionLine(items, issues, issueItems)
+  const itemIds = items.map((item) => item.inventory_item_id).filter(Boolean) as string[]
+  const inventoryById = new Map<string, InventoryItemRow>()
+  if (itemIds.length > 0) {
+    const { data } = await db().from('inventory_items').select('*').in('id', itemIds)
+    for (const row of (data as InventoryItemRow[] | null) ?? []) inventoryById.set(row.id, row)
+  }
+  return {
+    requisition,
+    issues,
+    issueItems,
+    items: items.map((item) => {
+      const issued = issuedByLine.get(item.id) ?? 0
+      return {
+        ...item,
+        quantity_requested: Number(item.quantity_requested),
+        quantity_approved: Number(item.quantity_approved),
+        quantity_issued: Number(item.quantity_issued),
+        issued_to_date: issued,
+        remaining_to_issue: requisitionRemaining({ approved: Number(item.quantity_approved), issued }),
+        inventory_item: item.inventory_item_id ? inventoryById.get(item.inventory_item_id) ?? null : null,
+      }
+    }),
+  }
 }
 
 export async function listRequisitions(
@@ -513,7 +566,7 @@ export async function getGoodsIssueItems(issueId: string): Promise<ProcurementGo
 }
 
 export async function listGoodsIssues(
-  opts: { brandIds?: string[] | null; kind?: string; status?: string; limit?: number } = {},
+  opts: { brandIds?: string[] | null; kind?: string; status?: string; requisitionId?: string; limit?: number } = {},
 ): Promise<ProcurementGoodsIssueRow[]> {
   let q = db()
     .from('procurement_goods_issues')
@@ -522,9 +575,20 @@ export async function listGoodsIssues(
     .limit(opts.limit ?? 200)
   if (opts.kind) q = q.eq('kind', opts.kind)
   if (opts.status) q = q.eq('status', opts.status)
+  if (opts.requisitionId) q = q.eq('requisition_id', opts.requisitionId)
   if (opts.brandIds && opts.brandIds.length > 0) q = q.in('brand_id', opts.brandIds)
   const { data } = await q
   return (data as ProcurementGoodsIssueRow[] | null) ?? []
+}
+
+async function getGoodsIssueItemsForIssues(issueIds: string[]): Promise<ProcurementGoodsIssueItemRow[]> {
+  if (issueIds.length === 0) return []
+  const { data } = await db()
+    .from('procurement_goods_issue_items')
+    .select('*')
+    .in('issue_id', issueIds)
+    .order('sort_order', { ascending: true })
+  return (data as ProcurementGoodsIssueItemRow[] | null) ?? []
 }
 
 export interface IssueItemInput {
@@ -545,11 +609,14 @@ export async function createGoodsIssue(
 ): Promise<ProcurementGoodsIssueRow> {
   if (!input.brand_id) throw new Error('Pick the brand issuing these goods.')
   const { items, ...header } = input
+  const kind = header.kind === 'transfer' ? 'transfer' : 'issue'
+  const reference = header.reference ?? (await mintReference(kind === 'transfer' ? 'goods_transfer' : 'goods_issue', kind === 'transfer' ? 'GTN-' : 'GIN-'))
   const { data, error } = await db()
     .from('procurement_goods_issues')
     .insert({
       ...header,
-      kind: header.kind === 'transfer' ? 'transfer' : 'issue',
+      kind,
+      reference,
       issued_by: header.issued_by || actor.name,
       issued_by_email: header.issued_by_email || actor.email,
       status: 'draft',
@@ -561,6 +628,88 @@ export async function createGoodsIssue(
   const issue = data as ProcurementGoodsIssueRow
   await replaceIssueItems(issue.id, items ?? [])
   return issue
+}
+
+export async function createIssueFromRequisition(input: {
+  requisition_id: string
+  source_store_id?: string | null
+  issue_date?: string
+  actor: ChainActor
+}): Promise<ProcurementGoodsIssueRow> {
+  const detail = await getRequisitionIssueDetail(input.requisition_id)
+  if (!detail) throw new Error('Requisition not found')
+
+  const check = canCreateIssueForRequisition({
+    status: detail.requisition.status,
+    lines: detail.items.map((item) => ({
+      requested: Number(item.quantity_requested),
+      approved: Number(item.quantity_approved),
+      issued: item.issued_to_date,
+    })),
+  })
+  if (!check.ok) throw new Error(check.reason ?? 'This requisition cannot be issued.')
+
+  const existingDraft = detail.issues.find((issue) => issue.kind === 'issue' && issue.status === 'draft')
+  if (existingDraft) return existingDraft
+
+  const remaining = detail.items.filter((item) => item.remaining_to_issue > 0)
+  if (remaining.length === 0) throw new Error('This requisition has no remaining approved quantity to issue.')
+
+  const sourceStoreId = input.source_store_id || commonStoreId(remaining.map((item) => item.inventory_item)) || null
+  const store = sourceStoreId ? await getStore(sourceStoreId) : null
+  if (sourceStoreId && !store) throw new Error('Source store not found.')
+  if (store?.brand_id && store.brand_id !== detail.requisition.brand_id) {
+    throw new Error('The selected source store does not belong to this requisition brand.')
+  }
+
+  return createGoodsIssue({
+    kind: 'issue',
+    brand_id: detail.requisition.brand_id,
+    requisition_id: detail.requisition.id,
+    issue_date: input.issue_date,
+    issued_to_type: 'department',
+    issued_to_label: detail.requisition.department || detail.requisition.requested_by_name,
+    department: detail.requisition.department,
+    purpose: detail.requisition.purpose,
+    source_store_id: sourceStoreId,
+    store_location: store?.name ?? '',
+    issued_by: input.actor.name,
+    issued_by_email: input.actor.email,
+    created_by: input.actor.email,
+    items: remaining.map((item) => ({
+      requisition_item_id: item.id,
+      inventory_item_id: item.inventory_item_id,
+      description: item.description || item.inventory_item?.name || '',
+      unit: item.unit,
+      quantity_approved: item.remaining_to_issue,
+      quantity_issued: 0,
+      store_location: store?.name ?? item.inventory_item?.location ?? '',
+    })),
+  }, input.actor)
+}
+
+export async function updateGoodsIssue(
+  id: string,
+  patch: Partial<ProcurementGoodsIssueRow> & { items?: IssueItemInput[] },
+): Promise<ProcurementGoodsIssueRow> {
+  const existing = await getGoodsIssue(id)
+  if (!existing) throw new Error('Issue note not found')
+  if (existing.status !== 'draft') {
+    throw new Error('A posted issue note cannot be edited — raise a correcting document instead.')
+  }
+  const { items, ...header } = patch
+  if (items !== undefined) {
+    await validateIssueItemsAgainstRequisition(existing, items)
+  }
+  const { data, error } = await db()
+    .from('procurement_goods_issues')
+    .update({ ...header, updated_at: nowIso() })
+    .eq('id', id)
+    .select('*')
+    .single()
+  if (error) throw new Error(error.message)
+  if (items !== undefined) await replaceIssueItems(id, items)
+  return data as ProcurementGoodsIssueRow
 }
 
 async function replaceIssueItems(issueId: string, items: IssueItemInput[]): Promise<void> {
@@ -585,6 +734,27 @@ async function replaceIssueItems(issueId: string, items: IssueItemInput[]): Prom
   if (error) throw new Error(error.message)
 }
 
+async function validateIssueItemsAgainstRequisition(issue: ProcurementGoodsIssueRow, items: IssueItemInput[]): Promise<void> {
+  if (!issue.requisition_id) return
+  const detail = await getRequisitionIssueDetail(issue.requisition_id)
+  if (!detail) throw new Error('Originating requisition not found.')
+  const remainingByLine = new Map(detail.items.map((item) => [item.id, item.remaining_to_issue]))
+  for (const line of items) {
+    if (!line.requisition_item_id) continue
+    const quantity = Number(line.quantity_issued ?? 0)
+    if (quantity < 0) throw new Error(`${line.description || 'Line'}: Issued quantity cannot be negative.`)
+    const remaining = remainingByLine.get(line.requisition_item_id) ?? 0
+    if (quantity > 0) {
+      const check = validateIssueLine({
+        quantity_approved: Number(line.quantity_approved ?? remaining),
+        quantity_issued: quantity,
+        remaining,
+      })
+      if (!check.ok) throw new Error(`${line.description || 'Line'}: ${check.reason}`)
+    }
+  }
+}
+
 /**
  * Finalise an issue note: this is the moment stock actually leaves. Validates
  * every line against what was approved and what is on hand, then posts exactly
@@ -603,6 +773,9 @@ export async function postGoodsIssue(
 
   const items = await getGoodsIssueItems(issue.id)
   if (items.length === 0) throw new Error('Add at least one line before issuing.')
+  if (!items.some((line) => Number(line.quantity_issued) > 0)) {
+    throw new Error('Enter at least one issued quantity greater than zero.')
+  }
 
   if (issue.kind === 'transfer') {
     if (!issue.source_store_id || !issue.destination_store_id) {
@@ -627,6 +800,7 @@ export async function postGoodsIssue(
     const { data } = await db().from('inventory_items').select('*').in('id', itemIds)
     for (const row of (data as InventoryItemRow[] | null) ?? []) stockById.set(row.id, row)
   }
+  const remainingByLine = issue.requisition_id ? await remainingByRequisitionLine(issue.requisition_id) : new Map<string, number>()
   for (const line of items) {
     if (Number(line.quantity_issued) <= 0) continue
     if (!line.inventory_item_id) {
@@ -635,6 +809,7 @@ export async function postGoodsIssue(
     const check = validateIssueLine({
       quantity_approved: Number(line.quantity_approved),
       quantity_issued: Number(line.quantity_issued),
+      remaining: line.requisition_item_id ? (remainingByLine.get(line.requisition_item_id) ?? 0) : undefined,
       available: Number(stockById.get(line.inventory_item_id)?.quantity ?? 0),
     })
     if (!check.ok) throw new Error(`${line.description}: ${check.reason}`)
@@ -681,18 +856,6 @@ export async function postGoodsIssue(
       movementsCreated += 1
     }
 
-    if (line.requisition_item_id) {
-      const { data: reqItem } = await db()
-        .from('procurement_requisition_items')
-        .select('*')
-        .eq('id', line.requisition_item_id)
-        .maybeSingle()
-      const current = Number((reqItem as ProcurementRequisitionItemRow | null)?.quantity_issued ?? 0)
-      await db()
-        .from('procurement_requisition_items')
-        .update({ quantity_issued: current + quantity })
-        .eq('id', line.requisition_item_id)
-    }
   }
 
   const now = nowIso()
@@ -720,6 +883,7 @@ export async function postGoodsIssue(
 }
 
 async function refreshRequisitionIssueStatus(requisitionId: string): Promise<void> {
+  await syncRequisitionIssuedQuantities(requisitionId)
   const items = await getRequisitionItems(requisitionId)
   const status = deriveRequisitionStatus(
     items.map((i) => ({
@@ -733,4 +897,51 @@ async function refreshRequisitionIssueStatus(requisitionId: string): Promise<voi
     .from('procurement_requisitions')
     .update({ status, updated_at: nowIso() })
     .eq('id', requisitionId)
+}
+
+async function syncRequisitionIssuedQuantities(requisitionId: string): Promise<void> {
+  const items = await getRequisitionItems(requisitionId)
+  const issued = await issuedToDateForRequisition(requisitionId)
+  await Promise.all(items.map((item) => db()
+    .from('procurement_requisition_items')
+    .update({ quantity_issued: issued.get(item.id) ?? 0 })
+    .eq('id', item.id)))
+}
+
+async function remainingByRequisitionLine(requisitionId: string): Promise<Map<string, number>> {
+  const detail = await getRequisitionIssueDetail(requisitionId)
+  if (!detail) return new Map()
+  return new Map(detail.items.map((item) => [item.id, item.remaining_to_issue]))
+}
+
+async function issuedToDateForRequisition(requisitionId: string): Promise<Map<string, number>> {
+  const issues = await listGoodsIssues({ requisitionId, limit: 500 })
+  const issueItems = issues.length > 0 ? await getGoodsIssueItemsForIssues(issues.map((issue) => issue.id)) : []
+  const requisitionItems = await getRequisitionItems(requisitionId)
+  return issuedToDateByRequisitionLine(requisitionItems, issues, issueItems)
+}
+
+function issuedToDateByRequisitionLine(
+  requisitionItems: ProcurementRequisitionItemRow[],
+  issues: ProcurementGoodsIssueRow[],
+  issueItems: ProcurementGoodsIssueItemRow[],
+): Map<string, number> {
+  const posted = new Set(issues.filter((issue) => issue.status === 'posted').map((issue) => issue.id))
+  const ids = new Set(requisitionItems.map((item) => item.id))
+  const out = new Map<string, number>()
+  for (const line of issueItems) {
+    if (!line.requisition_item_id || !ids.has(line.requisition_item_id) || !posted.has(line.issue_id)) continue
+    out.set(line.requisition_item_id, Number(((out.get(line.requisition_item_id) ?? 0) + Number(line.quantity_issued ?? 0)).toFixed(2)))
+  }
+  return out
+}
+
+async function getStore(id: string): Promise<InventoryStoreRow | null> {
+  const { data } = await db().from('inventory_stores').select('*').eq('id', id).maybeSingle()
+  return (data as InventoryStoreRow | null) ?? null
+}
+
+function commonStoreId(items: Array<InventoryItemRow | null>): string | null {
+  const ids = [...new Set(items.map((item) => item?.store_id).filter(Boolean) as string[])]
+  return ids.length === 1 ? ids[0]! : null
 }
