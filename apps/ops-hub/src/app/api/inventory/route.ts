@@ -32,6 +32,8 @@ export async function POST(req: NextRequest) {
         unit: (values.unit as string) ?? 'pcs',
         quantity: Number(values.quantity ?? 0),
         unit_value_ksh: Number(values.unit_value_ksh ?? 0),
+        selling_price_ksh: Number(values.selling_price_ksh ?? 0),
+        wholesale_price_ksh: Number(values.wholesale_price_ksh ?? 0),
         reorder_level: Number(values.reorder_level ?? 0),
         location: (values.location as string) ?? '',
         notes: (values.notes as string) ?? '',

@@ -142,7 +142,9 @@ export function InventoryForms({ brandId, items, categories = [] }: { brandId: s
             </select>
           </Field>
           <Field label="Opening quantity"><input type="number" min="0" step="0.01" className="input" value={values.quantity ?? ''} onChange={(e) => set('quantity', e.target.value)} /></Field>
-          <Field label="Unit value (KSh)"><input type="number" min="0" step="0.01" className="input" value={values.unit_value_ksh ?? ''} onChange={(e) => set('unit_value_ksh', e.target.value)} /></Field>
+          <Field label="Reference cost (KSh)"><input type="number" min="0" step="0.01" className="input" value={values.unit_value_ksh ?? ''} onChange={(e) => set('unit_value_ksh', e.target.value)} /></Field>
+          <Field label="Retail price (KSh)"><input type="number" min="0" step="0.01" className="input" value={values.selling_price_ksh ?? ''} onChange={(e) => set('selling_price_ksh', e.target.value)} /></Field>
+          <Field label="Wholesale price (KSh)"><input type="number" min="0" step="0.01" className="input" value={values.wholesale_price_ksh ?? ''} onChange={(e) => set('wholesale_price_ksh', e.target.value)} /></Field>
           <Field label="Reorder level"><input type="number" min="0" step="0.01" className="input" value={values.reorder_level ?? ''} onChange={(e) => set('reorder_level', e.target.value)} /></Field>
           <Field label="Location"><input className="input" placeholder="Store, Classroom 2…" value={values.location ?? ''} onChange={(e) => set('location', e.target.value)} /></Field>
         </div>

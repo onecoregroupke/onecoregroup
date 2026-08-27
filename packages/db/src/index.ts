@@ -105,6 +105,7 @@ export type {
   OpsAttendanceRecordRow,
   InventoryItemRow,
   InventoryMovementRow,
+  InventoryPriceHistoryRow,
   InventoryItemAliasRow,
   ProcurementVendorRow,
   ProcurementPurchaseRow,

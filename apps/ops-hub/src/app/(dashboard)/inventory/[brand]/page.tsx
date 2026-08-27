@@ -31,7 +31,13 @@ export default async function BrandInventoryPage({
     listMovements(allowed, { brandId: brand.id, limit: 40 }),
   ])
   const itemById = new Map(items.map((i) => [i.id, i]))
-  const totalValue = items.reduce((sum, i) => sum + Number(i.quantity) * Number(i.unit_value_ksh), 0)
+  const referenceCostValue = items.reduce((sum, i) => sum + Number(i.quantity) * Number(i.unit_value_ksh), 0)
+  const retailSalesValue = items
+    .filter((i) => i.item_type === 'finished_good')
+    .reduce((sum, i) => sum + Number(i.quantity) * Number(i.selling_price_ksh), 0)
+  const wholesaleSalesValue = items
+    .filter((i) => i.item_type === 'finished_good')
+    .reduce((sum, i) => sum + Number(i.quantity) * Number(i.wholesale_price_ksh), 0)
   const canEdit = actor.can('inventory', 'edit')
   const categories = inventoryCategories(brand.slug)
 
@@ -58,7 +64,11 @@ export default async function BrandInventoryPage({
         <span className="h-4 w-4 rounded-full" style={{ backgroundColor: brand.color_hex }} />
         <div>
           <h1 className="text-2xl font-semibold text-gray-900">{brand.name} inventory</h1>
-          <p className="text-sm text-gray-500">{items.length} items · total value KSh {totalValue.toLocaleString()}</p>
+          <p className="text-sm text-gray-500">
+            {items.length} items · reference cost value KSh {referenceCostValue.toLocaleString()}
+            {retailSalesValue > 0 && ` · retail sales value KSh ${retailSalesValue.toLocaleString()}`}
+            {wholesaleSalesValue > 0 && ` · wholesale sales value KSh ${wholesaleSalesValue.toLocaleString()}`}
+          </p>
         </div>
       </div>
 
@@ -102,8 +112,8 @@ export default async function BrandInventoryPage({
                   <th className="px-3 py-2">Item</th>
                   <th className="px-3 py-2">Category</th>
                   <th className="px-3 py-2 text-right">In stock</th>
-                  <th className="px-3 py-2 text-right">Unit value</th>
-                  <th className="px-3 py-2 text-right">Total value</th>
+                  <th className="px-3 py-2 text-right">Reference / prices</th>
+                  <th className="px-3 py-2 text-right">Estimated value</th>
                   <th className="px-3 py-2">Location</th>
                   <th className="px-3 py-2"></th>
                 </tr>
@@ -123,8 +133,8 @@ export default async function BrandInventoryPage({
                           <FinishedGoodsQuantity totalPieces={Number(item.quantity)} packSize={Number(item.pack_size ?? 1)} />
                         ) : `${Number(item.quantity).toLocaleString()} ${item.base_unit || item.unit}`}
                       </td>
-                      <td className="px-3 py-2.5 text-right text-gray-600">KSh {Number(item.unit_value_ksh).toLocaleString()}</td>
-                      <td className="px-3 py-2.5 text-right text-gray-800">KSh {(Number(item.quantity) * Number(item.unit_value_ksh)).toLocaleString()}</td>
+                      <td className="px-3 py-2.5 text-right text-gray-600">{priceCell(item)}</td>
+                      <td className="px-3 py-2.5 text-right text-gray-800">{valueCell(item)}</td>
                       <td className="px-3 py-2.5 text-gray-500">{item.location || '—'}</td>
                       <td className="px-3 py-2.5 text-right">
                         {low && (
@@ -188,4 +198,27 @@ function quantityCell(item: Awaited<ReturnType<typeof listItems>>[number] | unde
   if (item?.item_type !== 'finished_good') return quantity.toLocaleString()
   const view = finishedGoodsQuantity(quantity, Number(item.pack_size ?? 1))
   return <span>{view.totalLabel}{view.cartonLabel && <span className="block text-[10px] font-normal text-gray-400">{view.cartonLabel}</span>}</span>
+}
+
+function priceCell(item: Awaited<ReturnType<typeof listItems>>[number]) {
+  if (item.item_type !== 'finished_good') return <span>Ref cost KSh {Number(item.unit_value_ksh).toLocaleString()}</span>
+  return (
+    <span>
+      Retail KSh {Number(item.selling_price_ksh).toLocaleString()}
+      <span className="block text-[10px] text-gray-400">Wholesale KSh {Number(item.wholesale_price_ksh).toLocaleString()}</span>
+      {Number(item.unit_value_ksh) > 0 && <span className="block text-[10px] text-gray-400">Cost KSh {Number(item.unit_value_ksh).toLocaleString()}</span>}
+    </span>
+  )
+}
+
+function valueCell(item: Awaited<ReturnType<typeof listItems>>[number]) {
+  const qty = Number(item.quantity)
+  if (item.item_type !== 'finished_good') return <span>Stock KSh {(qty * Number(item.unit_value_ksh)).toLocaleString()}</span>
+  return (
+    <span>
+      Retail KSh {(qty * Number(item.selling_price_ksh)).toLocaleString()}
+      <span className="block text-[10px] text-gray-400">Wholesale KSh {(qty * Number(item.wholesale_price_ksh)).toLocaleString()}</span>
+      {Number(item.unit_value_ksh) > 0 && <span className="block text-[10px] text-gray-400">Cost KSh {(qty * Number(item.unit_value_ksh)).toLocaleString()}</span>}
+    </span>
+  )
 }

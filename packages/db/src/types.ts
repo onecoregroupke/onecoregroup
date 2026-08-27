@@ -2809,6 +2809,7 @@ export interface InventoryItemRow {
   package_config: string
   barcode: string
   selling_price_ksh: number
+  wholesale_price_ksh: number
   minimum_stock: number
   maximum_stock: number | null
   production_threshold: number
@@ -2849,6 +2850,16 @@ export interface InventoryMovementRow {
   receipt_item_id: string | null
   goods_issue_id: string | null
   issue_item_id: string | null
+  production_run_id: string | null
+  fg_transfer_id: string | null
+  allocation_id: string | null
+  allocation_item_id: string | null
+  sales_invoice_id: string | null
+  sales_invoice_item_id: string | null
+  batch_number: string
+  store_id: string | null
+  stock_count_id: string | null
+  stock_count_item_id: string | null
   movement_unit: string
   conversion_rate: number
   base_quantity: number
@@ -2861,6 +2872,25 @@ export interface InventoryMovementRow {
   import_id: string | null
 }
 type InventoryMovementInsert = Pick<InventoryMovementRow, 'item_id'> & Partial<InventoryMovementRow>
+
+export interface InventoryPriceHistoryRow {
+  id: string
+  brand_id: string | null
+  inventory_item_id: string
+  price_type: 'supplier_reference_cost' | 'retail_selling_price' | 'wholesale_selling_price'
+  amount_ksh: number
+  effective_date: string
+  supplier_name: string
+  source_description: string
+  source_reference: string
+  base_unit: string
+  notes: string
+  created_by: string
+  created_at: string
+}
+export type InventoryPriceHistoryInsert =
+  Pick<InventoryPriceHistoryRow, 'inventory_item_id' | 'price_type' | 'amount_ksh' | 'effective_date'>
+  & Partial<InventoryPriceHistoryRow>
 
 export interface InventoryItemAliasRow {
   id: string
@@ -4106,13 +4136,19 @@ export interface InventoryStockCountRow {
   count_ref: string
   brand_id: string | null
   store_id: string | null
-  count_date: string
+  location: string
+  scope_note: string
+  effective_date: string
+  frozen_at: string | null
   counted_by: string
-  counted_by_id: string | null
-  /** draft | submitted | approved | posted | rejected */
+  reviewed_by: string
+  /** draft | counting | variance_review | approved | posted | cancelled */
   status: string
+  submitted_for_review_at: string | null
+  reviewed_at: string | null
   approved_by: string
   approved_at: string | null
+  posted_by: string
   posted_at: string | null
   notes: string
   created_at: string
@@ -4125,14 +4161,25 @@ export interface InventoryStockCountItemRow {
   id: string
   count_id: string
   item_id: string
-  batch_number: string
-  system_quantity: number
-  counted_quantity: number
-  /** GENERATED: counted - system. */
+  expected_quantity: number
+  counted_quantity: number | null
+  /** GENERATED: counted - expected. */
   variance_quantity: number
   reason: string
+  reason_code: string
+  notes: string
+  status: string
+  counted_by: string
+  reviewed_by: string
+  approved: boolean
+  approved_by: string
+  expected_unit_value_ksh: number
+  expected_retail_price_ksh: number
+  expected_wholesale_price_ksh: number
   movement_id: string | null
+  posted_at: string | null
   created_at: string
+  updated_at: string
 }
 export type InventoryStockCountItemInsert =
   Pick<InventoryStockCountItemRow, 'count_id' | 'item_id'> & Partial<Omit<InventoryStockCountItemRow, 'variance_quantity'>>
@@ -4837,6 +4884,7 @@ export interface Database {
       ops_attendance_records: DbTable<OpsAttendanceRecordRow, OpsAttendanceRecordInsert, Partial<OpsAttendanceRecordRow>>
       inventory_items: DbTable<InventoryItemRow, InventoryItemInsert, Partial<InventoryItemRow>>
       inventory_movements: DbTable<InventoryMovementRow, InventoryMovementInsert, Partial<InventoryMovementRow>>
+      inventory_price_history: DbTable<InventoryPriceHistoryRow, InventoryPriceHistoryInsert, Partial<InventoryPriceHistoryRow>>
       inventory_item_aliases: DbTable<InventoryItemAliasRow, InventoryItemAliasInsert, Partial<InventoryItemAliasRow>>
       procurement_vendors: DbTable<ProcurementVendorRow, ProcurementVendorInsert, Partial<ProcurementVendorRow>>
       procurement_purchases: DbTable<ProcurementPurchaseRow, ProcurementPurchaseInsert, Partial<ProcurementPurchaseRow>>

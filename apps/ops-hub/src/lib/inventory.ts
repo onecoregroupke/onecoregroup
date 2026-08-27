@@ -62,6 +62,8 @@ export async function createItem(input: {
   unit?: string
   quantity?: number
   unit_value_ksh?: number
+  selling_price_ksh?: number
+  wholesale_price_ksh?: number
   reorder_level?: number
   location?: string
   notes?: string
@@ -94,6 +96,8 @@ export async function createItem(input: {
       pack_size: 1,
       quantity: openingQty,
       unit_value_ksh: Number(input.unit_value_ksh ?? 0),
+      selling_price_ksh: Number(input.selling_price_ksh ?? 0),
+      wholesale_price_ksh: Number(input.wholesale_price_ksh ?? 0),
       reorder_level: Number(input.reorder_level ?? 0),
       location: input.location ?? '',
       notes: input.notes ?? '',
@@ -168,6 +172,8 @@ export interface RecordStockInput {
   idempotency_key?: string
   approved_by?: string
   import_id?: string | null
+  stock_count_id?: string | null
+  stock_count_item_id?: string | null
 }
 
 /** Record a stock movement and update the item's live quantity. Stock-out
@@ -233,6 +239,8 @@ export async function recordStockMovement(
       idempotency_key: input.idempotency_key ?? '',
       approved_by: input.approved_by ?? '',
       import_id: input.import_id ?? null,
+      stock_count_id: input.stock_count_id ?? null,
+      stock_count_item_id: input.stock_count_item_id ?? null,
       purchase_id: input.purchase_id ?? null,
       goods_receipt_id: input.goods_receipt_id ?? null,
       receipt_item_id: input.receipt_item_id ?? null,

@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { ArrowUpRight, Boxes, PackageOpen, TriangleAlert } from 'lucide-react'
+import { ArrowUpRight, Boxes, ClipboardCheck, PackageOpen, TriangleAlert } from 'lucide-react'
 import { listBrands } from '@/lib/brands'
 import { listItems, listMovements } from '@/lib/inventory'
 import { scopeBrands } from '@/lib/finance'
@@ -56,7 +56,7 @@ export default async function InventoryPage() {
 
       <div className="grid gap-3 sm:grid-cols-3">
         <Stat label="Items tracked" value={items.length} />
-        <Stat label="Total stock value" value={grandValue} money />
+        <Stat label="Reference cost value" value={grandValue} money />
         <Stat label="Low stock alerts" value={lowTotal} tone={lowTotal ? 'text-amber-600' : 'text-gray-900'} />
       </div>
 
@@ -67,6 +67,17 @@ export default async function InventoryPage() {
           <span className="mt-0.5 block text-sm text-gray-500">
             Opening · In · Out · Closing per item for any period, replayed from the movement ledger
             and filterable by brand, store, item type and date.
+          </span>
+        </span>
+        <ArrowUpRight size={16} className="shrink-0 text-gray-300" />
+      </Link>
+
+      <Link href="/inventory/stock-take"
+        className="flex items-center justify-between gap-3 rounded-xl border border-gray-100 bg-white p-5 shadow-sm transition-colors hover:border-ocg-gold/40">
+        <span>
+          <span className="flex items-center gap-2 text-sm font-semibold text-gray-900"><ClipboardCheck size={16} /> Stock Take</span>
+          <span className="mt-0.5 block text-sm text-gray-500">
+            Freeze a store balance, enter physical quantities, review variances, then approve and reconcile through explicit ledger adjustments.
           </span>
         </span>
         <ArrowUpRight size={16} className="shrink-0 text-gray-300" />
@@ -94,7 +105,7 @@ export default async function InventoryPage() {
               <ArrowUpRight size={16} className="text-gray-300" />
             </div>
             <p className="mt-3 font-semibold text-gray-900">{brand.name}</p>
-            <p className="mt-1 text-sm text-gray-500">{count} item{count === 1 ? '' : 's'} · KSh {totalValue.toLocaleString()}</p>
+            <p className="mt-1 text-sm text-gray-500">{count} item{count === 1 ? '' : 's'} · ref cost KSh {totalValue.toLocaleString()}</p>
             {low > 0 && (
               <p className="mt-2 inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700">
                 <TriangleAlert size={12} /> {low} item{low === 1 ? '' : 's'} at / below reorder level
