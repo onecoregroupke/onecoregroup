@@ -1,6 +1,7 @@
 import { db, mintReference, nowIso } from './serverClient'
 import { auditEvent } from './audit'
 import { recordStockMovement } from './inventory'
+import { toInventoryBaseQuantity } from './inventoryUnits'
 import {
   canApproveRequisition,
   canCreateIssueForRequisition,
@@ -493,6 +494,7 @@ export async function postGoodsReceipt(
       item_id: itemId,
       direction: 'in',
       quantity,
+      movement_unit: line.unit,
       unit_value_ksh: Number(line.unit_cost_ksh ?? 0) || undefined,
       reason: `Goods received on ${reference}`,
       reference,
@@ -810,9 +812,17 @@ export async function postGoodsIssue(
       quantity_approved: Number(line.quantity_approved),
       quantity_issued: Number(line.quantity_issued),
       remaining: line.requisition_item_id ? (remainingByLine.get(line.requisition_item_id) ?? 0) : undefined,
-      available: Number(stockById.get(line.inventory_item_id)?.quantity ?? 0),
     })
     if (!check.ok) throw new Error(`${line.description}: ${check.reason}`)
+    const stock = stockById.get(line.inventory_item_id)
+    const baseQuantity = toInventoryBaseQuantity(
+      Number(line.quantity_issued),
+      line.unit,
+      stock?.base_unit || stock?.unit || '',
+    )
+    if (baseQuantity > Number(stock?.quantity ?? 0)) {
+      throw new Error(`${line.description}: Cannot issue ${line.quantity_issued} ${line.unit} — only ${Number(stock?.quantity ?? 0)} ${stock?.base_unit || stock?.unit} in stock.`)
+    }
   }
 
   const prefix = issue.kind === 'transfer' ? 'GTN-' : 'GIN-'
@@ -827,6 +837,7 @@ export async function postGoodsIssue(
       item_id: line.inventory_item_id,
       direction: 'out',
       quantity,
+      movement_unit: line.unit,
       reason: `${issue.kind === 'transfer' ? 'Transferred' : 'Issued'} on ${reference}`,
       reference,
       source: 'manual',

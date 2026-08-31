@@ -2,6 +2,7 @@ import { db, nowIso } from './serverClient'
 import type { InventoryItemRow, InventoryMovementRow } from '@ocg/db'
 import { toBaseQuantity } from './inventoryIntegrity'
 import { scopedBrandIds } from './stockCards'
+import { inventoryUnitConversionRate, normalizeInventoryUnit } from './inventoryUnits'
 
 // =============================================================================
 // Inventory — per-brand stock registers with in/out movements. Every movement
@@ -36,8 +37,9 @@ export async function listItems(allowed: string[] | null, brandId?: string): Pro
 /** Movements, newest first. `brandId` narrows within `allowed`, never past it. */
 export async function listMovements(
   allowed: string[] | null,
-  opts: { brandId?: string; itemId?: string; limit?: number } = {},
+  opts: { brandId?: string; itemId?: string; itemIds?: string[]; limit?: number } = {},
 ): Promise<InventoryMovementRow[]> {
+  if (opts.itemIds && opts.itemIds.length === 0) return []
   const brands = scopedBrandIds(allowed, opts.brandId)
   let q = db()
     .from('inventory_movements')
@@ -45,6 +47,7 @@ export async function listMovements(
     .order('created_at', { ascending: false })
     .limit(opts.limit ?? 100)
   if (opts.itemId) q = q.eq('item_id', opts.itemId)
+  if (opts.itemIds) q = q.in('item_id', opts.itemIds)
   if (brands !== null) q = q.in('brand_id', brands)
   const { data } = await q
   return (data as InventoryMovementRow[] | null) ?? []
@@ -80,6 +83,7 @@ export async function createItem(input: {
   if (!input.brand_id) throw new Error('brand_id is required')
   if (!input.name?.trim()) throw new Error('Item name is required')
   const openingQty = Number(input.quantity ?? 0)
+  const baseUnit = normalizeInventoryUnit(input.unit || 'pcs') || 'pcs'
   const itemType: InventoryItemType = (ITEM_TYPES as readonly string[]).includes(input.item_type ?? '')
     ? (input.item_type as InventoryItemType)
     : 'consumable'
@@ -90,9 +94,9 @@ export async function createItem(input: {
       name: input.name.trim(),
       sku: input.sku ?? '',
       category: input.category ?? '',
-      unit: input.unit || 'pcs',
+      unit: baseUnit,
       canonical_name: input.name.trim(),
-      base_unit: input.unit || 'pcs',
+      base_unit: baseUnit,
       pack_size: 1,
       quantity: openingQty,
       unit_value_ksh: Number(input.unit_value_ksh ?? 0),
@@ -185,8 +189,6 @@ export async function recordStockMovement(
   const supabase = db()
   const qty = Number(input.quantity)
   if (!Number.isFinite(qty) || qty <= 0) throw new Error('Quantity must be greater than 0')
-  const conversionRate = Number(input.conversion_rate ?? 1)
-  const baseQty = toBaseQuantity(qty, conversionRate)
 
   if (input.idempotency_key) {
     const { data: replay } = await supabase
@@ -208,6 +210,15 @@ export async function recordStockMovement(
   if (!itemRow) throw new Error('Inventory item not found')
   const item = itemRow as InventoryItemRow
 
+  const baseUnit = normalizeInventoryUnit(item.base_unit || item.unit)
+  const movementUnit = normalizeInventoryUnit(input.movement_unit || baseUnit)
+  const inferredRate = inventoryUnitConversionRate(movementUnit, baseUnit)
+  if (input.conversion_rate == null && inferredRate == null) {
+    throw new Error(`Cannot convert ${movementUnit || 'the entered unit'} to ${baseUnit || 'the inventory base unit'} for "${item.name}".`)
+  }
+  const conversionRate = Number(input.conversion_rate ?? inferredRate)
+  const baseQty = toBaseQuantity(qty, conversionRate)
+
   const current = Number(item.quantity ?? 0)
   const after = input.direction === 'in' ? current + baseQty : current - baseQty
   if (after < 0) {
@@ -215,7 +226,7 @@ export async function recordStockMovement(
   }
 
   const unitValue = input.unit_value_ksh != null && input.unit_value_ksh !== 0
-    ? Number(input.unit_value_ksh)
+    ? Number(input.unit_value_ksh) / conversionRate
     : Number(item.unit_value_ksh ?? 0)
 
   const { data: movementRow, error } = await supabase
@@ -225,7 +236,7 @@ export async function recordStockMovement(
       brand_id: item.brand_id,
       direction: input.direction,
       quantity: qty,
-      movement_unit: input.movement_unit || item.base_unit || item.unit,
+      movement_unit: movementUnit,
       conversion_rate: conversionRate,
       base_quantity: baseQty,
       effective_at: input.movement_date ? `${input.movement_date}T00:00:00.000Z` : nowIso(),

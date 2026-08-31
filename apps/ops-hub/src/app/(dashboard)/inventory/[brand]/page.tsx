@@ -7,15 +7,24 @@ import { listItems, listMovements } from '@/lib/inventory'
 import { requireSection } from '@/lib/server-auth'
 import { InventoryForms } from '@/components/inventory/InventoryForms'
 import { FinishedGoodsQuantity } from '@/components/inventory/FinishedGoodsQuantity'
-import { inventoryBreadcrumb, inventoryTaxonomy } from '@/lib/inventoryTaxonomy'
+import {
+  filterInventoryByTaxonomy,
+  inventoryBreadcrumb,
+  inventoryTaxonomy,
+  parseInventoryClassifications,
+  serializeInventoryClassifications,
+  toggleInventoryClassification,
+} from '@/lib/inventoryTaxonomy'
 import { finishedGoodsQuantity } from '@/lib/finishedGoodsQuantity'
 
 export const dynamic = 'force-dynamic'
 
 export default async function BrandInventoryPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ brand: string }>
+  searchParams: Promise<{ classifications?: string | string[] }>
 }) {
   const actor = await requireSection('inventory')
   const { brand: slug } = await params
@@ -26,11 +35,7 @@ export default async function BrandInventoryPage({
   const allowed = actor.allowedBrandIds('inventory')
   if (allowed !== null && !allowed.includes(brand.id)) redirect('/inventory')
 
-  const [items, movements] = await Promise.all([
-    listItems(allowed, brand.id),
-    listMovements(allowed, { brandId: brand.id, limit: 40 }),
-  ])
-  const itemById = new Map(items.map((i) => [i.id, i]))
+  const items = await listItems(allowed, brand.id)
   const referenceCostValue = items.reduce((sum, i) => sum + Number(i.quantity) * Number(i.unit_value_ksh), 0)
   const retailSalesValue = items
     .filter((i) => i.item_type === 'finished_good')
@@ -42,17 +47,33 @@ export default async function BrandInventoryPage({
   const categories = inventoryCategories(brand.slug)
 
   // The same normalized taxonomy used by Manufacturing and Stock Cards.
-  const taxonomyCategories = [...new Set(items.map((item) => inventoryTaxonomy(item).category))]
-  const byCategory = taxonomyCategories
-    .map((category) => {
-      const catItems = items.filter((item) => inventoryTaxonomy(item).category === category)
-      return {
-        category,
-        count: catItems.length,
-        value: catItems.reduce((sum, i) => sum + Number(i.quantity) * Number(i.unit_value_ksh), 0),
-      }
-    })
-  const uncategorised = items.filter((item) => inventoryTaxonomy(item).category === 'Other / Unclassified').length
+  const categoryGroups = new Map<string, { categoryKey: string; category: string; count: number; value: number }>()
+  for (const item of items) {
+    const taxonomy = inventoryTaxonomy(item)
+    const existing = categoryGroups.get(taxonomy.categoryKey)
+    if (existing) {
+      existing.count += 1
+      existing.value += Number(item.quantity) * Number(item.unit_value_ksh)
+    } else {
+      categoryGroups.set(taxonomy.categoryKey, {
+        categoryKey: taxonomy.categoryKey,
+        category: taxonomy.category,
+        count: 1,
+        value: Number(item.quantity) * Number(item.unit_value_ksh),
+      })
+    }
+  }
+  const byCategory = [...categoryGroups.values()]
+  const requestedClassifications = parseInventoryClassifications((await searchParams).classifications)
+  const availableClassifications = new Set(byCategory.map((category) => category.categoryKey))
+  const selectedClassifications = requestedClassifications.filter((value) => availableClassifications.has(value))
+  const visibleItems = filterInventoryByTaxonomy(items, { categories: selectedClassifications })
+  const movements = await listMovements(allowed, {
+    brandId: brand.id,
+    itemIds: selectedClassifications.length > 0 ? visibleItems.map((item) => item.id) : undefined,
+    limit: 40,
+  })
+  const itemById = new Map(items.map((i) => [i.id, i]))
 
   return (
     <div className="space-y-6">
@@ -84,26 +105,53 @@ export default async function BrandInventoryPage({
       )}
 
       <section className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
-        <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-ocg-gold">Classification</h2>
-        <div className="flex flex-wrap gap-2">
-          {byCategory.map(({ category, count, value }) => (
-            <span key={category} className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm ${count ? 'border-gray-200 text-gray-700' : 'border-dashed border-gray-200 text-gray-400'}`}>
-              <span className="font-medium">{category}</span>
-              <span className="text-xs text-gray-400">{count} item{count === 1 ? '' : 's'}{value > 0 ? ` · KSh ${value.toLocaleString()}` : ''}</span>
-            </span>
-          ))}
-          {uncategorised > 0 && (
-            <span className="inline-flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-sm text-amber-700">
-              Uncategorised <span className="text-xs">{uncategorised} item{uncategorised === 1 ? '' : 's'}</span>
-            </span>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-ocg-gold">Classification</h2>
+          {selectedClassifications.length > 0 && (
+            <Link href={`/inventory/${brand.slug}`} className="inline-flex min-h-11 items-center px-1 text-xs font-medium text-gray-500 underline decoration-gray-300 underline-offset-4 hover:text-gray-800">
+              Clear filters
+            </Link>
           )}
         </div>
+        <div className="flex flex-wrap gap-2">
+          {byCategory.map(({ categoryKey, category, count, value }) => {
+            const active = selectedClassifications.includes(categoryKey)
+            const next = toggleInventoryClassification(selectedClassifications, categoryKey)
+            const serialized = serializeInventoryClassifications(next)
+            const href = serialized
+              ? `/inventory/${brand.slug}?classifications=${serialized}`
+              : `/inventory/${brand.slug}`
+            return (
+              <Link
+                key={categoryKey}
+                href={href}
+                prefetch={false}
+                aria-label={`${category}, ${count} item${count === 1 ? '' : 's'}, ${active ? 'selected' : 'not selected'}`}
+                className={`inline-flex min-h-11 items-center gap-2 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ocg-gold focus-visible:ring-offset-2 ${
+                  active
+                    ? 'border-ocg-navy bg-ocg-navy text-white shadow-sm'
+                    : categoryKey === 'unclassified'
+                      ? 'border-amber-200 bg-amber-50 text-amber-700 hover:border-amber-300 hover:bg-amber-100'
+                      : 'border-gray-200 text-gray-700 hover:border-ocg-gold/50 hover:bg-gray-50'
+                }`}
+              >
+                <span>{category}</span>
+                <span className={`text-xs font-normal ${active ? 'text-white/70' : categoryKey === 'unclassified' ? 'text-amber-600' : 'text-gray-400'}`}>
+                  {count} item{count === 1 ? '' : 's'}{value > 0 ? ` · KSh ${value.toLocaleString()}` : ''}
+                </span>
+              </Link>
+            )
+          })}
+        </div>
+        <p className="mt-3 text-xs text-gray-500">Showing {visibleItems.length} of {items.length} items</p>
       </section>
 
       <section className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
         <h2 className="mb-4 text-xs font-semibold uppercase tracking-wider text-ocg-gold">Stock register</h2>
-        {items.length === 0 ? (
-          <p className="rounded-lg bg-gray-50 p-3 text-sm text-gray-500">No items yet. Add the first item above.</p>
+        {visibleItems.length === 0 ? (
+          <p className="rounded-lg bg-gray-50 p-3 text-sm text-gray-500">
+            {items.length === 0 ? 'No items yet. Add the first item above.' : 'No inventory items match the selected classifications.'}
+          </p>
         ) : (
           <div className="overflow-x-auto rounded-lg border border-gray-100">
             <table className="w-full min-w-[760px] text-sm">
@@ -119,7 +167,7 @@ export default async function BrandInventoryPage({
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {items.map((item) => {
+                {visibleItems.map((item) => {
                   const low = Number(item.reorder_level) > 0 && Number(item.quantity) <= Number(item.reorder_level)
                   return (
                     <tr key={item.id} className="hover:bg-gray-50">
@@ -155,7 +203,9 @@ export default async function BrandInventoryPage({
       <section className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
         <h2 className="mb-4 text-xs font-semibold uppercase tracking-wider text-ocg-gold">Movement history</h2>
         {movements.length === 0 ? (
-          <p className="rounded-lg bg-gray-50 p-3 text-sm text-gray-500">No movements recorded yet.</p>
+          <p className="rounded-lg bg-gray-50 p-3 text-sm text-gray-500">
+            {selectedClassifications.length > 0 ? 'No movements match the selected classifications.' : 'No movements recorded yet.'}
+          </p>
         ) : (
           <div className="overflow-x-auto rounded-lg border border-gray-100">
             <table className="w-full min-w-[720px] text-sm">
@@ -177,8 +227,8 @@ export default async function BrandInventoryPage({
                     <tr key={m.id} className="hover:bg-gray-50">
                       <td className="px-3 py-2.5 whitespace-nowrap text-gray-600">{m.movement_date}</td>
                       <td className="px-3 py-2.5 text-gray-800">{item?.name ?? '—'}</td>
-                      <td className="px-3 py-2.5 text-right font-medium text-emerald-700">{m.direction === 'in' ? quantityCell(item, Number(m.quantity)) : ''}</td>
-                      <td className="px-3 py-2.5 text-right font-medium text-red-700">{m.direction === 'out' ? quantityCell(item, Number(m.quantity)) : ''}</td>
+                      <td className="px-3 py-2.5 text-right font-medium text-emerald-700">{m.direction === 'in' ? quantityCell(item, Number(m.base_quantity ?? m.quantity)) : ''}</td>
+                      <td className="px-3 py-2.5 text-right font-medium text-red-700">{m.direction === 'out' ? quantityCell(item, Number(m.base_quantity ?? m.quantity)) : ''}</td>
                       <td className="px-3 py-2.5 text-right text-gray-700">{m.quantity_after != null ? quantityCell(item, Number(m.quantity_after)) : '—'}</td>
                       <td className="px-3 py-2.5 max-w-[220px] truncate text-gray-500" title={m.reason}>{m.reason || m.source}</td>
                       <td className="px-3 py-2.5 whitespace-nowrap text-gray-500">{m.recorded_by || '—'}</td>

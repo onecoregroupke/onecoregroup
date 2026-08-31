@@ -23,6 +23,8 @@ export interface InventoryTaxonomy {
 
 export interface InventoryTaxonomyFilter {
   category?: string
+  /** OR semantics for the Inventory-page classification pills. */
+  categories?: readonly string[]
   subcategory?: string
   family?: string
   pack?: string
@@ -61,6 +63,7 @@ export const PACKAGING_ROLE_LABELS: Record<string, string> = {
 }
 
 function key(value: string): string {
+  if (value.trim().toLowerCase() === UNCLASSIFIED.toLowerCase()) return 'unclassified'
   return value.trim().toLowerCase().replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'unclassified'
 }
 
@@ -168,11 +171,30 @@ export function filterInventoryByTaxonomy<T extends InventoryTaxonomyItem>(
 ): T[] {
   return items.filter((item) => {
     const taxonomy = inventoryTaxonomy(item)
-    return (!filter.category || taxonomy.categoryKey === filter.category)
+    return (!filter.categories?.length || filter.categories.includes(taxonomy.categoryKey))
+      && (!filter.category || taxonomy.categoryKey === filter.category)
       && (!filter.subcategory || taxonomy.subcategoryKey === filter.subcategory)
       && (!filter.family || taxonomy.family === filter.family)
       && (!filter.pack || taxonomy.size === filter.pack)
   })
+}
+
+export function parseInventoryClassifications(value: string | string[] | undefined): string[] {
+  const values = Array.isArray(value) ? value : [value ?? '']
+  const parsed = values
+    .flatMap((entry) => entry.split(','))
+    .map((entry) => entry.trim().toLowerCase())
+    .filter((entry) => /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(entry))
+  return [...new Set(parsed)]
+}
+
+export function serializeInventoryClassifications(values: readonly string[]): string {
+  return parseInventoryClassifications([...values]).join(',')
+}
+
+export function toggleInventoryClassification(values: readonly string[], value: string): string[] {
+  const selected = parseInventoryClassifications([...values])
+  return selected.includes(value) ? selected.filter((entry) => entry !== value) : [...selected, value]
 }
 
 function options(values: Array<{ value: string; label: string }>): TaxonomyOption[] {

@@ -1,6 +1,13 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { filterInventoryByTaxonomy, inventoryTaxonomy, inventoryTaxonomyOptions } from './inventoryTaxonomy'
+import {
+  filterInventoryByTaxonomy,
+  inventoryTaxonomy,
+  inventoryTaxonomyOptions,
+  parseInventoryClassifications,
+  serializeInventoryClassifications,
+  toggleInventoryClassification,
+} from './inventoryTaxonomy'
 
 function item(overrides: Record<string, unknown>) {
   return {
@@ -51,4 +58,61 @@ test('taxonomy filters cascade and both stock-card/manufacturing consumers resol
   const filtered = filterInventoryByTaxonomy(rows, { category: 'stickers', subcategory: 'front' })
   assert.deepEqual(filtered.map((r) => r.id), ['front'])
   assert.deepEqual(inventoryTaxonomy(filtered[0]!), inventoryTaxonomy(rows[0]!))
+})
+
+test('no selected classifications returns every inventory item', () => {
+  const rows = [
+    item({ id: 'raw', item_type: 'raw_material', category: 'Raw Materials' }),
+    item({ id: 'perfume', item_type: 'raw_material', category: 'Perfume' }),
+  ]
+  assert.deepEqual(filterInventoryByTaxonomy(rows, { categories: [] }).map((row) => row.id), ['raw', 'perfume'])
+})
+
+test('one classification filters the stock register', () => {
+  const rows = [
+    item({ id: 'raw', item_type: 'raw_material', category: 'Raw Materials' }),
+    item({ id: 'perfume', item_type: 'raw_material', category: 'Perfume' }),
+  ]
+  assert.deepEqual(filterInventoryByTaxonomy(rows, { categories: ['perfume'] }).map((row) => row.id), ['perfume'])
+})
+
+test('multiple classifications use OR semantics', () => {
+  const rows = [
+    item({ id: 'raw', item_type: 'raw_material', category: 'Raw Materials' }),
+    item({ id: 'perfume', item_type: 'raw_material', category: 'Perfume' }),
+    item({ id: 'bottle', item_type: 'packaging', category: 'Packaging - Bottles' }),
+  ]
+  assert.deepEqual(
+    filterInventoryByTaxonomy(rows, { categories: ['raw-materials', 'perfume'] }).map((row) => row.id),
+    ['raw', 'perfume'],
+  )
+})
+
+test('unclassified is selectable and uses one stable key', () => {
+  const rows = [
+    item({ id: 'unknown-raw', item_type: 'raw_material', category: '' }),
+    item({ id: 'unknown-pack', item_type: 'packaging', category: '' }),
+    item({ id: 'known', item_type: 'raw_material', category: 'Raw Materials' }),
+  ]
+  assert.deepEqual(
+    filterInventoryByTaxonomy(rows, { categories: ['unclassified'] }).map((row) => row.id),
+    ['unknown-raw', 'unknown-pack'],
+  )
+})
+
+test('classification selection can be deselected and cleared', () => {
+  assert.deepEqual(toggleInventoryClassification(['raw-materials', 'perfume'], 'perfume'), ['raw-materials'])
+  assert.deepEqual(toggleInventoryClassification(['raw-materials'], 'packaging'), ['raw-materials', 'packaging'])
+  assert.deepEqual(toggleInventoryClassification(['raw-materials'], 'raw-materials'), [])
+  assert.equal(serializeInventoryClassifications([]), '')
+})
+
+test('classification URL state parses, deduplicates and serializes', () => {
+  assert.deepEqual(
+    parseInventoryClassifications('raw-materials,perfume,raw-materials'),
+    ['raw-materials', 'perfume'],
+  )
+  assert.deepEqual(parseInventoryClassifications(['packaging', 'unclassified']), ['packaging', 'unclassified'])
+  assert.equal(serializeInventoryClassifications(['raw-materials', 'perfume']), 'raw-materials,perfume')
+  assert.deepEqual(parseInventoryClassifications('raw-materials,../bad, perfume'), ['raw-materials', 'perfume'])
 })
