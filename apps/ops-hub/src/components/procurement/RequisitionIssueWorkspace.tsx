@@ -28,6 +28,7 @@ export function RequisitionIssueWorkspace({ detail, stores, canEdit }: Props) {
     [detail.issueItems, draftIssue],
   )
   const [storeId, setStoreId] = useState(draftIssue?.source_store_id ?? commonStore(detail))
+  const [documentNumber, setDocumentNumber] = useState(draftIssue?.document_number ?? '')
   const [busy, setBusy] = useState('')
   const [error, setError] = useState('')
   const [lines, setLines] = useState<DraftLine>(() => Object.fromEntries(draftItems.map((item) => [item.id, {
@@ -64,6 +65,10 @@ export function RequisitionIssueWorkspace({ detail, stores, canEdit }: Props) {
 
   async function saveDraft(post: boolean) {
     if (!draftIssue) return
+    if (post && !documentNumber.trim()) {
+      setError('Enter the physical GIN number before posting.')
+      return
+    }
     setBusy(post ? 'post' : 'save'); setError('')
     const res = await api<{ ok: boolean; error?: string }>('/api/procurement/chain', {
       method: 'POST',
@@ -71,6 +76,7 @@ export function RequisitionIssueWorkspace({ detail, stores, canEdit }: Props) {
         action: 'update-issue',
         id: draftIssue.id,
         values: {
+          document_number: documentNumber.trim(),
           source_store_id: storeId || null,
           store_location: stores.find((store) => store.id === storeId)?.label ?? '',
           items: draftItems.map((item) => {
@@ -168,13 +174,22 @@ export function RequisitionIssueWorkspace({ detail, stores, canEdit }: Props) {
         <section className="space-y-4 rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
-              <h2 className="text-sm font-semibold text-gray-900">Issue Note No: {draftIssue.reference}</h2>
-              <p className="mt-1 text-sm text-gray-500">Against MRF: {detail.requisition.reference ?? detail.requisition.id}</p>
+              <h2 className="text-sm font-semibold text-gray-900">Goods Issue Note</h2>
+              <p className="mt-1 text-sm text-gray-500">System ref {draftIssue.reference} · against MRF {detail.requisition.reference ?? detail.requisition.id}</p>
             </div>
-            <select className="input max-w-xs" value={storeId} onChange={(e) => setStoreId(e.target.value)}>
-              <option value="">Choose source store</option>
-              {stores.map((store) => <option key={store.id} value={store.id}>{store.label}</option>)}
-            </select>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-gray-500">Physical GIN no. *</span>
+                <input className="input" value={documentNumber} onChange={(e) => setDocumentNumber(e.target.value)} />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-gray-500">Source store *</span>
+                <select className="input" value={storeId} onChange={(e) => setStoreId(e.target.value)}>
+                  <option value="">Choose source store</option>
+                  {stores.map((store) => <option key={store.id} value={store.id}>{store.label}</option>)}
+                </select>
+              </label>
+            </div>
           </div>
           <div className="overflow-x-auto rounded-lg border border-gray-100">
             <table className="w-full min-w-[920px] text-sm">
@@ -227,7 +242,7 @@ export function RequisitionIssueWorkspace({ detail, stores, canEdit }: Props) {
               className="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-700 disabled:opacity-60">
               <Save size={15} /> Save draft
             </button>
-            <button disabled={busy !== '' || !storeId} onClick={() => saveDraft(true)}
+            <button disabled={busy !== '' || !storeId || !documentNumber.trim()} onClick={() => saveDraft(true)}
               className="inline-flex items-center gap-2 rounded-lg bg-ocg-navy px-4 py-2 text-sm font-medium text-white disabled:opacity-60">
               <ClipboardCheck size={15} /> Post Issue Note
             </button>
@@ -244,7 +259,7 @@ export function RequisitionIssueWorkspace({ detail, stores, canEdit }: Props) {
             {detail.issues.map((issue) => (
               <div key={issue.id} className="rounded-lg border border-gray-100 px-3 py-2 text-sm">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="font-medium text-gray-800">{issue.reference ?? 'Draft issue note'} · {issue.status}</p>
+                  <p className="font-medium text-gray-800">{issue.document_number || issue.reference || 'Draft issue note'} · {issue.status}</p>
                   <p className="text-xs text-gray-400">{issue.issue_date} · {issue.store_location || 'No store'}</p>
                 </div>
                 <p className="mt-1 text-xs text-gray-500">

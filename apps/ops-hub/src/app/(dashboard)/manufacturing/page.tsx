@@ -4,7 +4,7 @@ import { requireSection } from '@/lib/server-auth'
 import { listBrands } from '@/lib/brands'
 import { listItems } from '@/lib/inventory'
 import { scopeBrands } from '@/lib/finance'
-import { listStores, listRuns, listFgTransfers, productionSuggestions, listBomForProducts } from '@/lib/manufacturing'
+import { listStores, listRuns, listFgTransfers, productionSuggestions, listBomForProducts, productionRunSummary } from '@/lib/manufacturing'
 import { periodBalances } from '@/lib/stockCards'
 import { inventoryHealthReport } from '@/lib/inventoryHealth'
 import { PACKAGING_ROLE_LABELS } from '@/lib/inventoryTaxonomy'
@@ -32,10 +32,9 @@ const STORE_TONE: Record<string, string> = {
 /**
  * MANUFACTURING (§§19–28).
  *
- * Raw material → production → packaging → finished goods, all posting through
- * the one stock ledger. The three stores are kept visually and structurally
- * apart so a "total stock" figure can never silently mix ingredients with
- * sellable product.
+ * Production records plans, execution and variances. Only posted operational
+ * documents move stock: GIN for material store-out, GTN for accepted finished
+ * goods into the destination store.
  */
 export default async function ManufacturingPage({
   searchParams,
@@ -67,6 +66,7 @@ export default async function ManufacturingPage({
   const packagingItems = byType('packaging')
   const finishedItems = byType('finished_good')
   const bomLines = await listBomForProducts(finishedItems.map((item) => item.id))
+  const runSummaries = new Map((await Promise.all(runs.map(async (run) => [run.id, await productionRunSummary(run.id)] as const))).map((entry) => entry))
   const health = inventoryHealthReport(items, stores, bomLines)
   const usedBy = new Map<string, string[]>()
   const requirements = new Map<string, StoreItem['requirements']>()
@@ -145,8 +145,8 @@ export default async function ManufacturingPage({
             <Factory size={22} className="text-gray-400" /> Manufacturing
           </h1>
           <p className="mt-1 max-w-2xl text-sm text-gray-500">
-            Raw materials and packaging in, finished goods out. Issuing materials deducts them from
-            store; only accepted output is added back, so rejected units never become sellable stock.
+            Plan and reconcile production here. An approved MRF does not move stock; posting its GIN
+            issues materials, and a linked GTN receives accepted output into finished goods.
           </p>
         </div>
         <Link href="/inventory/stock-cards"
@@ -158,14 +158,20 @@ export default async function ManufacturingPage({
       <ProductionRunPanel
         brands={brands.map((b) => ({ id: b.id, label: b.name }))}
         products={finishedItems.map(toOption)}
-        materials={[...rawItems, ...packagingItems].map(toOption)}
-        stores={stores.filter((s) => s.store_type === 'finished_goods' || s.store_type === 'general')
-          .map((s) => ({ id: s.id, label: s.name }))}
+        runs={activeRuns.map((run) => ({
+          id: run.id,
+          label: `${run.run_ref}${itemById.get(run.product_item_id ?? '') ? ` · ${itemById.get(run.product_item_id ?? '')!.name}` : ''}`,
+          productItemId: run.product_item_id,
+          actualQuantity: Number(run.actual_quantity ?? 0),
+          acceptedQuantity: Number(run.accepted_quantity ?? 0),
+          rejectedQuantity: Number(run.rejected_quantity ?? 0),
+          wasteQuantity: Number(run.waste_quantity ?? 0),
+        }))}
       />
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Stat label="Active runs" value={String(activeRuns.length)} />
-        <Stat label="Produced this month" value={`${num(producedThisMonth)} pcs`} tone="text-emerald-600" />
+        <Stat label="FG received this month" value={`${num(producedThisMonth)} pcs`} tone="text-emerald-600" />
         <Stat label="Finished SKUs" value={String(finishedItems.length)} />
         <Stat label="Production suggestions" value={String(suggestions.length)} tone={suggestions.length ? 'text-amber-600' : 'text-gray-900'} />
       </div>
@@ -199,12 +205,12 @@ export default async function ManufacturingPage({
       {actor.can('procurement', 'edit') && (
         <OperationalDocLinks
           title="Production documents"
-          hint="Request material, issue it to a run, and move finished goods — each posts straight to the stock ledger."
+          hint="MRF records demand only. The posted GIN moves materials out; the posted GTN receives accepted output."
           brand={params.brand}
           docs={[
             { pad: 'mrf', label: 'Material Requisition', hint: 'Request material for a production run' },
-            { pad: 'gin', label: 'Goods / Raw Material Issue Note', hint: 'Issue material out to production' },
-            { pad: 'gtn', label: 'Goods Transfer Note', hint: 'Move stock between stores' },
+            { pad: 'gin', label: 'Goods / Raw Material Issue Note', hint: 'Normally generated from an approved MRF' },
+            { pad: 'gtn', label: 'Goods Transfer Note', hint: 'Receive accepted production output into finished goods' },
           ]}
         />
       )}
@@ -263,15 +269,17 @@ export default async function ManufacturingPage({
             <div className="space-y-2">
               {runs.slice(0, 10).map((r) => {
                 const item = r.product_item_id ? itemById.get(r.product_item_id) : null
+                const summary = runSummaries.get(r.id)
                 return (
-                  <div key={r.id} className="flex items-center justify-between gap-3 rounded-lg border border-gray-100 px-3 py-2 text-sm">
+                  <div key={r.id} className="rounded-lg border border-gray-100 px-3 py-2 text-sm">
+                    <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="truncate font-medium text-gray-800">
                         {r.run_ref}{item ? ` · ${item.name}` : ''}
                       </p>
                       <p className="text-xs text-gray-400">
                         planned {num(r.planned_quantity)} pieces
-                        {r.actual_quantity > 0 && ` · made ${num(r.actual_quantity)} pieces`}
+                        {r.actual_quantity > 0 && ` · made ${num(r.actual_quantity)} pieces · accepted ${num(r.accepted_quantity)} pieces`}
                         {r.rejected_quantity > 0 && ` · rejected ${num(r.rejected_quantity)} pieces`}
                         {r.batch_number && ` · batch ${r.batch_number}`}
                       </p>
@@ -282,6 +290,20 @@ export default async function ManufacturingPage({
                         : r.status === 'cancelled' || r.status === 'rejected' ? 'bg-red-50 text-red-600'
                           : 'bg-amber-50 text-amber-700'
                     }`}>{r.status.replace(/_/g, ' ')}</span>
+                    </div>
+                    {summary && (
+                      <div className="mt-2 border-t border-gray-100 pt-2 text-[11px] text-gray-500">
+                        <p><strong className="text-gray-700">GTN:</strong> {num(summary.transferred)} transferred · {num(summary.awaitingTransfer)} awaiting transfer</p>
+                        <p className="mt-1"><strong className="text-gray-700">Linked documents:</strong>{' '}
+                          MRF {summary.mrfs.map((doc) => doc.reference ?? 'draft').join(', ') || 'none'} · GIN {summary.gins.map((doc) => doc.document_number || doc.reference || 'draft').join(', ') || 'none'} · GTN {summary.gtns.map((doc) => doc.document_number || doc.reference || 'draft').join(', ') || 'none'}
+                        </p>
+                        {summary.materials.length > 0 && <p className="mt-1"><strong className="text-gray-700">GIN materials:</strong> {summary.materials.map((line) => `${line.item?.name ?? 'Item'} ${num(line.issued)}/${num(line.expected)} (${line.variance >= 0 ? '+' : ''}${num(line.variance)})`).join(' · ')}</p>}
+                        <div className="mt-1 flex gap-3">
+                          <Link className="font-medium text-ocg-gold hover:underline" href={`/forms/operations?pad=mrf&brand=${r.brand_id ?? ''}&run=${r.id}`}>Raise MRF</Link>
+                          <Link className="font-medium text-ocg-gold hover:underline" href={`/forms/operations?pad=gtn&brand=${r.brand_id ?? ''}&run=${r.id}`}>Raise GTN</Link>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )
               })}
@@ -290,7 +312,8 @@ export default async function ManufacturingPage({
         </section>
 
         <section className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
-          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-ocg-gold">Finished-goods transfers</h2>
+          <h2 className="mb-1 text-xs font-semibold uppercase tracking-wider text-ocg-gold">Legacy production transfers · read only</h2>
+          <p className="mb-3 text-xs text-gray-500">Historical FGT rows are preserved for audit. New finished-goods receipts use GTNs.</p>
           {transfers.length === 0 ? (
             <p className="rounded-lg bg-gray-50 p-4 text-sm text-gray-500">Nothing transferred yet.</p>
           ) : (

@@ -48,6 +48,22 @@ test('allocating then selling deducts the main store exactly once', () => {
   assert.equal(alloc.custody + sale.custody, 200)
 })
 
+test('E–H: delivery, two sales, and a mixed return preserve the store/custody boundary', () => {
+  let store = 100
+  let custody = 0
+  for (const effect of [
+    allocationStockEffect(20),
+    invoiceStockEffect(7),
+    invoiceStockEffect(3),
+    returnStockEffect(6, 1),
+  ]) {
+    store += effect.mainStore
+    custody += effect.custody
+  }
+  assert.equal(store, 86) // 100 - 20 + 6; sales never touch store again
+  assert.equal(custody, 3) // 20 - 7 - 3 - 7
+})
+
 // ─── Returns (§22) ──────────────────────────────────────────────────────────
 
 test('accepted returns restore store stock; damaged returns do not', () => {
@@ -159,9 +175,26 @@ test('a fully reconciled week can close', () => {
   assert.equal(r.canClose, true)
 })
 
-test('a week with unexplained variance cannot close without approval', () => {
-  const r = reconcileWeek([pos({ sold: 300, returned: 150 })])   // 50 unaccounted
-  assert.equal(r.unexplainedVariance, 50)
+test('stock still held is outstanding custody, not an unexplained loss', () => {
+  const r = reconcileWeek([pos({ sold: 300, returned: 150 })])
+  assert.equal(r.outstandingCustody, 50)
+  assert.equal(r.unexplainedVariance, 0)
+  assert.equal(r.canClose, false)
+})
+
+test('a physical count mismatch is unexplained variance', () => {
+  const r = reconcileWeek([pos({ sold: 300, returned: 150 })], { reportedOnHand: { i1: 40 } })
+  assert.equal(r.outstandingCustody, 50)
+  assert.equal(r.unexplainedVariance, 10)
+  assert.equal(r.canClose, false)
+})
+
+test('opposing SKU count errors cannot cancel into a clean reconciliation', () => {
+  const r = reconcileWeek([
+    pos({ item_id: 'i1', issued: 10 }),
+    pos({ item_id: 'i2', issued: 10 }),
+  ], { reportedOnHand: { i1: 9, i2: 11 } })
+  assert.equal(r.unexplainedVariance, 2)
   assert.equal(r.canClose, false)
 })
 

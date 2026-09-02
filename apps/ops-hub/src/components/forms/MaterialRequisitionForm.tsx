@@ -29,12 +29,14 @@ const blankLine = (): Line => ({ inventory_item_id: '', description: '', unit: '
  * on the shelf.
  */
 export function MaterialRequisitionForm({
-  brands, items, identity, defaultBrandId,
+  brands, items, identity, defaultBrandId, productionRuns, defaultRunId,
 }: {
   brands: { id: string; label: string }[]
   items: ItemOption[]
   identity: Identity | null
   defaultBrandId: string
+  productionRuns: { id: string; label: string; productItemId: string | null; acceptedQuantity: number }[]
+  defaultRunId: string
 }) {
   const router = useRouter()
   const [saving, setSaving] = useState(false)
@@ -49,6 +51,7 @@ export function MaterialRequisitionForm({
     required_by: '',
     prepared_by: '',
     notes: '',
+    production_run_id: defaultRunId,
   })
   const [lines, setLines] = useState<Line[]>([blankLine()])
 
@@ -118,6 +121,12 @@ export function MaterialRequisitionForm({
         <PadField label="Department">
           <input className="input" value={head.department} onChange={(e) => set('department', e.target.value)} />
         </PadField>
+        <PadField label="Production run">
+          <select className="input" value={head.production_run_id} onChange={(e) => set('production_run_id', e.target.value)}>
+            <option value="">Not linked</option>
+            {productionRuns.map((run) => <option key={run.id} value={run.id}>{run.label}</option>)}
+          </select>
+        </PadField>
         <PadField label="Required by">
           <input type="date" className="input" value={head.required_by} onChange={(e) => set('required_by', e.target.value)} />
         </PadField>
@@ -181,7 +190,7 @@ export function MaterialRequisitionForm({
       <StockEffectNotice tone="none">
         <strong>This form moves no stock.</strong> It records a request. Approval is recorded
         separately, by someone other than the requester — a requester can never approve their own
-        requisition — and stock only moves when the resulting Goods Issue Note is posted.
+        requisition — and stock only moves when the resulting linked Goods Issue Note is posted.
       </StockEffectNotice>
 
       {error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-600">{error}</p>}

@@ -7,6 +7,8 @@ import { MoneyForms } from '@/components/finance/MoneyForms'
 import { getFinanceData, isOverdue } from '@/lib/management'
 import { listVoteheads, scopeBrands, scopeByBrand } from '@/lib/finance'
 import { requireSection } from '@/lib/server-auth'
+import { listInvoices, listPayments } from '@/lib/sales'
+import { listAllocations, listDailyReturns, reconcileAllocation } from '@/lib/fieldSales'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,7 +29,15 @@ export default async function FinancePage() {
   const allowed = actor.permissions === null || actor.isSuperAdmin ? null : (actor.allowedBrandIds('finance') ?? [])
   const canEdit = actor.can('finance', 'edit')
 
-  const [data, voteheads] = await Promise.all([getFinanceData(), listVoteheads(allowed)])
+  const [data, voteheads, salesInvoices, salesPayments, fieldActivity, fieldAllocations] = await Promise.all([
+    getFinanceData(), listVoteheads(allowed), listInvoices(allowed, { limit: 100 }),
+    listPayments(allowed, 100), listDailyReturns(allowed, { limit: 100 }),
+    listAllocations(allowed, { limit: 20 }),
+  ])
+  const fieldInvoices = salesInvoices.filter((invoice) => invoice.salesperson_id || invoice.allocation_id || invoice.daily_return_id)
+  const fieldPayments = salesPayments.filter((payment) => payment.daily_return_id)
+  const teamById = new Map(data.team.map((member) => [member.id, member]))
+  const fieldReconciliations = await Promise.all(fieldAllocations.map((allocation) => reconcileAllocation(allocation.id)))
 
   // ── Brand compartment: scoped users only ever see their brands' records ──
   const brands = scopeBrands(data.brands, allowed)
@@ -122,6 +132,32 @@ export default async function FinancePage() {
         <Stat label="Pending transfers" value={pendingTransfers.length} tone={pendingTransfers.length ? 'text-amber-600' : 'text-gray-900'} />
         <Stat label="Open exceptions" value={openExceptions.length} tone={openExceptions.length ? 'text-red-600' : 'text-gray-900'} />
       </div>
+
+      <section className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+        <SectionTitle icon={ReceiptText} title="Field-sales finance · read only" description="Invoices, remittances and payment references from sales-team activity. Custody decisions remain with Field Sales management." />
+        <div className="grid gap-4 xl:grid-cols-4">
+          <FinanceList title="Invoices" empty="No field-sales invoices yet." rows={fieldInvoices.slice(0, 12).map((invoice) => ({
+            id: invoice.id,
+            title: `${invoice.invoice_number || invoice.invoice_ref} · KSh ${Number(invoice.total_amount_ksh).toLocaleString()}`,
+            detail: `${invoice.bill_to_name || 'Walk-in customer'} · ${invoice.salesperson_id ? teamById.get(invoice.salesperson_id)?.name ?? 'Salesperson' : 'Field sale'} · ${invoice.status}`,
+          }))} />
+          <FinanceList title="Daily remittances" empty="No daily field activity yet." rows={fieldActivity.slice(0, 12).map((activity) => ({
+            id: activity.id,
+            title: `${activity.return_ref} · KSh ${(Number(activity.cash_received_ksh) + Number(activity.mobile_money_ksh) + Number(activity.bank_ksh)).toLocaleString()}`,
+            detail: `${activity.return_date} · ${activity.salesperson_id ? teamById.get(activity.salesperson_id)?.name ?? 'Salesperson' : 'Unassigned'} · refs: ${activity.payment_references || 'none'}`,
+          }))} />
+          <FinanceList title="Recorded payments" empty="No field-sales payments yet." rows={fieldPayments.slice(0, 12).map((payment) => ({
+            id: payment.id,
+            title: `${payment.payment_ref} · KSh ${Number(payment.amount_ksh).toLocaleString()}`,
+            detail: `${payment.method} · reference ${payment.reference || payment.mpesa_code || 'none'} · ${payment.payment_date}`,
+          }))} />
+          <FinanceList title="Expected vs submitted" empty="No allocation reconciliation yet." rows={fieldReconciliations.slice(0, 12).map((entry) => ({
+            id: entry.allocation.id,
+            title: `${entry.allocation.delivery_note_no || entry.allocation.allocation_ref} · expected KSh ${entry.cash.expected.toLocaleString()}`,
+            detail: `submitted KSh ${entry.cash.submitted.toLocaleString()} · credit KSh ${entry.cash.credit.toLocaleString()} · ${entry.cash.shortfall >= 0 ? 'shortfall' : 'overage'} KSh ${Math.abs(entry.cash.shortfall).toLocaleString()}`,
+          }))} />
+        </div>
+      </section>
 
       <section className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
         <SectionTitle icon={Building2} title="Brand finance" description="Open a brand to work inside its own scoped finance workspace — transactions, petty cash, imports, and export." />
@@ -412,6 +448,26 @@ function schoolRow(
     invoiceCount: invoices.length,
     paymentCount: payments.length,
   }
+}
+
+function FinanceList({ title, empty, rows }: {
+  title: string
+  empty: string
+  rows: Array<{ id: string; title: string; detail: string }>
+}) {
+  return (
+    <div>
+      <h3 className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">{title}</h3>
+      {rows.length === 0 ? <p className="mt-2 rounded-lg bg-gray-50 p-3 text-sm text-gray-500">{empty}</p> : (
+        <div className="mt-2 space-y-2">{rows.map((row) => (
+          <div key={row.id} className="rounded-lg border border-gray-100 p-2.5">
+            <p className="text-sm font-medium text-gray-800">{row.title}</p>
+            <p className="mt-0.5 text-xs text-gray-400">{row.detail}</p>
+          </div>
+        ))}</div>
+      )}
+    </div>
+  )
 }
 
 function SectionTitle({ icon: Icon, title, description }: { icon: React.ElementType; title: string; description: string }) {

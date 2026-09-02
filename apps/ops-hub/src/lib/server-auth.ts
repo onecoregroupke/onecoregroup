@@ -26,6 +26,8 @@ export interface Actor {
   email: string | null
   /** Team-member display name used to scope "assigned_to" task queries. */
   name: string
+  /** Matching ops_team_members row. Null means no salesperson identity exists. */
+  teamMemberId: string | null
   /** null = founding admin (full access). */
   permissions: PermissionsMap | null
   /** Per-section brand restriction. null = founding admin (unrestricted). */
@@ -103,6 +105,7 @@ export async function loadActor(user: { id: string; email: string | null }): Pro
     userId: user.id,
     email: user.email,
     name,
+    teamMemberId: me?.id ?? null,
     permissions,
     brandAccess,
     recordAccess,

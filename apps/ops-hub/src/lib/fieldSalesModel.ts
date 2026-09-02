@@ -210,6 +210,7 @@ export interface WeeklyReconciliation {
   totalSold: number
   totalReturned: number
   totalDamaged: number
+  outstandingCustody: number
   unexplainedVariance: number
   flags: CustodyFlag[]
   canClose: boolean
@@ -224,18 +225,27 @@ export interface WeeklyReconciliation {
  */
 export function reconcileWeek(
   positions: CustodyPosition[],
-  opts: { managerApproval?: { approvedBy: string; reason: string } | null } = {},
+  opts: {
+    managerApproval?: { approvedBy: string; reason: string } | null
+    reportedOnHand?: Record<string, number>
+  } = {},
 ): WeeklyReconciliation {
   const withBalance = positions.map((p) => ({ ...p, balance: positionBalance(p) }))
   const flags = flagCustodyIssues(positions)
 
-  // Anything still sitting in custody at week end that was not returned is
-  // unexplained — the team either has it or cannot account for it.
-  const unexplainedVariance = round3(withBalance.reduce((sum, p) => sum + p.balance, 0))
+  // Stock still physically held is an outstanding custody position, not a
+  // loss. A variance exists only when a reported physical count differs from
+  // the custody ledger.
+  const outstandingCustody = round3(withBalance.reduce((sum, p) => sum + p.balance, 0))
+  const unexplainedVariance = round3(withBalance.reduce((sum, p) => {
+    const reported = opts.reportedOnHand?.[p.item_id]
+    // Opposing SKU mismatches must never cancel each other out.
+    return reported == null ? sum : sum + Math.abs(p.balance - reported)
+  }, 0))
 
   const approval = opts.managerApproval
   const approved = !!approval && approval.reason.trim().length > 0 && approval.approvedBy.trim().length > 0
-  const clean = unexplainedVariance === 0 && flags.length === 0
+  const clean = outstandingCustody === 0 && unexplainedVariance === 0 && flags.length === 0
 
   return {
     positions: withBalance,
@@ -243,6 +253,7 @@ export function reconcileWeek(
     totalSold: round3(positions.reduce((s, p) => s + p.sold, 0)),
     totalReturned: round3(positions.reduce((s, p) => s + p.returned, 0)),
     totalDamaged: round3(positions.reduce((s, p) => s + p.damaged, 0)),
+    outstandingCustody,
     unexplainedVariance,
     flags,
     canClose: clean || approved,

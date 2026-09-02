@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation'
 import { listBrands } from '@/lib/brands'
 import { listItems } from '@/lib/inventory'
 import { listTeam } from '@/lib/team'
-import { listStores } from '@/lib/manufacturing'
+import { listStores, listRuns } from '@/lib/manufacturing'
 import { listVendors } from '@/lib/procurement'
 import { listCustomers, suggestPadNumber } from '@/lib/sales'
 import { getPrintIdentity, identityHeaderLines } from '@/lib/printIdentity'
@@ -20,9 +20,9 @@ export const dynamic = 'force-dynamic'
 
 const PADS = [
   { key: 'grn', label: 'Goods Received Note', hint: 'Goods in from a supplier', section: 'procurement' },
-  { key: 'gin', label: 'Goods / Raw Material Issue Note', hint: 'Stock out to production', section: 'procurement' },
-  { key: 'gtn', label: 'Goods Transfer Note', hint: 'Stock between stores', section: 'procurement' },
-  { key: 'mrf', label: 'Material Requisition', hint: 'Request material', section: 'procurement' },
+  { key: 'gin', label: 'Other Stock Issue', hint: 'Exception when no approved MRF exists', section: 'procurement' },
+  { key: 'gtn', label: 'Goods Transfer Note', hint: 'Store transfer or production receipt', section: 'procurement' },
+  { key: 'mrf', label: 'Material Requisition', hint: 'Request material · no stock movement', section: 'procurement' },
   { key: 'invoice', label: 'Invoice', hint: 'Sale to a customer', section: 'finance' },
   { key: 'delivery', label: 'Delivery Note', hint: 'Stock to a sales team', section: 'inventory' },
 ] as const
@@ -50,7 +50,7 @@ type PadSection = 'procurement' | 'finance' | 'inventory'
 export default async function OperationalFormsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ pad?: string; brand?: string }>
+  searchParams: Promise<{ pad?: string; brand?: string; run?: string }>
 }) {
   const actor = await requireActor()
   const sp = await searchParams
@@ -101,13 +101,23 @@ export default async function OperationalFormsPage({
 
   // From here on, ONE brand id feeds every lookup on the page.
   const brandId = brand.id
-  const [items, vendors, customers, stores, identityRow] = await Promise.all([
+  const [items, vendors, customers, stores, identityRow, runs] = await Promise.all([
     listItems(allowed, brandId),
     listVendors(),
     padDef.key === 'invoice' ? listCustomers(allowed, brandId) : Promise.resolve([]),
     listStores(allowed, brandId),
     getPrintIdentity(brandId, 'default'),
+    padDef.key === 'mrf' || padDef.key === 'gtn'
+      ? listRuns(allowed, { brandId, limit: 100 })
+      : Promise.resolve([]),
   ])
+  const runOptions = runs.map((run) => ({
+    id: run.id,
+    label: run.run_ref,
+    productItemId: run.product_item_id,
+    acceptedQuantity: Number(run.accepted_quantity ?? 0),
+  }))
+  const defaultRunId = runs.some((run) => run.id === sp.run) ? sp.run ?? '' : ''
 
   const identity = identityRow
     ? { name: identityRow.legal_name, lines: identityHeaderLines(identityRow) }
@@ -152,16 +162,16 @@ export default async function OperationalFormsPage({
       {pad === 'gin' && (
         <GoodsIssueNoteForm kind="issue" brands={brandOptions} items={allItems}
           stores={stores.map((s) => ({ id: s.id, label: s.name }))}
-          identity={identity} defaultBrandId={brandId} />
+          identity={identity} defaultBrandId={brandId} productionRuns={[]} defaultRunId="" />
       )}
       {pad === 'gtn' && (
         <GoodsIssueNoteForm kind="transfer" brands={brandOptions} items={allItems}
           stores={stores.map((s) => ({ id: s.id, label: s.name }))}
-          identity={identity} defaultBrandId={brandId} />
+          identity={identity} defaultBrandId={brandId} productionRuns={runOptions} defaultRunId={defaultRunId} />
       )}
       {pad === 'mrf' && (
         <MaterialRequisitionForm brands={brandOptions} items={allItems}
-          identity={identity} defaultBrandId={brandId} />
+          identity={identity} defaultBrandId={brandId} productionRuns={runOptions} defaultRunId={defaultRunId} />
       )}
       {pad === 'invoice' && (
         <SalesInvoiceForm
@@ -191,7 +201,7 @@ export default async function OperationalFormsPage({
       )}
 
       <p className="rounded-xl border border-gray-100 bg-white p-4 text-xs leading-relaxed text-gray-500 shadow-sm">
-        <strong className="text-gray-700">How these reach the stock card.</strong> Every posted form
+        <strong className="text-gray-700">How these reach the stock card.</strong> Every posted stock document
         writes one row per line into <code className="rounded bg-gray-100 px-1">inventory_movements</code>,
         carrying the id of the document that caused it. The stock card is a view over that ledger, so
         Opening · In · Out · Closing recalculates the instant a form is posted — there is no batch job
@@ -229,9 +239,8 @@ function Header({
           )}
         </h1>
         <p className="mt-1 max-w-2xl text-sm text-gray-500">
-          The paper pads, with the same fields in the same order. Submitting a form posts its
-          movement through the stock ledger, so the stock card updates immediately — no separate
-          data-entry step, and no chance of the two disagreeing.
+          The paper pads, with the same fields in the same order. MRF submission and approval record
+          intent only. Posted GRNs, GINs, GTNs, delivery notes and invoices create their defined ledger effect.
         </p>
         {brandName && (
           <p className="mt-1 text-xs text-gray-400">

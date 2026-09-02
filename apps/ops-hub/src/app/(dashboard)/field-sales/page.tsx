@@ -1,12 +1,17 @@
 import Link from 'next/link'
 import { Truck, ArrowUpRight, TriangleAlert } from 'lucide-react'
+import { redirect } from 'next/navigation'
 import { requireSection } from '@/lib/server-auth'
+import { isFieldSalesManager, fieldSalesAllowedBrands } from '@/lib/fieldSalesAccess'
 import { listBrands } from '@/lib/brands'
 import { listTeam } from '@/lib/team'
 import { listItems } from '@/lib/inventory'
 import { scopeBrands } from '@/lib/finance'
-import { listAllocations, listDailyReturns, custodyBalances, reconcileAllocation } from '@/lib/fieldSales'
+import { listAllocations, listDailyReturns, listReturnNotes, getReturnNote, custodyBalances, reconcileAllocation } from '@/lib/fieldSales'
+import { listStores } from '@/lib/manufacturing'
 import { finishedGoodsQuantity } from '@/lib/finishedGoodsQuantity'
+import { ReturnAcceptancePanel } from '@/components/field-sales/ReturnAcceptancePanel'
+import { ReconciliationApprovalPanel } from '@/components/field-sales/ReconciliationApprovalPanel'
 
 export const dynamic = 'force-dynamic'
 
@@ -39,18 +44,23 @@ export default async function FieldSalesPage({
 }: {
   searchParams: Promise<{ brand?: string; allocation?: string }>
 }) {
-  const actor = await requireSection('inventory')
+  const actor = await requireSection('field_sales')
+  if (!isFieldSalesManager(actor)) redirect('/field-sales/my')
   const sp = await searchParams
-  const allowed = actor.allowedBrandIds('inventory')
+  const allowed = fieldSalesAllowedBrands(actor)
 
-  const [allBrands, team, items, allocations, custody, returns] = await Promise.all([
+  const [allBrands, team, items, allocations, custody, returns, pendingNotes, stores] = await Promise.all([
     listBrands(),
     listTeam(),
     listItems(allowed, sp.brand),
     listAllocations(allowed, { brandId: sp.brand, limit: 25 }),
     custodyBalances(allowed),
     listDailyReturns(allowed, { limit: 20 }),
+    listReturnNotes(allowed, { status: 'submitted', limit: 50 }),
+    listStores(allowed, sp.brand),
   ])
+  const pendingReturns = (await Promise.all(pendingNotes.map((note) => getReturnNote(note.id))))
+    .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
   const brands = scopeBrands(allBrands, allowed)
   const memberById = new Map(team.map((m) => [m.id, m]))
   const itemById = new Map(items.map((i) => [i.id, i]))
@@ -133,6 +143,7 @@ export default async function FieldSalesPage({
                   <th className="px-3 py-2 text-right font-semibold">Sampled</th>
                   <th className="px-3 py-2 text-right font-semibold">Returned</th>
                   <th className="px-3 py-2 text-right font-semibold">In custody</th>
+                  <th className="px-3 py-2 text-right font-semibold">Physical count</th>
                   <th className="px-3 py-2 text-right font-semibold">Unaccounted</th>
                 </tr>
               </thead>
@@ -146,6 +157,7 @@ export default async function FieldSalesPage({
                     <td className="px-3 py-2 text-right tabular-nums text-gray-600">{l.sampled ? packQuantity(itemById.get(l.itemId), l.sampled) : '—'}</td>
                     <td className="px-3 py-2 text-right tabular-nums text-gray-600">{l.returned ? packQuantity(itemById.get(l.itemId), l.returned) : '—'}</td>
                     <td className="px-3 py-2 text-right tabular-nums font-medium text-gray-900">{packQuantity(itemById.get(l.itemId), l.inCustody)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-gray-600">{l.reportedOnHand == null ? 'Not reported' : packQuantity(itemById.get(l.itemId), l.reportedOnHand)}</td>
                     <td className={`px-3 py-2 text-right tabular-nums font-semibold ${Math.abs(l.unaccounted) > 0.001 ? 'text-red-600' : 'text-gray-300'}`}>
                       {Math.abs(l.unaccounted) > 0.001 ? packQuantity(itemById.get(l.itemId), l.unaccounted) : '—'}
                     </td>
@@ -159,12 +171,18 @@ export default async function FieldSalesPage({
             <p className="mt-3 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
               <TriangleAlert size={15} className="mt-0.5 shrink-0" />
               <span>
-                Stock left custody with no explanation — it was issued, but is not sold, damaged,
-                sampled, returned or still held. This week cannot close without a manager approving
-                the variance with a reason.
+                A reported physical count does not match custody ledger stock. No balance was changed
+                automatically; a manager must investigate and approve the variance with a reason.
               </span>
             </p>
           )}
+          <ReconciliationApprovalPanel
+            allocationId={reconciliation.allocation.id}
+            hasVariance={reconciliation.lines.some((line) => Math.abs(line.unaccounted) > 0.001) || Math.abs(reconciliation.cash.shortfall) > 0.005}
+            status={reconciliation.allocation.status}
+            approvedBy={reconciliation.allocation.variance_approved_by}
+            existingReason={reconciliation.allocation.variance_reason}
+          />
         </section>
       )}
 
@@ -224,10 +242,23 @@ export default async function FieldSalesPage({
         </section>
       </div>
 
+      <ReturnAcceptancePanel
+        requests={pendingReturns.map(({ note, items: noteItems }) => ({
+          id: note.id, ref: note.note_ref, returnDate: note.return_date,
+          salesperson: note.salesperson_id ? memberById.get(note.salesperson_id)?.name ?? 'Unknown' : 'Unassigned',
+          destinationStoreId: note.destination_store_id,
+          lines: noteItems.map((line) => ({
+            id: line.id, itemName: itemById.get(line.item_id)?.name ?? 'Item',
+            quantityReturned: Number(line.quantity_returned), conditionNote: line.condition_note,
+          })),
+        }))}
+        stores={stores.map((store) => ({ id: store.id, label: store.name }))}
+      />
+
       <section className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
-        <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-ocg-gold">Recent daily returns</h2>
+        <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-ocg-gold">Recent daily activity</h2>
         {returns.length === 0 ? (
-          <p className="rounded-lg bg-gray-50 p-4 text-sm text-gray-500">No daily returns submitted yet.</p>
+          <p className="rounded-lg bg-gray-50 p-4 text-sm text-gray-500">No daily activity submitted yet.</p>
         ) : (
           <div className="space-y-2">
             {returns.map((r) => {

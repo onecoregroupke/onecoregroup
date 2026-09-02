@@ -82,7 +82,9 @@ export async function createItem(input: {
 }): Promise<InventoryItemRow> {
   if (!input.brand_id) throw new Error('brand_id is required')
   if (!input.name?.trim()) throw new Error('Item name is required')
-  const openingQty = Number(input.quantity ?? 0)
+  // Item registration creates the master record only. Opening balances must be
+  // established through an approved stock take/adjustment document.
+  const openingQty = 0
   const baseUnit = normalizeInventoryUnit(input.unit || 'pcs') || 'pcs'
   const itemType: InventoryItemType = (ITEM_TYPES as readonly string[]).includes(input.item_type ?? '')
     ? (input.item_type as InventoryItemType)
@@ -116,24 +118,6 @@ export async function createItem(input: {
   if (error) throw new Error(error.message)
   const item = data as InventoryItemRow
 
-  // Opening stock is itself an auditable "in" movement.
-  if (openingQty > 0) {
-    await db().from('inventory_movements').insert({
-      item_id: item.id,
-      brand_id: item.brand_id,
-      direction: 'in',
-      quantity: openingQty,
-      movement_unit: item.base_unit || item.unit,
-      conversion_rate: 1,
-      base_quantity: openingQty,
-      effective_at: nowIso(),
-      unit_value_ksh: item.unit_value_ksh,
-      reason: 'Opening stock',
-      source: 'manual',
-      quantity_after: openingQty,
-      recorded_by: input.recorded_by ?? '',
-    })
-  }
   return item
 }
 
@@ -156,9 +140,9 @@ export interface RecordStockInput {
   receipt_item_id?: string | null
   goods_issue_id?: string | null
   issue_item_id?: string | null
-  // Production (060) and field-sales custody (061). fg_transfer_id and
-  // allocation_item_id also carry partial UNIQUE indexes, so a finished-goods
-  // transfer or a weekly allocation line posts to stock exactly once.
+  // Production context (legacy FGT rows remain readable) and field-sales
+  // custody. New production receipts use linked GTNs; allocation_item_id keeps
+  // each weekly delivery-note line once-only.
   production_run_id?: string | null
   fg_transfer_id?: string | null
   allocation_id?: string | null
@@ -178,6 +162,7 @@ export interface RecordStockInput {
   import_id?: string | null
   stock_count_id?: string | null
   stock_count_item_id?: string | null
+  return_note_item_id?: string | null
 }
 
 /** Record a stock movement and update the item's live quantity. Stock-out
@@ -252,6 +237,7 @@ export async function recordStockMovement(
       import_id: input.import_id ?? null,
       stock_count_id: input.stock_count_id ?? null,
       stock_count_item_id: input.stock_count_item_id ?? null,
+      return_note_item_id: input.return_note_item_id ?? null,
       purchase_id: input.purchase_id ?? null,
       goods_receipt_id: input.goods_receipt_id ?? null,
       receipt_item_id: input.receipt_item_id ?? null,

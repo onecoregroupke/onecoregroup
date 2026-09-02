@@ -4,7 +4,7 @@ export type SectionKey =
   | 'glitz' | 'npt' | 'reports' | 'brands' | 'users' | 'marketing'
   | 'ops' | 'ops_agents' | 'management' | 'finance' | 'npt_service' | 'rayyan_admin' | 'rhythms_admin'
   | 'darul_admin' | 'nuuranest_admin' | 'glitz_admin' | 'personal' | 'all_tasks'
-  | 'meetings' | 'inventory' | 'procurement' | 'forms' | 'forms_responses' | 'forms_approvals'
+  | 'meetings' | 'inventory' | 'procurement' | 'field_sales' | 'forms' | 'forms_responses' | 'forms_approvals'
   // Production-readiness foundations (067). These remain independently
   // grantable and brand-scopable; none inherit broad Ops access.
   | 'people' | 'knowledge' | 'historical_imports'
@@ -2860,6 +2860,7 @@ export interface InventoryMovementRow {
   store_id: string | null
   stock_count_id: string | null
   stock_count_item_id: string | null
+  return_note_item_id: string | null
   movement_unit: string
   conversion_rate: number
   base_quantity: number
@@ -3010,6 +3011,7 @@ export interface ProcurementRequisitionRow {
   purpose: string
   linked_task_id: string | null
   linked_repair_case_id: string | null
+  production_run_id: string | null
   status: string
   prepared_by: string
   /** Never equal to requested_by unless self-approval was explicitly granted. */
@@ -3120,8 +3122,17 @@ export interface ProcurementGoodsIssueRow {
   store_location: string
   source_store_id: string | null
   destination_store_id: string | null
+  production_run_id: string | null
+  document_number: string
   department: string
   purpose: string
+  exception_reason: string
+  requested_by: string
+  requested_by_name: string
+  approved_by: string
+  approved_by_name: string
+  prepared_by: string
+  handed_over_by: string
   stock_card_number: string
   entered_by: string
   issued_by: string
@@ -4058,6 +4069,7 @@ export interface ProductionRunRow {
   product_item_id: string | null
   planned_quantity: number
   actual_quantity: number
+  accepted_quantity: number
   rejected_quantity: number
   waste_quantity: number
   unit: string
@@ -4297,7 +4309,11 @@ export interface FieldSalesCustodyMovementRow {
   movement_date: string
   allocation_item_id: string | null
   daily_return_id: string | null
+  daily_return_item_id: string | null
   return_note_id: string | null
+  sales_invoice_id: string | null
+  sales_invoice_item_id: string | null
+  idempotency_key: string
   invoice_ref: string
   reason: string
   recorded_by: string
@@ -4342,10 +4358,15 @@ export interface FieldSalesDailyReturnItemRow {
   quantity_damaged: number
   quantity_sample: number
   quantity_on_hand: number
+  on_hand_reported: boolean
   selling_price_ksh: number
   /** GENERATED: quantity_sold * selling_price_ksh. */
   line_total_ksh: number
   customer: string
+  payment_method: string
+  payment_reference: string
+  amount_received_ksh: number
+  credit_amount_ksh: number
   notes: string
   created_at: string
 }
@@ -4361,6 +4382,9 @@ export interface FieldSalesReturnNoteRow {
   salesperson_id: string | null
   destination_store_id: string | null
   received_by: string
+  requested_by: string
+  requested_at: string | null
+  posted_by: string
   /** draft | submitted | received | posted | disputed */
   status: string
   posted_at: string | null

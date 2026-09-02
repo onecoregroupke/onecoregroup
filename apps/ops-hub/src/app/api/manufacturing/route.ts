@@ -1,8 +1,8 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { requireApiSection } from '@/lib/api-auth'
 import {
-  createStore, createRun, issueMaterials, recordConsumption,
-  createFgTransfer, postFgTransfer, setBomLine, deactivateBomLine,
+  createStore, createRun, getRun, updateRunExecution, recordConsumption,
+  setBomLine, deactivateBomLine,
 } from '@/lib/manufacturing'
 import { auditEvent } from '@/lib/audit'
 
@@ -10,8 +10,8 @@ import { auditEvent } from '@/lib/audit'
  * Manufacturing actions (§§19–28). Gated on `inventory` edit, brand-scoped —
  * production moves stock, so it lives behind the same grant as the ledger.
  *
- * Every stock effect runs through the manufacturing service, which posts via
- * recordStockMovement(); nothing here writes inventory_movements directly.
+ * Manufacturing records execution and reconciliation only. MRF/GIN and GTN
+ * are the authoritative stock-moving workflows.
  */
 export async function POST(req: NextRequest) {
   const gate = await requireApiSection(req, 'inventory', 'edit')
@@ -61,16 +61,7 @@ export async function POST(req: NextRequest) {
       }
 
       case 'issue-materials': {
-        // Deducts raw material / packaging from stock. An over-issue is refused
-        // by the ledger before any material row is written.
-        const rows = await issueMaterials({
-          run_id: body.run_id,
-          lines: Array.isArray(body.lines) ? body.lines : [],
-          issued_by: who,
-          movement_date: body.movement_date,
-        })
-        await auditEvent({ actor, action: 'manufacturing.run.issue', entity_table: 'production_runs', entity_id: body.run_id, entity_label: `${rows.length} material line(s)` })
-        return NextResponse.json({ ok: true, rows })
+        return NextResponse.json({ ok: false, error: 'Direct material issue is disabled. Use an approved MRF and post its linked GIN.' }, { status: 409 })
       }
 
       case 'record-consumption': {
@@ -79,21 +70,18 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: true, row })
       }
 
-      case 'create-fg-transfer': {
-        assertBrand(body.brand_id ?? null)
-        const row = await createFgTransfer(body)
-        await auditEvent({ actor, action: 'manufacturing.fg.create', entity_table: 'production_fg_transfers', entity_id: row.id, entity_label: row.transfer_ref, after_data: row as unknown as Record<string, unknown> })
-        return NextResponse.json({ ok: true, row }, { status: 201 })
-      }
-
-      case 'post-fg-transfer': {
-        // Only ACCEPTED units reach stock, and the partial unique index on
-        // inventory_movements.fg_transfer_id makes a second post impossible.
-        if (!body?.id) return NextResponse.json({ ok: false, error: 'id is required' }, { status: 400 })
-        const row = await postFgTransfer(body.id, who)
-        await auditEvent({ actor, action: 'manufacturing.fg.post', entity_table: 'production_fg_transfers', entity_id: row.id, entity_label: row.transfer_ref, after_data: row as unknown as Record<string, unknown> })
+      case 'record-output': {
+        const existing = await getRun(String(body?.run_id ?? ''))
+        if (!existing) return NextResponse.json({ ok: false, error: 'Production run not found.' }, { status: 404 })
+        assertBrand(existing.brand_id)
+        const row = await updateRunExecution(body)
+        await auditEvent({ actor, action: 'manufacturing.run.output', entity_table: 'production_runs', entity_id: row.id, entity_label: row.run_ref, after_data: row as unknown as Record<string, unknown> })
         return NextResponse.json({ ok: true, row })
       }
+
+      case 'create-fg-transfer':
+      case 'post-fg-transfer':
+        return NextResponse.json({ ok: false, error: 'Legacy finished-goods posting is disabled. Record output, then post a GTN linked to the run.' }, { status: 409 })
 
       default:
         return NextResponse.json({ ok: false, error: `Unknown action "${action}"` }, { status: 400 })

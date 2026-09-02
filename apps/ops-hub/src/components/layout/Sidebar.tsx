@@ -83,7 +83,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: '/inventory', label: 'Inventory', icon: Boxes, section: 'inventory' },
       { href: '/manufacturing', label: 'Manufacturing', icon: Factory, section: 'inventory' },
-      { href: '/field-sales', label: 'Field Sales', icon: Truck, section: 'inventory' },
+      { href: '/field-sales', label: 'Field Sales', icon: Truck, section: 'field_sales' },
       { href: '/procurement', label: 'Procurement', icon: ShoppingCart, section: 'procurement' },
       { href: '/petty-cash', label: 'Petty Cash', icon: Wallet, section: 'finance' },
       { href: '/finance', label: 'Finance', icon: Landmark, section: 'finance' },

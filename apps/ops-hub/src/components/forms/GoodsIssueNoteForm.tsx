@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { PackageMinus } from 'lucide-react'
 import { api } from '@/lib/apiClient'
@@ -36,7 +36,7 @@ const blankLine = (): Line => ({
  * is on hand, so this cannot drive a store negative.
  */
 export function GoodsIssueNoteForm({
-  kind, brands, items, stores, identity, defaultBrandId,
+  kind, brands, items, stores, identity, defaultBrandId, productionRuns, defaultRunId,
 }: {
   kind: 'issue' | 'transfer'
   brands: { id: string; label: string }[]
@@ -44,6 +44,8 @@ export function GoodsIssueNoteForm({
   stores: { id: string; label: string }[]
   identity: Identity | null
   defaultBrandId: string
+  productionRuns: { id: string; label: string; productItemId: string | null; acceptedQuantity: number }[]
+  defaultRunId: string
 }) {
   const router = useRouter()
   const isTransfer = kind === 'transfer'
@@ -53,6 +55,7 @@ export function GoodsIssueNoteForm({
   const [head, setHead] = useState({
     brand_id: defaultBrandId,
     issue_date: new Date().toISOString().slice(0, 10),
+    document_number: '',
     issued_to: '',
     department: '',
     destination_location: '',
@@ -64,6 +67,12 @@ export function GoodsIssueNoteForm({
     received_by: '',
     entered_by: '',
     remarks: '',
+    production_run_id: defaultRunId,
+    exception_reason: '',
+    requested_by_name: '',
+    approved_by_name: '',
+    prepared_by: '',
+    handed_over_by: '',
   })
   const [lines, setLines] = useState<Line[]>([blankLine()])
 
@@ -73,9 +82,11 @@ export function GoodsIssueNoteForm({
 
   const totalOut = lines.filter((l) => l.inventory_item_id)
     .reduce((s, l) => s + Number(l.quantity_issued || 0), 0)
+  const selectedRun = productionRuns.find((run) => run.id === head.production_run_id)
 
   /** On-hand check mirrored from the ledger so a short issue is visible early. */
   function shortfall(l: Line): string | null {
+    if (isTransfer && selectedRun) return null
     if (!l.inventory_item_id) return null
     const item = items.find((i) => i.id === l.inventory_item_id)
     if (!item) return null
@@ -90,8 +101,14 @@ export function GoodsIssueNoteForm({
     setError(''); setDone('')
     const usable = lines.filter((l) => (l.description.trim() || l.inventory_item_id) && Number(l.quantity_issued) > 0)
     if (usable.length === 0) { setError('Add at least one line with a quantity.'); return }
+    if (!head.document_number.trim()) { setError(`Enter the physical ${isTransfer ? 'GTN' : 'GIN'} number.`); return }
     if (!head.issued_to.trim()) {
       setError(isTransfer ? 'Say where the goods are being transferred to.' : 'Say who the goods are being issued to.')
+      return
+    }
+    if (!isTransfer && [head.exception_reason, head.requested_by_name, head.approved_by_name, head.purpose]
+      .some((value) => !value.trim())) {
+      setError('This non-MRF issue is an exception. Record the reason, requester, approver, destination and intended use.')
       return
     }
 
@@ -104,7 +121,8 @@ export function GoodsIssueNoteForm({
           kind,
           brand_id: head.brand_id,
           issue_date: head.issue_date,
-          issued_to_type: isTransfer ? 'store' : 'department',
+          document_number: head.document_number,
+          issued_to_type: isTransfer ? 'store' : 'other',
           issued_to_label: head.issued_to,
           transfer_to_location: head.destination_location,
           store_location: stores.find((s) => s.id === head.source_store_id)?.label ?? '',
@@ -112,6 +130,14 @@ export function GoodsIssueNoteForm({
           destination_store_id: head.destination_store_id || null,
           department: head.department,
           purpose: head.purpose,
+          production_run_id: head.production_run_id || null,
+          exception_reason: head.exception_reason,
+          requested_by: head.requested_by_name,
+          requested_by_name: head.requested_by_name,
+          approved_by: head.approved_by_name,
+          approved_by_name: head.approved_by_name,
+          prepared_by: head.prepared_by,
+          handed_over_by: head.handed_over_by,
           stock_card_number: head.stock_card_number,
           entered_by: head.entered_by,
           issued_by: head.issued_by,
@@ -140,7 +166,9 @@ export function GoodsIssueNoteForm({
       })
       setSaving(false)
       if (!posted.ok) { setError(posted.data?.error ?? 'Saved as draft, but posting to stock failed.'); return }
-      setDone(`${issue.reference} posted — ${totalOut} unit(s) taken out of stock.`)
+      setDone(isTransfer && head.production_run_id
+        ? `${issue.reference} posted — ${totalOut} accepted unit(s) received into the destination store.`
+        : `${issue.reference} posted — ${totalOut} unit(s) moved by the document.`)
     } else {
       setSaving(false)
       setDone(`${issue?.reference ?? 'Note'} saved as a draft. Stock has NOT moved yet.`)
@@ -151,9 +179,9 @@ export function GoodsIssueNoteForm({
 
   return (
     <Pad
-      title={isTransfer ? 'Goods Transfer Note' : 'Goods / Raw Material Issue Note'}
+      title={isTransfer ? 'Goods Transfer Note' : 'Other Stock Issue (exception)'}
       identity={identity}
-      subtitle={isTransfer ? 'Stock moving between stores' : 'Stock issued to production or a department'}
+      subtitle={isTransfer ? 'Store-to-store transfer or accepted production receipt' : 'Use only when no approved Material Requisition exists'}
     >
       <PadHeader>
         {brands.length > 1 && (
@@ -172,6 +200,24 @@ export function GoodsIssueNoteForm({
         <PadField label="Department">
           <input className="input" value={head.department} onChange={(e) => set('department', e.target.value)} />
         </PadField>
+        <PadField label={isTransfer ? 'GTN no.' : 'GIN no.'}>
+          <input className="input" value={head.document_number} onChange={(e) => set('document_number', e.target.value)} placeholder="Number on the physical pad" />
+        </PadField>
+        {isTransfer && productionRuns.length > 0 && (
+          <PadField label="Production run (for production → FG)">
+            <select className="input" value={head.production_run_id} onChange={(e) => set('production_run_id', e.target.value)}>
+              <option value="">Ordinary store transfer</option>
+              {productionRuns.map((run) => <option key={run.id} value={run.id}>{run.label} · accepted {run.acceptedQuantity}</option>)}
+            </select>
+          </PadField>
+        )}
+        {!isTransfer && (
+          <>
+            <PadField label="Exception reason"><input className="input" value={head.exception_reason} onChange={(e) => set('exception_reason', e.target.value)} /></PadField>
+            <PadField label="Requested by"><input className="input" value={head.requested_by_name} onChange={(e) => set('requested_by_name', e.target.value)} /></PadField>
+            <PadField label="Approved by"><input className="input" value={head.approved_by_name} onChange={(e) => set('approved_by_name', e.target.value)} /></PadField>
+          </>
+        )}
         <PadField label="Source store">
           <select className="input" value={head.source_store_id} onChange={(e) => set('source_store_id', e.target.value)}>
             <option value="">Select source store…</option>
@@ -214,8 +260,8 @@ export function GoodsIssueNoteForm({
         {lines.map((l, idx) => {
           const short = shortfall(l)
           return (
-            <>
-              <PadRow key={idx} onRemove={lines.length > 1 ? () => setLines((c) => c.filter((_, i) => i !== idx)) : undefined}>
+            <Fragment key={idx}>
+              <PadRow onRemove={lines.length > 1 ? () => setLines((c) => c.filter((_, i) => i !== idx)) : undefined}>
                 <PadCell align="right">
                   <input type="number" step="any" min="0" className="input text-right" value={l.quantity_issued}
                     onChange={(e) => setLine(idx, { quantity_issued: e.target.value })} />
@@ -247,28 +293,32 @@ export function GoodsIssueNoteForm({
                 <PadCell><input className="input" value={l.remarks} onChange={(e) => setLine(idx, { remarks: e.target.value })} /></PadCell>
               </PadRow>
               {short && (
-                <tr key={`${idx}-short`}>
+                <tr>
                   <td colSpan={7} className="px-1.5 pb-2 text-xs text-amber-600">{short}</td>
                 </tr>
               )}
-            </>
+            </Fragment>
           )
         })}
       </PadLines>
 
       <PadFooter fields={[
         { label: 'Stock card entered by', node: <input className="input" value={head.entered_by} onChange={(e) => set('entered_by', e.target.value)} /> },
+        { label: 'Prepared by', node: <input className="input" value={head.prepared_by} onChange={(e) => set('prepared_by', e.target.value)} /> },
+        { label: 'Handed over by', node: <input className="input" value={head.handed_over_by} onChange={(e) => set('handed_over_by', e.target.value)} /> },
         { label: isTransfer ? 'Goods issued by' : 'Issued by', node: <input className="input" value={head.issued_by} onChange={(e) => set('issued_by', e.target.value)} /> },
         { label: isTransfer ? 'Goods received by' : 'Received by', node: <input className="input" value={head.received_by} onChange={(e) => set('received_by', e.target.value)} /> },
         { label: 'Remarks', node: <input className="input" value={head.remarks} onChange={(e) => set('remarks', e.target.value)} /> },
       ]} />
 
       <StockEffectNotice tone="out">
-        Posting this note {isTransfer ? 'moves' : 'removes'} <strong>{totalOut}</strong> unit(s) {isTransfer ? 'between stores' : 'from stock'}.
-        {isTransfer
-          ? ' Paired source and destination ledger movements keep total stock unchanged and are protected against replay.'
-          : ' Material issued to production is consumed — it leaves the store and is reconciled against the run.'}
-        {' '}An issue larger than the quantity on hand is refused by the ledger.
+        Posting this note {isTransfer && selectedRun ? 'receives' : isTransfer ? 'moves' : 'removes'} <strong>{totalOut}</strong> unit(s) {isTransfer && selectedRun ? 'into finished-goods inventory' : isTransfer ? 'between stores' : 'from stock'}.
+        {isTransfer && selectedRun
+          ? ' Production output was not previously in inventory, so the linked GTN creates one destination receipt and no production-store deduction.'
+          : isTransfer
+            ? ' Paired source and destination ledger movements keep total stock unchanged and are protected against replay.'
+            : ' This is an explicitly approved non-MRF exception. Normal production issues originate from an approved MRF.'}
+        {!(isTransfer && selectedRun) && ' An issue larger than the quantity on hand is refused by the ledger.'}
       </StockEffectNotice>
 
       {error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-600">{error}</p>}
@@ -277,7 +327,7 @@ export function GoodsIssueNoteForm({
       <div className="flex flex-wrap gap-2">
         <button onClick={() => submit(true)} disabled={saving}
           className="inline-flex items-center gap-2 rounded-lg bg-ocg-navy px-5 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60">
-          <PackageMinus size={15} /> {saving ? 'Saving…' : 'Issue & post to stock'}
+          <PackageMinus size={15} /> {saving ? 'Saving…' : isTransfer ? 'Post GTN' : 'Post exception issue'}
         </button>
         <button onClick={() => submit(false)} disabled={saving}
           className="rounded-lg border border-gray-200 bg-white px-5 py-2 text-sm text-gray-600 hover:border-gray-300 disabled:opacity-60">

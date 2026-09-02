@@ -1,5 +1,6 @@
 import { db, nowIso, todayInEat, mintReference } from './serverClient'
 import { recordStockMovement } from './inventory'
+import { recordCustodyMovement } from './fieldSalesCustody'
 import { scopedBrandIds } from './stockCards'
 import type {
   SalesCustomerRow, SalesInvoiceRow, SalesInvoiceItemRow,
@@ -9,10 +10,9 @@ import type {
 // =============================================================================
 // ICELAND SALES — customers → invoices → payments (migration 066).
 //
-// The invoice is the document that moves finished goods off the shelf, so it
-// posts through the SAME ledger as every other movement. Nothing here writes
-// inventory_movements directly; it all goes via recordStockMovement(), and the
-// partial unique index on sales_invoice_item_id makes a second post impossible.
+// Store invoices move finished goods out of inventory. Field-sales invoices
+// move goods out of salesperson custody only; the delivery note already moved
+// them out of the store. Nothing writes either ledger directly.
 //
 // An invoice is created as a DRAFT and moves stock only when POSTED. Drafting
 // an invoice must never quietly deplete a store.
@@ -373,10 +373,9 @@ export async function createInvoice(input: {
 /**
  * Issue the invoice and move the goods.
  *
- * Every line that names an inventory item deducts finished goods through the
- * shared ledger. Lines with no linked item (a service, or an ad-hoc
- * description) move nothing — deliberately, because inventing an item to make
- * the ledger balance would be worse than recording that nothing moved.
+ * Store-sale lines deduct the stock ledger. Field-sale lines deduct custody
+ * only. When an invoice is generated from an already-posted daily activity,
+ * neither ledger moves again.
  *
  * Idempotent: the status guard catches the ordinary double-click, and the
  * partial unique index on inventory_movements.sales_invoice_item_id catches a
@@ -388,8 +387,33 @@ export async function postInvoice(invoiceId: string, postedBy: string): Promise<
   const { invoice, items } = loaded
   if (invoice.status !== 'draft') throw new Error(`This invoice is already ${invoice.status}.`)
 
+  const fieldSale = Boolean(invoice.allocation_id || invoice.salesperson_id || invoice.daily_return_id)
+  if (fieldSale && !invoice.daily_return_id && !invoice.salesperson_id) {
+    throw new Error('A field-sales invoice must identify the salesperson whose custody is being reduced.')
+  }
+
   for (const line of items) {
     if (!line.item_id || Number(line.quantity) <= 0) continue
+    // The daily activity already posted its sale to custody line by line.
+    if (invoice.daily_return_id) continue
+    if (fieldSale) {
+      await recordCustodyMovement({
+        allocation_id: invoice.allocation_id,
+        salesperson_id: invoice.salesperson_id,
+        item_id: line.item_id,
+        brand_id: invoice.brand_id,
+        movement_kind: 'sale',
+        quantity: Number(line.quantity),
+        batch_number: line.batch_number,
+        movement_date: invoice.invoice_date,
+        reference: invoice.invoice_number || invoice.invoice_ref,
+        sales_invoice_id: invoice.id,
+        sales_invoice_item_id: line.id,
+        idempotency_key: `field-invoice:${line.id}`,
+        recorded_by: postedBy,
+      })
+      continue
+    }
     await recordStockMovement({
       item_id: line.item_id,
       direction: 'out',
@@ -400,6 +424,7 @@ export async function postInvoice(invoiceId: string, postedBy: string): Promise<
       source: 'sales_invoice',
       sales_invoice_id: invoice.id,
       sales_invoice_item_id: line.id,
+      idempotency_key: `store-invoice:${line.id}`,
       batch_number: line.batch_number,
       store_id: invoice.source_store_id,
       recorded_by: postedBy,

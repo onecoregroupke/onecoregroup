@@ -171,6 +171,33 @@ export function expectedFromBom(
 
 // ─── Finished goods transfer (§26) ──────────────────────────────────────────
 
+export interface ProductionOutput {
+  produced_quantity: number
+  accepted_quantity: number
+  rejected_quantity: number
+  waste_quantity: number
+}
+
+/** Recording production output is reconciliation only; it has no inventory
+ * effect. A posted GTN is the authoritative finished-goods receipt. */
+export function validateProductionOutput(output: ProductionOutput): string[] {
+  const values = [output.produced_quantity, output.accepted_quantity, output.rejected_quantity, output.waste_quantity]
+  const problems: string[] = []
+  if (values.some((value) => value < 0)) problems.push('Output quantities cannot be negative.')
+  if (output.accepted_quantity + output.rejected_quantity > output.produced_quantity) {
+    problems.push('Accepted plus rejected cannot exceed the produced quantity.')
+  }
+  return problems
+}
+
+export function awaitingTransferQuantity(accepted: number, transferredOnPostedGtns: number): number {
+  return round3(Math.max(0, accepted - transferredOnPostedGtns))
+}
+
+export function productionGtnStockEffect(quantity: number): { production: number; finishedGoods: number } {
+  return { production: 0, finishedGoods: Math.max(0, quantity) }
+}
+
 export interface FgTransfer {
   produced_quantity: number
   accepted_quantity: number

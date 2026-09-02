@@ -31,6 +31,7 @@ export const SECTIONS: SectionDef[] = [
   { key: 'finance', label: 'Finance', href: '/finance' },
   { key: 'inventory', label: 'Inventory', href: '/inventory' },
   { key: 'procurement', label: 'Procurement', href: '/procurement' },
+  { key: 'field_sales', label: 'Field Sales (own activity · management scope)', href: '/field-sales' },
   { key: 'people', label: 'People · Role & Capability', href: '/management/team' },
   { key: 'knowledge', label: 'Group Knowledge', href: '/knowledge' },
   { key: 'historical_imports', label: 'Historical Imports', href: '/historical-imports' },
@@ -93,6 +94,7 @@ export const BRAND_SCOPED_SECTIONS: SectionDef[] = [
   { key: 'finance', label: 'Finance', href: '/finance' },
   { key: 'inventory', label: 'Inventory', href: '/inventory' },
   { key: 'procurement', label: 'Procurement', href: '/procurement' },
+  { key: 'field_sales', label: 'Field Sales', href: '/field-sales' },
   { key: 'all_tasks', label: 'Task oversight (brand manager)', href: '/tasks' },
   { key: 'marketing', label: 'Marketing (brand marketer)', href: '/mhub/marketing/calendar' },
   { key: 'meetings', label: 'Meetings (view all)', href: '/meetings' },
@@ -177,6 +179,9 @@ export function can(
   const fallbacks: Partial<Record<SectionKey, SectionKey[]>> = {
     management: ['ops'],
     finance: ['ops'],
+    // Existing inventory managers retain the field-sales management surface;
+    // salespeople can instead receive only the narrow field_sales grant.
+    field_sales: ['inventory'],
     npt_service: ['ops'],
     rayyan_admin: ['ops'],
     rhythms_admin: ['ops'],

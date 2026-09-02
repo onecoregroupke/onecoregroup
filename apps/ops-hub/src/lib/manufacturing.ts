@@ -1,8 +1,9 @@
-import { db, nowIso, todayInEat, mintReference } from './serverClient'
-import { recordStockMovement } from './inventory'
+import { db, nowIso, mintReference } from './serverClient'
 import { scopedBrandIds } from './stockCards'
 import {
-  validateFgTransfer, expectedFromBom, reconcileMaterial, suggestProduction,
+  expectedFromBom, reconcileMaterial, suggestProduction,
+  validateProductionOutput,
+  awaitingTransferQuantity,
   type ProductionSuggestion,
 } from './manufacturingModel'
 import { evaluateRequirementGroups } from './packagingCompatibility'
@@ -21,10 +22,9 @@ export type {
 // =============================================================================
 // MANUFACTURING (§§19–28) — data access over migration 060.
 //
-// The pure rules live in manufacturingModel.ts and are unit-tested; this module
-// only reads and writes. It NEVER creates a second stock ledger: every stock
-// effect goes through recordStockMovement(), so quantity_after, the item's live
-// quantity and the once-only partial indexes all keep working.
+// The pure rules live in manufacturingModel.ts and are unit-tested. This module
+// records plans, execution and reconciliation only; it does not post stock.
+// Authoritative GIN and GTN posting lives in procurementChain.ts.
 // =============================================================================
 
 // ─── Stores ─────────────────────────────────────────────────────────────────
@@ -178,6 +178,50 @@ export async function createRun(input: {
   return data as ProductionRunRow
 }
 
+/** Record what production made and what quality accepted. This deliberately
+ * creates no inventory movement. Accepted output enters inventory only when a
+ * linked Goods Transfer Note is posted to the finished-goods store. */
+export async function updateRunExecution(input: {
+  run_id: string
+  actual_quantity: number
+  accepted_quantity: number
+  rejected_quantity?: number
+  waste_quantity?: number
+  quality_result?: string
+  quality_approved_by?: string
+  expiry_date?: string | null
+  notes?: string
+}): Promise<ProductionRunRow> {
+  const run = await getRun(input.run_id)
+  if (!run) throw new Error('Production run not found.')
+  if (['closed', 'cancelled'].includes(run.status)) throw new Error(`This run is ${run.status}.`)
+  const output = {
+    produced_quantity: Number(input.actual_quantity),
+    accepted_quantity: Number(input.accepted_quantity),
+    rejected_quantity: Number(input.rejected_quantity ?? 0),
+    waste_quantity: Number(input.waste_quantity ?? 0),
+  }
+  const problems = validateProductionOutput(output)
+  if (problems.length > 0) throw new Error(problems.join(' '))
+  const completedAt = output.produced_quantity > 0 ? nowIso() : null
+  const { data, error } = await db().from('production_runs').update({
+    actual_quantity: output.produced_quantity,
+    accepted_quantity: output.accepted_quantity,
+    rejected_quantity: output.rejected_quantity,
+    waste_quantity: output.waste_quantity,
+    status: output.accepted_quantity > 0 ? 'awaiting_quality' : 'in_production',
+    completed_at: completedAt,
+    quality_result: input.quality_result ?? run.quality_result,
+    quality_approved_by: input.quality_approved_by ?? run.quality_approved_by,
+    quality_approved_at: input.quality_approved_by ? nowIso() : run.quality_approved_at,
+    expiry_date: input.expiry_date ?? run.expiry_date,
+    notes: input.notes ?? run.notes,
+    updated_at: nowIso(),
+  }).eq('id', run.id).select('*').single()
+  if (error) throw new Error(error.message)
+  return data as ProductionRunRow
+}
+
 export async function listRunMaterials(runId: string): Promise<ProductionRunMaterialRow[]> {
   const { data } = await db().from('production_run_materials').select('*').eq('run_id', runId)
   return ((data as ProductionRunMaterialRow[] | null) ?? []).map((m) => ({
@@ -188,62 +232,6 @@ export async function listRunMaterials(runId: string): Promise<ProductionRunMate
     consumed_quantity: Number(m.consumed_quantity ?? 0),
     waste_quantity: Number(m.waste_quantity ?? 0),
   }))
-}
-
-/**
- * Issue raw material / packaging to a run. This is the ONLY place production
- * consumes stock, and it deducts through the shared ledger — so an over-issue
- * is refused by recordStockMovement() rather than driving a store negative.
- *
- * Rows are created when the issue is FINALISED, never at planning time.
- */
-export async function issueMaterials(input: {
-  run_id: string
-  lines: Array<{ item_id: string; quantity: number; expected_quantity?: number; unit?: string; notes?: string }>
-  issued_by: string
-  movement_date?: string
-}): Promise<ProductionRunMaterialRow[]> {
-  const run = await getRun(input.run_id)
-  if (!run) throw new Error('Production run not found.')
-  if (run.status === 'closed' || run.status === 'cancelled') {
-    throw new Error(`This run is ${run.status} — materials can no longer be issued to it.`)
-  }
-
-  const out: ProductionRunMaterialRow[] = []
-  for (const line of input.lines) {
-    const qty = Number(line.quantity)
-    if (!(qty > 0)) continue
-
-    // Deduct first: if stock is short this throws and no material row is written.
-    await recordStockMovement({
-      item_id: line.item_id,
-      direction: 'out',
-      quantity: qty,
-      movement_date: input.movement_date ?? todayInEat(),
-      reason: `Issued to production ${run.run_ref}`,
-      reference: run.run_ref,
-      source: 'production_issue',
-      production_run_id: run.id,
-      batch_number: run.batch_number,
-      recorded_by: input.issued_by,
-    })
-
-    const { data, error } = await db().from('production_run_materials').insert({
-      run_id: run.id,
-      item_id: line.item_id,
-      expected_quantity: Number(line.expected_quantity ?? 0),
-      issued_quantity: qty,
-      unit: line.unit ?? '',
-      notes: line.notes ?? '',
-    }).select('*').single()
-    if (error) throw new Error(error.message)
-    out.push(data as ProductionRunMaterialRow)
-  }
-
-  await db().from('production_runs')
-    .update({ status: 'materials_issued', started_at: run.started_at ?? nowIso(), updated_at: nowIso() })
-    .eq('id', run.id)
-  return out
 }
 
 /** Record what a run actually consumed, wasted and returned. */
@@ -293,109 +281,6 @@ export async function listFgTransfers(runId?: string, limit = 100): Promise<Prod
   if (runId) q = q.eq('run_id', runId)
   const { data } = await q
   return (data as ProductionFgTransferRow[] | null) ?? []
-}
-
-/**
- * Move finished goods from production into the finished-goods store.
- *
- * §26: only ACCEPTED units reach available stock. Rejected units are recorded
- * on the transfer and never stocked. The transfer is created `draft` and posted
- * separately, so the once-only index on fg_transfer_id is the final guard
- * against a double post.
- */
-export async function createFgTransfer(input: {
-  run_id: string | null
-  brand_id: string | null
-  item_id: string
-  produced_quantity: number
-  accepted_quantity: number
-  rejected_quantity?: number
-  batch_number?: string
-  unit?: string
-  destination_store_id?: string | null
-  source_store_id?: string | null
-  supervisor?: string
-  receiver?: string
-  quality_approved_by?: string
-  production_date?: string
-  expiry_date?: string | null
-  remarks?: string
-}): Promise<ProductionFgTransferRow> {
-  const accepted = Number(input.accepted_quantity)
-  const transfer = {
-    produced_quantity: Number(input.produced_quantity),
-    accepted_quantity: accepted,
-    rejected_quantity: Number(input.rejected_quantity ?? 0),
-    transferred_quantity: accepted,
-  }
-  const problems = validateFgTransfer(transfer)
-  if (problems.length > 0) throw new Error(problems.join(' '))
-
-  const ref = await mintReference('fg_transfer', 'FGT-')
-  const { data, error } = await db().from('production_fg_transfers').insert({
-    transfer_ref: ref,
-    run_id: input.run_id,
-    brand_id: input.brand_id,
-    item_id: input.item_id,
-    batch_number: input.batch_number ?? '',
-    ...transfer,
-    unit: input.unit ?? 'pcs',
-    source_store_id: input.source_store_id || null,
-    destination_store_id: input.destination_store_id || null,
-    supervisor: input.supervisor ?? '',
-    receiver: input.receiver ?? '',
-    quality_approved_by: input.quality_approved_by ?? '',
-    production_date: input.production_date ?? todayInEat(),
-    expiry_date: input.expiry_date || null,
-    status: 'draft',
-    remarks: input.remarks ?? '',
-  }).select('*').single()
-  if (error) throw new Error(error.message)
-  return data as ProductionFgTransferRow
-}
-
-/** Post a finished-goods transfer to stock. Idempotent by construction: the
- *  status guard catches the ordinary case and the partial unique index on
- *  inventory_movements.fg_transfer_id catches a concurrent replay. */
-export async function postFgTransfer(transferId: string, postedBy: string): Promise<ProductionFgTransferRow> {
-  const { data: row } = await db().from('production_fg_transfers').select('*').eq('id', transferId).maybeSingle()
-  if (!row) throw new Error('Transfer not found.')
-  const transfer = row as ProductionFgTransferRow
-  if (transfer.status === 'posted') throw new Error('This transfer has already been posted to stock.')
-
-  const qty = Number(transfer.transferred_quantity)
-  if (qty > 0) {
-    await recordStockMovement({
-      item_id: transfer.item_id,
-      direction: 'in',
-      quantity: qty,
-      movement_date: transfer.production_date ?? todayInEat(),
-      reason: 'Finished goods from production',
-      reference: transfer.transfer_ref,
-      source: 'production_output',
-      production_run_id: transfer.run_id,
-      fg_transfer_id: transfer.id,
-      batch_number: transfer.batch_number,
-      store_id: transfer.destination_store_id,
-      recorded_by: postedBy,
-    })
-  }
-
-  const { data, error } = await db().from('production_fg_transfers').update({
-    status: 'posted', posted_by: postedBy, posted_at: nowIso(), updated_at: nowIso(),
-  }).eq('id', transfer.id).select('*').single()
-  if (error) throw new Error(error.message)
-
-  if (transfer.run_id) {
-    await db().from('production_runs').update({
-      actual_quantity: transfer.accepted_quantity,
-      rejected_quantity: transfer.rejected_quantity,
-      status: 'completed',
-      completed_at: nowIso(),
-      updated_at: nowIso(),
-    }).eq('id', transfer.run_id)
-  }
-  return data as ProductionFgTransferRow
 }
 
 // ─── Production planning (§28) ──────────────────────────────────────────────
@@ -498,5 +383,59 @@ export async function bomRequirement(productItemId: string, quantity: number) {
       })),
       Number(quantity),
     ),
+  }
+}
+
+/** Authoritative run reconciliation. Material issues come only from posted
+ * linked GIN lines; finished goods transferred come only from posted linked
+ * GTNs. Legacy FGT rows are intentionally excluded and shown separately. */
+export async function productionRunSummary(runId: string) {
+  const run = await getRun(runId)
+  if (!run) throw new Error('Production run not found.')
+  const [bom, issuedRows, requisitions, issueDocs, transferDocs] = await Promise.all([
+    run.product_item_id ? listBom(run.product_item_id) : Promise.resolve([]),
+    listRunMaterials(run.id),
+    db().from('procurement_requisitions').select('id,reference,status')
+      .eq('production_run_id', run.id).order('created_at', { ascending: true }),
+    db().from('procurement_goods_issues').select('id,reference,document_number,status')
+      .eq('production_run_id', run.id).eq('kind', 'issue').order('created_at', { ascending: true }),
+    db().from('procurement_goods_issues').select('id,reference,document_number,status')
+      .eq('production_run_id', run.id).eq('kind', 'transfer').eq('status', 'posted'),
+  ])
+  const materialIds = [...new Set([...bom.map((line) => line.component_item_id), ...issuedRows.map((line) => line.item_id)])]
+  const { data: itemRows } = materialIds.length > 0
+    ? await db().from('inventory_items').select('*').in('id', materialIds)
+    : { data: [] as InventoryItemRow[] }
+  const itemById = new Map(((itemRows as InventoryItemRow[] | null) ?? []).map((item) => [item.id, item]))
+  const issuedByItem = new Map<string, number>()
+  for (const line of issuedRows) {
+    issuedByItem.set(line.item_id, (issuedByItem.get(line.item_id) ?? 0) + Number(line.issued_quantity ?? 0))
+  }
+  const materialLines = bom.map((line) => {
+    const expected = Number(line.quantity_per_unit ?? 0) * Number(run.planned_quantity ?? 0)
+      * (1 + Number(line.wastage_percent ?? 0) / 100)
+    const issued = issuedByItem.get(line.component_item_id) ?? 0
+    issuedByItem.delete(line.component_item_id)
+    return { itemId: line.component_item_id, item: itemById.get(line.component_item_id), expected, issued, variance: issued - expected }
+  })
+  for (const [itemId, issued] of issuedByItem) {
+    materialLines.push({ itemId, item: itemById.get(itemId), expected: 0, issued, variance: issued })
+  }
+
+  const docRows = (transferDocs.data as Array<{ id: string; reference: string | null; document_number: string; status: string }> | null) ?? []
+  const { data: transferMovements } = docRows.length > 0
+    ? await db().from('inventory_movements').select('base_quantity')
+        .in('goods_issue_id', docRows.map((doc) => doc.id)).eq('direction', 'in')
+    : { data: [] as Array<{ base_quantity: number }> }
+  const transferred = ((transferMovements as Array<{ base_quantity: number }> | null) ?? [])
+    .reduce((sum, movement) => sum + Number(movement.base_quantity ?? 0), 0)
+  return {
+    run,
+    materials: materialLines,
+    transferred,
+    awaitingTransfer: awaitingTransferQuantity(Number(run.accepted_quantity ?? 0), transferred),
+    mrfs: (requisitions.data as Array<{ id: string; reference: string | null; status: string }> | null) ?? [],
+    gins: (issueDocs.data as Array<{ id: string; reference: string | null; document_number: string; status: string }> | null) ?? [],
+    gtns: docRows,
   }
 }

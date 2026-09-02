@@ -6,6 +6,7 @@ import {
   expectedFromBom, fgTransferStockQuantity, validateFgTransfer,
   closingBalance, verifyLedger, reversalOf, suggestProduction,
   countVariance, canPostCountLine,
+  validateProductionOutput, awaitingTransferQuantity, productionGtnStockEffect,
 } from './manufacturingModel'
 
 // §37 "Manufacturing" testing requirements, in order.
@@ -53,6 +54,14 @@ test('approving a requisition moves no stock — only the issue does', () => {
   // but unissued line contributes nothing.
   assert.equal(issueStockQuantity({ issued_quantity: 0 }), 0)
   assert.equal(issueStockQuantity({ issued_quantity: 25 }), 25)
+})
+
+test('A: MRF approval alone has zero ledger quantity', () => {
+  assert.equal(issueStockQuantity({ issued_quantity: 0 }), 0)
+})
+
+test('B: a posted GIN moves exactly the issued quantity out', () => {
+  assert.equal(issueStockQuantity({ issued_quantity: 37.5 }), 37.5)
 })
 
 test('issuing cannot exceed what was approved', () => {
@@ -124,6 +133,25 @@ test('a transfer adds only accepted finished goods', () => {
   assert.equal(fgTransferStockQuantity({
     produced_quantity: 1000, accepted_quantity: 960, rejected_quantity: 40, transferred_quantity: 960,
   }), 960)
+})
+
+test('C: recording production output validates reconciliation but has no implicit stock effect', () => {
+  assert.deepEqual(validateProductionOutput({
+    produced_quantity: 100, accepted_quantity: 92, rejected_quantity: 8, waste_quantity: 2,
+  }), [])
+  assert.deepEqual(productionGtnStockEffect(0), { production: 0, finishedGoods: 0 })
+})
+
+test('D: a production GTN receives accepted output once and never deducts a phantom production balance', () => {
+  assert.deepEqual(productionGtnStockEffect(92), { production: 0, finishedGoods: 92 })
+  assert.equal(awaitingTransferQuantity(92, 92), 0)
+  assert.equal(awaitingTransferQuantity(92, 40), 52)
+})
+
+test('accepted and rejected output cannot exceed production', () => {
+  assert.match(validateProductionOutput({
+    produced_quantity: 100, accepted_quantity: 95, rejected_quantity: 10, waste_quantity: 0,
+  })[0], /cannot exceed/)
 })
 
 test('transferring more than accepted is rejected', () => {

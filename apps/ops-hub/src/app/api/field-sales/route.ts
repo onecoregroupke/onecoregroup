@@ -1,62 +1,80 @@
 import { NextResponse, type NextRequest } from 'next/server'
-import { requireApiSection, getApiActor } from '@/lib/api-auth'
+import { getApiActor, type Actor } from '@/lib/api-auth'
 import {
   listAllocations, getAllocation, createAllocation, issueAllocation,
-  listDailyReturns, submitDailyReturn, postReturnNote,
-  custodyBalances, reconcileAllocation,
+  listDailyReturns, submitDailyReturn, createReturnRequest, postReturnNote,
+  listReturnNotes, getReturnNote, custodyBalances, reconcileAllocation,
+  approveAllocationReconciliation,
 } from '@/lib/fieldSales'
+import { isFieldSalesManager, canManageFieldSales, fieldSalesAllowedBrands, canAccessSalesperson } from '@/lib/fieldSalesAccess'
 import { auditEvent } from '@/lib/audit'
 
-/**
- * Field-sales custody — the weekly delivery note, daily returns and the unsold
- * stock coming back.
- *
- * Gated on `inventory`, because every action here moves stock or custody.
- * The two-ledger rule (main store reduced once at allocation; custody reduced
- * daily) lives in the service, so it holds for any caller.
- */
+function assertBrand(allowed: string[] | null, brandId: string | null) {
+  if (allowed !== null && (!brandId || !allowed.includes(brandId))) {
+    throw new Error('That brand is outside the brands you manage.')
+  }
+}
+
+function assertOwnSalesperson(actor: Actor, salespersonId: string | null) {
+  if (!actor.teamMemberId && !isFieldSalesManager(actor)) throw new Error('Your account is not linked to a salesperson profile.')
+  if (!canAccessSalesperson(actor, salespersonId)) throw new Error('You may only access your own field-sales records.')
+}
+
 export async function GET(req: NextRequest) {
   const actor = await getApiActor(req)
   if (!actor) return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 })
-  if (!actor.can('inventory', 'view')) {
+  if (!actor.can('field_sales', 'view')) {
     return NextResponse.json({ ok: false, error: 'forbidden' }, { status: 403 })
   }
 
   const url = new URL(req.url)
   const view = url.searchParams.get('view') ?? 'allocations'
-  const allowed = actor.allowedBrandIds('inventory')
+  const manager = isFieldSalesManager(actor)
+  const salespersonId = manager
+    ? (url.searchParams.get('salesperson') ?? undefined)
+    : (actor.teamMemberId ?? undefined)
+  const allowed = fieldSalesAllowedBrands(actor)
+
+  if (!manager && !salespersonId) {
+    return NextResponse.json({ ok: false, error: 'Your account is not linked to a salesperson profile.' }, { status: 403 })
+  }
 
   try {
     switch (view) {
       case 'allocations':
-        return NextResponse.json({
-          ok: true,
-          allocations: await listAllocations(allowed, {
-            brandId: url.searchParams.get('brand') ?? undefined,
-            salespersonId: url.searchParams.get('salesperson') ?? undefined,
-          }),
-        })
+        return NextResponse.json({ ok: true, allocations: await listAllocations(allowed, {
+          brandId: url.searchParams.get('brand') ?? undefined, salespersonId,
+        }) })
       case 'allocation': {
-        const id = url.searchParams.get('id') ?? ''
-        const loaded = id ? await getAllocation(id) : null
+        const loaded = await getAllocation(url.searchParams.get('id') ?? '')
         if (!loaded) return NextResponse.json({ ok: false, error: 'Not found' }, { status: 404 })
+        assertBrand(allowed, loaded.allocation.brand_id)
+        assertOwnSalesperson(actor, loaded.allocation.salesperson_id)
         return NextResponse.json({ ok: true, ...loaded })
       }
       case 'custody':
-        return NextResponse.json({
-          ok: true,
-          balances: await custodyBalances(allowed, url.searchParams.get('salesperson') ?? undefined),
-        })
+        return NextResponse.json({ ok: true, balances: await custodyBalances(allowed, salespersonId) })
       case 'daily-returns':
-        return NextResponse.json({
-          ok: true,
-          returns: await listDailyReturns(allowed, {
-            allocationId: url.searchParams.get('allocation') ?? undefined,
-          }),
-        })
+        return NextResponse.json({ ok: true, returns: await listDailyReturns(allowed, {
+          allocationId: url.searchParams.get('allocation') ?? undefined, salespersonId,
+        }) })
+      case 'return-notes':
+        return NextResponse.json({ ok: true, notes: await listReturnNotes(allowed, {
+          salespersonId, status: url.searchParams.get('status') ?? undefined,
+        }) })
+      case 'return-note': {
+        const loaded = await getReturnNote(url.searchParams.get('id') ?? '')
+        if (!loaded) return NextResponse.json({ ok: false, error: 'Not found' }, { status: 404 })
+        assertBrand(allowed, loaded.note.brand_id)
+        assertOwnSalesperson(actor, loaded.note.salesperson_id)
+        return NextResponse.json({ ok: true, ...loaded })
+      }
       case 'reconciliation': {
         const id = url.searchParams.get('id') ?? ''
-        if (!id) return NextResponse.json({ ok: false, error: 'id is required' }, { status: 400 })
+        const loaded = id ? await getAllocation(id) : null
+        if (!loaded) return NextResponse.json({ ok: false, error: 'Not found' }, { status: 404 })
+        assertBrand(allowed, loaded.allocation.brand_id)
+        assertOwnSalesperson(actor, loaded.allocation.salesperson_id)
         return NextResponse.json({ ok: true, reconciliation: await reconcileAllocation(id) })
       }
       default:
@@ -68,18 +86,14 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const gate = await requireApiSection(req, 'inventory', 'edit')
-  if (gate instanceof NextResponse) return gate
-  const actor = gate
-  const who = actor.name || actor.email || actor.userId
-  const allowed = actor.allowedBrandIds('inventory')
-
-  const assertBrand = (brandId: string | null) => {
-    if (allowed === null) return
-    if (!brandId || !allowed.includes(brandId)) {
-      throw new Error('That brand is outside the brands you manage.')
-    }
+  const actor = await getApiActor(req)
+  if (!actor) return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 })
+  if (!actor.can('field_sales', 'edit')) {
+    return NextResponse.json({ ok: false, error: 'forbidden' }, { status: 403 })
   }
+
+  const who = actor.name || actor.email || actor.userId
+  const allowed = fieldSalesAllowedBrands(actor)
 
   try {
     const body = await req.json()
@@ -87,37 +101,71 @@ export async function POST(req: NextRequest) {
 
     switch (action) {
       case 'create-allocation': {
-        assertBrand(body.brand_id ?? null)
+        if (!canManageFieldSales(actor)) return NextResponse.json({ ok: false, error: 'Manager access required.' }, { status: 403 })
+        assertBrand(allowed, body.brand_id ?? null)
         const row = await createAllocation({ ...body, created_by: who })
         await auditEvent({ actor, action: 'field_sales.allocation.create', entity_table: 'field_sales_allocations', entity_id: row.id, entity_label: row.delivery_note_no || row.allocation_ref, after_data: row as unknown as Record<string, unknown> })
         return NextResponse.json({ ok: true, row }, { status: 201 })
       }
-
       case 'issue-allocation': {
-        if (!body?.id) return NextResponse.json({ ok: false, error: 'id is required' }, { status: 400 })
-        // Deducts the MAIN STORE once and opens custody. Both effects are keyed
-        // to the allocation line, so issuing twice is impossible.
-        const row = await issueAllocation(body.id, who)
+        if (!canManageFieldSales(actor)) return NextResponse.json({ ok: false, error: 'Manager access required.' }, { status: 403 })
+        const loaded = await getAllocation(String(body?.id ?? ''))
+        if (!loaded) return NextResponse.json({ ok: false, error: 'Not found' }, { status: 404 })
+        assertBrand(allowed, loaded.allocation.brand_id)
+        const row = await issueAllocation(loaded.allocation.id, who)
         await auditEvent({ actor, action: 'field_sales.allocation.issue', entity_table: 'field_sales_allocations', entity_id: row.id, entity_label: row.delivery_note_no || row.allocation_ref, after_data: row as unknown as Record<string, unknown> })
         return NextResponse.json({ ok: true, row })
       }
-
       case 'submit-daily-return': {
-        assertBrand(body.brand_id ?? null)
-        // Reduces CUSTODY ONLY — the main store was already reduced at issue.
-        const row = await submitDailyReturn({ ...body, submitted_by: who })
-        await auditEvent({ actor, action: 'field_sales.daily_return.submit', entity_table: 'field_sales_daily_returns', entity_id: row.id, entity_label: row.return_ref, after_data: row as unknown as Record<string, unknown> })
+        const loaded = await getAllocation(String(body?.allocation_id ?? ''))
+        if (!loaded) throw new Error('Choose one of your issued delivery notes.')
+        assertBrand(allowed, loaded.allocation.brand_id)
+        assertOwnSalesperson(actor, loaded.allocation.salesperson_id)
+        const row = await submitDailyReturn({ ...body,
+          allocation_id: loaded.allocation.id, brand_id: loaded.allocation.brand_id,
+          salesperson_id: loaded.allocation.salesperson_id, sales_team: loaded.allocation.sales_team,
+          submitted_by: who,
+        })
+        await auditEvent({ actor, action: 'field_sales.daily_activity.submit', entity_table: 'field_sales_daily_returns', entity_id: row.id, entity_label: row.return_ref, after_data: row as unknown as Record<string, unknown> })
         return NextResponse.json({ ok: true, row }, { status: 201 })
       }
-
+      case 'create-return-request': {
+        const loaded = await getAllocation(String(body?.allocation_id ?? ''))
+        if (!loaded) throw new Error('Choose one of your issued delivery notes.')
+        assertBrand(allowed, loaded.allocation.brand_id)
+        assertOwnSalesperson(actor, loaded.allocation.salesperson_id)
+        const row = await createReturnRequest({ ...body,
+          allocation_id: loaded.allocation.id, brand_id: loaded.allocation.brand_id,
+          salesperson_id: loaded.allocation.salesperson_id, requested_by: who,
+        })
+        await auditEvent({ actor, action: 'field_sales.return_request.create', entity_table: 'field_sales_return_notes', entity_id: row.id, entity_label: row.note_ref, after_data: row as unknown as Record<string, unknown> })
+        return NextResponse.json({ ok: true, row }, { status: 201 })
+      }
       case 'post-return-note': {
-        assertBrand(body.brand_id ?? null)
-        // Accepted units re-enter sellable stock; rejected units do NOT.
-        const row = await postReturnNote({ ...body, received_by: who })
+        if (!canManageFieldSales(actor)) return NextResponse.json({ ok: false, error: 'Manager access required.' }, { status: 403 })
+        const loaded = await getReturnNote(String(body?.id ?? ''))
+        if (!loaded) return NextResponse.json({ ok: false, error: 'Not found' }, { status: 404 })
+        assertBrand(allowed, loaded.note.brand_id)
+        const row = await postReturnNote({
+          id: loaded.note.id, destination_store_id: body.destination_store_id ?? loaded.note.destination_store_id,
+          lines: Array.isArray(body.lines) ? body.lines : [], received_by: who,
+        })
         await auditEvent({ actor, action: 'field_sales.return_note.post', entity_table: 'field_sales_return_notes', entity_id: row.id, entity_label: row.note_ref, after_data: row as unknown as Record<string, unknown> })
-        return NextResponse.json({ ok: true, row }, { status: 201 })
+        return NextResponse.json({ ok: true, row })
       }
-
+      case 'approve-reconciliation': {
+        if (!canManageFieldSales(actor)) return NextResponse.json({ ok: false, error: 'Manager access required.' }, { status: 403 })
+        const loaded = await getAllocation(String(body?.id ?? ''))
+        if (!loaded) return NextResponse.json({ ok: false, error: 'Not found' }, { status: 404 })
+        assertBrand(allowed, loaded.allocation.brand_id)
+        const row = await approveAllocationReconciliation({
+          allocationId: loaded.allocation.id,
+          approvedBy: who,
+          reason: String(body?.reason ?? ''),
+        })
+        await auditEvent({ actor, action: 'field_sales.reconciliation.approve', entity_table: 'field_sales_allocations', entity_id: row.id, entity_label: row.delivery_note_no || row.allocation_ref, after_data: row as unknown as Record<string, unknown> })
+        return NextResponse.json({ ok: true, row })
+      }
       default:
         return NextResponse.json({ ok: false, error: `Unknown action "${action}"` }, { status: 400 })
     }
