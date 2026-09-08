@@ -3,6 +3,7 @@ import type { InventoryItemRow, InventoryMovementRow } from '@ocg/db'
 import { toBaseQuantity } from './inventoryIntegrity'
 import { scopedBrandIds } from './stockCards'
 import { inventoryUnitConversionRate, normalizeInventoryUnit } from './inventoryUnits'
+import { compareInventoryItems } from './inventoryPresentation'
 
 // =============================================================================
 // Inventory — per-brand stock registers with in/out movements. Every movement
@@ -31,7 +32,87 @@ export async function listItems(allowed: string[] | null, brandId?: string): Pro
     .order('name', { ascending: true })
   if (brands !== null) q = q.in('brand_id', brands)
   const { data } = await q
-  return (data as InventoryItemRow[] | null) ?? []
+  return ((data as InventoryItemRow[] | null) ?? []).sort(compareInventoryItems)
+}
+
+export async function inventoryItem(itemId: string): Promise<InventoryItemRow | null> {
+  const { data, error } = await db().from('inventory_items').select('*').eq('id', itemId).maybeSingle()
+  if (error) throw new Error(error.message)
+  return data as InventoryItemRow | null
+}
+
+export async function updateInventorySettings(itemId: string, input: {
+  reorder_level: number
+  minimum_stock: number
+  production_threshold: number
+  maximum_stock: number | null
+  display_name?: string
+  product_family?: string
+  size_ml?: number | null
+  packaging_component?: string
+  sort_order?: number
+}): Promise<InventoryItemRow> {
+  const minimum = Number(input.minimum_stock)
+  const maximum = input.maximum_stock == null ? null : Number(input.maximum_stock)
+  const production = Number(input.production_threshold)
+  if (![minimum, production, Number(input.reorder_level)].every((value) => Number.isFinite(value) && value >= 0)) {
+    throw new Error('Stock thresholds must be zero or greater.')
+  }
+  if (maximum != null && (!Number.isFinite(maximum) || maximum < minimum)) {
+    throw new Error('Maximum stock must be blank or at least the minimum stock.')
+  }
+  const { data, error } = await db().from('inventory_items').update({
+    reorder_level: Number(input.reorder_level),
+    minimum_stock: minimum,
+    production_threshold: production,
+    maximum_stock: maximum,
+    display_name: input.display_name?.trim() ?? '',
+    product_family: input.product_family?.trim() ?? '',
+    size_ml: input.size_ml == null ? null : Number(input.size_ml),
+    packaging_component: input.packaging_component ?? '',
+    sort_order: Number(input.sort_order ?? 0),
+    updated_at: nowIso(),
+  }).eq('id', itemId).select('*').single()
+  if (error) throw new Error(error.message)
+  return data as InventoryItemRow
+}
+
+export async function listPriceHistory(itemId: string, limit = 200) {
+  const { data, error } = await db().from('inventory_price_history').select('*')
+    .eq('inventory_item_id', itemId).order('effective_date', { ascending: false })
+    .order('created_at', { ascending: false }).limit(limit)
+  if (error) throw new Error(error.message)
+  return (data ?? []).map((row) => ({ ...row, amount_ksh: Number(row.amount_ksh) }))
+}
+
+export async function recordInventoryPrice(input: {
+  item_id: string
+  price_type: 'supplier_reference_cost' | 'retail_selling_price' | 'wholesale_selling_price'
+  amount_ksh: number
+  effective_date: string
+  supplier_name?: string
+  source_description?: string
+  source_reference?: string
+  notes?: string
+  created_by: string
+  idempotency_key: string
+}) {
+  if (!Number.isFinite(input.amount_ksh) || input.amount_ksh < 0) throw new Error('Price must be zero or greater.')
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.effective_date)) throw new Error('An effective date is required.')
+  const { data, error } = await db().rpc('record_inventory_price', {
+    p_item_id: input.item_id,
+    p_price_type: input.price_type,
+    p_amount_ksh: input.amount_ksh,
+    p_effective_date: input.effective_date,
+    p_supplier_name: input.supplier_name ?? '',
+    p_source_description: input.source_description ?? '',
+    p_source_reference: input.source_reference ?? '',
+    p_notes: input.notes ?? '',
+    p_created_by: input.created_by,
+    p_idempotency_key: input.idempotency_key,
+  })
+  if (error) throw new Error(error.message)
+  return data
 }
 
 /** Movements, newest first. `brandId` narrows within `allowed`, never past it. */

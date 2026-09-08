@@ -13,6 +13,7 @@ import { FinishedGoodsQuantity } from '@/components/inventory/FinishedGoodsQuant
 import { filterInventoryByTaxonomy, inventoryTaxonomy, inventoryTaxonomyOptions } from '@/lib/inventoryTaxonomy'
 import { formatPackageConfiguration } from '@/lib/finishedGoodsQuantity'
 import type { InventoryItemRow } from '@ocg/db'
+import { StockCardPdfButton } from '@/components/inventory/StockCardPdfButton'
 
 export const dynamic = 'force-dynamic'
 
@@ -84,16 +85,19 @@ export default async function StockCardsPage({
 
   return (
     <div className="space-y-5">
-      <div>
-        <Link href="/inventory" className="mb-2 inline-flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-700">
-          <ArrowLeft size={13} /> Inventory
-        </Link>
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-ocg-gold">Stock control · Stock card</p>
-        <h1 className="mt-1 text-2xl font-semibold text-gray-900">Stock card</h1>
-        <p className="mt-1 max-w-2xl text-sm text-gray-500">
-          Opening, in, out and closing balance per item for {from} → {to}. Every figure is replayed
-          from the movement ledger, so it can be traced line by line to the document that caused it.
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <Link href="/inventory" className="mb-2 inline-flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-700">
+            <ArrowLeft size={13} /> Inventory
+          </Link>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-ocg-gold">Stock control · Stock card</p>
+          <h1 className="mt-1 text-2xl font-semibold text-gray-900">Stock card</h1>
+          <p className="mt-1 max-w-2xl text-sm text-gray-500">
+            Opening, in, out and closing balance per item for {from} → {to}. Every figure is replayed
+            from the movement ledger, so it can be traced line by line to the document that caused it.
+          </p>
+        </div>
+        <StockCardPdfButton filters={{ ...params, from, to }} />
       </div>
 
       <Suspense fallback={<div className="h-24 animate-pulse rounded-xl bg-gray-100" />}>
