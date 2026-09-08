@@ -12,6 +12,8 @@ import { listStores } from '@/lib/manufacturing'
 import { finishedGoodsQuantity } from '@/lib/finishedGoodsQuantity'
 import { ReturnAcceptancePanel } from '@/components/field-sales/ReturnAcceptancePanel'
 import { ReconciliationApprovalPanel } from '@/components/field-sales/ReconciliationApprovalPanel'
+import { QualityRecallPanel } from '@/components/field-sales/QualityRecallPanel'
+import { listQualityIncidents } from '@/lib/productionCustody'
 
 export const dynamic = 'force-dynamic'
 
@@ -49,7 +51,7 @@ export default async function FieldSalesPage({
   const sp = await searchParams
   const allowed = fieldSalesAllowedBrands(actor)
 
-  const [allBrands, team, items, allocations, custody, returns, pendingNotes, stores] = await Promise.all([
+  const [allBrands, team, items, allocations, custody, returns, pendingNotes, stores, incidents] = await Promise.all([
     listBrands(),
     listTeam(),
     listItems(allowed, sp.brand),
@@ -58,6 +60,7 @@ export default async function FieldSalesPage({
     listDailyReturns(allowed, { limit: 20 }),
     listReturnNotes(allowed, { status: 'submitted', limit: 50 }),
     listStores(allowed, sp.brand),
+    listQualityIncidents(allowed, sp.brand),
   ])
   const pendingReturns = (await Promise.all(pendingNotes.map((note) => getReturnNote(note.id))))
     .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
@@ -99,6 +102,14 @@ export default async function FieldSalesPage({
         <Stat label="Pieces held" value={num(custody.reduce((s, c) => s + c.balance, 0))} />
         <Stat label="Value in custody" value={ksh(heldValue)} />
       </div>
+
+      <QualityRecallPanel
+        allocations={allocations.filter((row) => row.salesperson_id).map((row) => ({ id: row.id, label: row.delivery_note_no || row.allocation_ref, salespersonId: row.salesperson_id }))}
+        custody={custody}
+        items={items.map((row) => ({ id: row.id, label: row.name, unit: row.base_unit || row.unit }))}
+        incidents={incidents.filter((row) => row.status === 'disposition_approved' && row.linked_run_id && ['return_to_production', 'rework', 'repackage', 'partial_salvage'].includes(row.disposition)).map((row) => ({ id: row.id, label: `${row.incident_ref} · ${row.disposition.replace(/_/g, ' ')}`, itemId: row.item_id, salespersonId: row.salesperson_id, allocationId: row.source_allocation_id }))}
+        productionStores={stores.filter((row) => row.store_type === 'production').map((row) => ({ id: row.id, label: row.name }))}
+      />
 
       {brands.length > 1 && (
         <div className="flex flex-wrap gap-1.5">

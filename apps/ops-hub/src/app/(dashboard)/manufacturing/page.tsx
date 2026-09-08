@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Factory, Warehouse, Lightbulb, ArrowUpRight, TriangleAlert } from 'lucide-react'
+import { Factory, Warehouse, Lightbulb, ArrowUpRight, TriangleAlert, ShieldCheck } from 'lucide-react'
 import { requireSection } from '@/lib/server-auth'
 import { listBrands } from '@/lib/brands'
 import { listItems } from '@/lib/inventory'
@@ -11,9 +11,18 @@ import { PACKAGING_ROLE_LABELS } from '@/lib/inventoryTaxonomy'
 import { finishedGoodsQuantity, formatPackageConfiguration } from '@/lib/finishedGoodsQuantity'
 import { todayInEat } from '@/lib/serverClient'
 import { ProductionRunPanel, type ItemOption } from '@/components/inventory/ProductionRunPanel'
+import { QualityIncidentPanel } from '@/components/inventory/QualityIncidentPanel'
+import { ReworkStagingPanel } from '@/components/inventory/ReworkStagingPanel'
 import { StorePanel, type StoreItem } from '@/components/inventory/StorePanel'
 import { FinishedGoodsQuantity } from '@/components/inventory/FinishedGoodsQuantity'
 import { OperationalDocLinks } from '@/components/forms/OperationalDocLinks'
+import {
+  listCompanyCustody,
+  listDisposalLosses,
+  listProductionCustody,
+  listQualityIncidents,
+} from '@/lib/productionCustody'
+import { recordAccessAtLeast } from '@/lib/permissions'
 
 export const dynamic = 'force-dynamic'
 
@@ -47,7 +56,7 @@ export default async function ManufacturingPage({
   const today = todayInEat()
   const monthStart = `${today.slice(0, 7)}-01`
 
-  const [allBrands, items, stores, runs, transfers, suggestions, balances] = await Promise.all([
+  const [allBrands, items, stores, runs, transfers, suggestions, balances, productionCustody, companyCustody, incidents, losses] = await Promise.all([
     listBrands(),
     listItems(allowed, params.brand),
     listStores(allowed, params.brand),
@@ -55,6 +64,10 @@ export default async function ManufacturingPage({
     listFgTransfers(undefined, 15),
     productionSuggestions(allowed, params.brand),
     periodBalances({ allowed, brandId: params.brand, from: monthStart, to: today }),
+    listProductionCustody(allowed, { brandId: params.brand }),
+    listCompanyCustody(allowed, { brandId: params.brand }),
+    listQualityIncidents(allowed, params.brand),
+    listDisposalLosses(allowed, params.brand),
   ])
 
   const brands = scopeBrands(allBrands, allowed)
@@ -66,7 +79,9 @@ export default async function ManufacturingPage({
   const packagingItems = byType('packaging')
   const finishedItems = byType('finished_good')
   const bomLines = await listBomForProducts(finishedItems.map((item) => item.id))
-  const runSummaries = new Map((await Promise.all(runs.map(async (run) => [run.id, await productionRunSummary(run.id)] as const))).map((entry) => entry))
+  // Only the ten cards rendered below need their secondary reconciliation
+  // reads; older runs remain available in their canonical records.
+  const runSummaries = new Map((await Promise.all(runs.slice(0, 10).map(async (run) => [run.id, await productionRunSummary(run.id)] as const))).map((entry) => entry))
   const health = inventoryHealthReport(items, stores, bomLines)
   const usedBy = new Map<string, string[]>()
   const requirements = new Map<string, StoreItem['requirements']>()
@@ -135,6 +150,10 @@ export default async function ManufacturingPage({
     .reduce((sum, b) => sum + b.quantity_in, 0)
 
   const unclassified = items.filter((i) => !i.item_type || i.item_type === 'consumable').length
+  const custodyTotals = new Map<string, number>()
+  for (const position of productionCustody) {
+    custodyTotals.set(position.custody_state, (custodyTotals.get(position.custody_state) ?? 0) + Number(position.quantity))
+  }
 
   return (
     <div className="space-y-6">
@@ -167,7 +186,37 @@ export default async function ManufacturingPage({
           rejectedQuantity: Number(run.rejected_quantity ?? 0),
           wasteQuantity: Number(run.waste_quantity ?? 0),
         }))}
+        qualityIncidents={incidents.filter((incident) => incident.status === 'disposition_approved').map((incident) => ({
+          id: incident.id,
+          label: `${incident.incident_ref} · ${incident.reason_category}`,
+          brandId: incident.brand_id,
+        }))}
       />
+      {actor.can('inventory', 'edit') && <QualityIncidentPanel
+        brands={brands.map((brand) => ({ id: brand.id, label: brand.name }))}
+        items={items.map((item) => ({ id: item.id, label: `${item.name}${item.sku ? ` (${item.sku})` : ''}`, brandId: item.brand_id, unit: item.base_unit || item.unit, itemType: item.item_type }))}
+        incidents={incidents.map((incident) => ({ id: incident.id, label: `${incident.incident_ref} · ${itemById.get(incident.item_id ?? '')?.name ?? incident.reason_category}`, status: incident.status, disposition: incident.disposition, itemId: incident.item_id, batch: incident.batch_number, unit: incident.unit }))}
+        runs={runs.map((run) => ({ id: run.id, label: `${run.run_ref} · ${itemById.get(run.product_item_id ?? '')?.name ?? 'Production run'}` }))}
+        canReview={actor.permissions === null || recordAccessAtLeast(actor.recordScope('inventory'), 'management')}
+      />}
+      {actor.can('inventory', 'edit') && <ReworkStagingPanel
+        positions={productionCustody.filter((position) => position.custody_state !== 'rework').map((position) => ({
+          key: `${position.production_store_id}:${position.item_id}:${position.batch_number}:${position.custody_state}`,
+          itemId: position.item_id,
+          productionStoreId: position.production_store_id,
+          label: `${position.item_name} · ${position.custody_state.replace(/_/g, ' ')}${position.batch_number ? ` · ${position.batch_number}` : ''}`,
+          batch: position.batch_number,
+          state: position.custody_state,
+          quantity: Number(position.quantity),
+          unit: position.unit,
+        }))}
+        runs={runs.filter((run) => ['rework', 'repackaging', 'quality_recovery'].includes(run.run_type)).map((run) => ({
+          id: run.id,
+          label: `${run.run_ref} · ${itemById.get(run.product_item_id ?? '')?.name ?? 'Rework run'}`,
+          incidentId: run.quality_incident_id,
+        }))}
+        incidents={incidents.filter((incident) => incident.status === 'disposition_approved').map((incident) => ({ id: incident.id, label: `${incident.incident_ref} · ${incident.reason_category}` }))}
+      />}
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Stat label="Active runs" value={String(activeRuns.length)} />
@@ -175,6 +224,77 @@ export default async function ManufacturingPage({
         <Stat label="Finished SKUs" value={String(finishedItems.length)} />
         <Stat label="Production suggestions" value={String(suggestions.length)} tone={suggestions.length ? 'text-amber-600' : 'text-gray-900'} />
       </div>
+
+      <section className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-ocg-gold">Production inventory</p>
+            <p className="mt-1 text-sm text-gray-500">Independent custody positions created by posted GINs, run transformations, recalls and GTNs.</p>
+          </div>
+          <span className="inline-flex items-center gap-1.5 rounded-lg bg-purple-50 px-3 py-1.5 text-xs font-medium text-purple-700"><ShieldCheck size={14} /> Ledger-backed</span>
+        </div>
+        <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+          {[
+            ['materials', 'Materials'], ['packaging', 'Packaging'], ['bulk_wip', 'Bulk / WIP'],
+            ['packaged_output', 'Awaiting GTN'], ['quality_hold', 'Quality hold'],
+            ['rework', 'Rework'], ['recovered_packaging', 'Recovered packaging'],
+          ].map(([state, label]) => <MiniStat key={state} label={label} value={num(custodyTotals.get(state) ?? 0)} />)}
+        </div>
+        {productionCustody.length === 0 ? (
+          <p className="mt-4 rounded-lg bg-gray-50 p-4 text-sm text-gray-500">No current Production custody. A posted production GIN, quality recall, source GTN or run output creates the first position.</p>
+        ) : (
+          <div className="mt-4 overflow-x-auto rounded-lg border border-gray-100">
+            <table className="w-full min-w-[900px] text-sm">
+              <thead><tr className="border-b border-gray-100 text-left text-[11px] uppercase tracking-wider text-gray-400">
+                <th className="px-3 py-2">Item</th><th className="px-3 py-2">Batch</th><th className="px-3 py-2">State</th>
+                <th className="px-3 py-2 text-right">Quantity</th><th className="px-3 py-2 text-right">Equivalent</th>
+                <th className="px-3 py-2">Received / produced from</th><th className="px-3 py-2">Last event</th>
+              </tr></thead>
+              <tbody className="divide-y divide-gray-50">{productionCustody.map((position) => (
+                <tr key={`${position.production_store_id}:${position.item_id}:${position.batch_number}:${position.custody_state}`} className="hover:bg-gray-50">
+                  <td className="px-3 py-2.5"><p className="font-medium text-gray-800">{position.item_name}</p><p className="text-xs text-gray-400">{position.sku || 'No SKU'}</p></td>
+                  <td className="px-3 py-2.5 text-gray-600">{position.batch_number || '—'}</td>
+                  <td className="px-3 py-2.5"><span className="rounded bg-purple-50 px-2 py-1 text-xs font-medium capitalize text-purple-700">{position.custody_state.replace(/_/g, ' ')}</span></td>
+                  <td className="px-3 py-2.5 text-right font-semibold text-gray-800">{num(position.quantity)} {position.unit}</td>
+                  <td className="px-3 py-2.5 text-right text-gray-500">{position.equivalent_quantity == null ? '—' : `${num(position.equivalent_quantity)} ${position.equivalent_unit}`}</td>
+                  <td className="px-3 py-2.5 text-gray-500">{position.latest_run_id ? `Run ${position.latest_run_id.slice(0, 8)}` : position.latest_source_document_type || 'Custody event'}</td>
+                  <td className="px-3 py-2.5 whitespace-nowrap text-gray-500">{new Date(position.last_event_at).toLocaleString('en-KE', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Africa/Nairobi' })}</td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section className="grid gap-4 xl:grid-cols-2">
+        <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-ocg-gold">Company custody reconciliation</h2>
+          <p className="mt-1 text-xs text-gray-500">Active custody is physical stock. Disposed/lost rows below are history and are never counted as on-hand.</p>
+          <div className="mt-3 max-h-80 overflow-auto rounded-lg border border-gray-100">
+            {companyCustody.slice(0, 100).map((position, index) => (
+              <div key={`${position.custody_type}:${position.custody_id}:${position.item_id}:${position.batch_number}:${index}`} className="flex items-center justify-between gap-3 border-b border-gray-50 px-3 py-2 text-sm last:border-0">
+                <div className="min-w-0"><p className="truncate font-medium text-gray-800">{position.item_name}</p><p className="text-xs capitalize text-gray-400">{position.custody_type.replace(/_/g, ' ')} · {position.custody_label || '—'}{position.batch_number ? ` · ${position.batch_number}` : ''}</p></div>
+                <span className={`shrink-0 text-right font-semibold ${position.active_custody ? 'text-gray-800' : 'text-red-600'}`}>{num(position.quantity)} {position.unit}</span>
+              </div>
+            ))}
+            {companyCustody.length === 0 && <p className="p-4 text-sm text-gray-500">No custody positions to show.</p>}
+          </div>
+        </div>
+        <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-ocg-gold">Quality incidents & operational loss</h2>
+          <p className="mt-1 text-xs text-gray-500">An incident authorises a disposition; only the linked custody event moves stock.</p>
+          <div className="mt-3 space-y-2">
+            {incidents.slice(0, 8).map((incident) => (
+              <div key={incident.id} className="rounded-lg border border-gray-100 px-3 py-2 text-sm">
+                <div className="flex items-start justify-between gap-3"><div><p className="font-medium text-gray-800">{incident.incident_ref} · {itemById.get(incident.item_id ?? '')?.name ?? 'Stock incident'}</p><p className="text-xs text-gray-400">{incident.reason_category} · {num(incident.affected_quantity)} {incident.unit}{incident.batch_number ? ` · batch ${incident.batch_number}` : ''}</p></div><span className="rounded bg-amber-50 px-2 py-0.5 text-[10px] font-medium capitalize text-amber-700">{incident.status.replace(/_/g, ' ')}</span></div>
+                {incident.disposition && <p className="mt-1 text-xs text-gray-500">Disposition: <strong>{incident.disposition.replace(/_/g, ' ')}</strong></p>}
+              </div>
+            ))}
+            {incidents.length === 0 && <p className="rounded-lg bg-gray-50 p-4 text-sm text-gray-500">No quality incidents.</p>}
+          </div>
+          {losses.length > 0 && <p className="mt-3 border-t border-gray-100 pt-3 text-xs text-red-700">Recorded operational loss: <strong>{num(losses.reduce((sum, loss) => sum + Number(loss.loss_value_ksh), 0))} KSh</strong> across {losses.length} approved event{losses.length === 1 ? '' : 's'}.</p>}
+        </div>
+      </section>
 
       {unclassified > 0 && (
         <p className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
@@ -278,12 +398,13 @@ export default async function ManufacturingPage({
                         {r.run_ref}{item ? ` · ${item.name}` : ''}
                       </p>
                       <p className="text-xs text-gray-400">
-                        planned {num(r.planned_quantity)} pieces
+                        {r.run_type.replace(/_/g, ' ')} · planned {num(r.planned_quantity)} pieces
                         {r.actual_quantity > 0 && ` · made ${num(r.actual_quantity)} pieces · accepted ${num(r.accepted_quantity)} pieces`}
                         {r.rejected_quantity > 0 && ` · rejected ${num(r.rejected_quantity)} pieces`}
                         {r.batch_number && ` · batch ${r.batch_number}`}
                       </p>
                       {item && <FinishedGoodsQuantity totalPieces={Number(r.planned_quantity)} packSize={Number(item.pack_size ?? 1)} compact className="mt-0.5 text-[11px] text-gray-500" />}
+                      {r.run_reason && <p className="mt-0.5 text-[11px] text-gray-500">Reason: {r.run_reason}{r.source_batch_number ? ` · source batch ${r.source_batch_number}` : ''}{r.source_custody ? ` · from ${r.source_custody.replace(/_/g, ' ')}` : ''}</p>}
                     </div>
                     <span className={`shrink-0 rounded px-2 py-0.5 text-[10px] font-medium capitalize ${
                       r.status === 'completed' ? 'bg-emerald-50 text-emerald-700'
@@ -293,11 +414,12 @@ export default async function ManufacturingPage({
                     </div>
                     {summary && (
                       <div className="mt-2 border-t border-gray-100 pt-2 text-[11px] text-gray-500">
-                        <p><strong className="text-gray-700">GTN:</strong> {num(summary.transferred)} transferred · {num(summary.awaitingTransfer)} awaiting transfer</p>
+                        <p><strong className="text-gray-700">Output:</strong> expected {num(r.planned_quantity)} · actual {num(r.actual_quantity)} · transferred by GTN {num(summary.transferred)} · still in Production {num(summary.outputRemaining)} · quality hold {num(summary.qualityHold)} · approved loss {num(summary.losses.reduce((sum, loss) => sum + Number(loss.quantity), 0))}</p>
                         <p className="mt-1"><strong className="text-gray-700">Linked documents:</strong>{' '}
                           MRF {summary.mrfs.map((doc) => doc.reference ?? 'draft').join(', ') || 'none'} · GIN {summary.gins.map((doc) => doc.document_number || doc.reference || 'draft').join(', ') || 'none'} · GTN {summary.gtns.map((doc) => doc.document_number || doc.reference || 'draft').join(', ') || 'none'}
                         </p>
-                        {summary.materials.length > 0 && <p className="mt-1"><strong className="text-gray-700">GIN materials:</strong> {summary.materials.map((line) => `${line.item?.name ?? 'Item'} ${num(line.issued)}/${num(line.expected)} (${line.variance >= 0 ? '+' : ''}${num(line.variance)})`).join(' · ')}</p>}
+                        {summary.materials.length > 0 && <p className="mt-1"><strong className="text-gray-700">Materials / packaging:</strong> {summary.materials.map((line) => `${line.item?.name ?? 'Item'} [${line.roles.join('/') || 'requested'}] requested ${num(line.requested)}, issued ${num(line.issued)}, consumed ${num(line.consumed)}, returned ${num(line.returned)}, waste ${num(line.waste)}, held ${num(line.remaining)}`).join(' · ')}</p>}
+                        {summary.recovered.length > 0 && <p className="mt-1"><strong className="text-gray-700">Recovered packaging:</strong> {summary.recovered.map((line) => `${line.component_kind.replace(/_/g, ' ')} ${num(line.quantity)} ${line.unit} (${line.condition_status})`).join(' · ')}</p>}
                         <div className="mt-1 flex gap-3">
                           <Link className="font-medium text-ocg-gold hover:underline" href={`/forms/operations?pad=mrf&brand=${r.brand_id ?? ''}&run=${r.id}`}>Raise MRF</Link>
                           <Link className="font-medium text-ocg-gold hover:underline" href={`/forms/operations?pad=gtn&brand=${r.brand_id ?? ''}&run=${r.id}`}>Raise GTN</Link>
@@ -367,4 +489,8 @@ function Stat({ label, value, tone = 'text-gray-900' }: { label: string; value: 
       <p className="mt-1 text-[11px] font-semibold uppercase tracking-wider text-gray-400">{label}</p>
     </div>
   )
+}
+
+function MiniStat({ label, value }: { label: string; value: string }) {
+  return <div className="rounded-lg border border-gray-100 bg-gray-50/70 px-3 py-2"><p className="text-lg font-semibold tabular-nums text-gray-800">{value}</p><p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{label}</p></div>
 }

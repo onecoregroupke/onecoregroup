@@ -28,15 +28,15 @@ export interface RunOption {
   wasteQuantity: number
 }
 
-/** Manufacturing captures the plan and actual output only. Stock movement is
- * intentionally absent: MRF → GIN issues inputs, and a linked GTN receives
- * accepted output into the finished-goods store. */
+/** Manufacturing captures transformation inside Production custody. It never
+ * mutates a store: GIN brings inputs in and GTN moves output to a store. */
 export function ProductionRunPanel({
-  brands, products, runs,
+  brands, products, runs, qualityIncidents,
 }: {
   brands: { id: string; label: string }[]
   products: ItemOption[]
   runs: RunOption[]
+  qualityIncidents: Array<{ id: string; label: string; brandId: string | null }>
 }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
@@ -47,6 +47,8 @@ export function ProductionRunPanel({
   const [run, setRun] = useState({
     brand_id: brands[0]?.id ?? '', product_item_id: '', planned_quantity: '',
     batch_number: '', production_team: '', notes: '',
+    run_type: 'normal_production', run_reason: '', source_product_item_id: '',
+    source_batch_number: '', source_custody: '', output_state: 'packaged_output', quality_incident_id: '',
   })
   const [output, setOutput] = useState({
     run_id: runs[0]?.id ?? '', actual_quantity: '', accepted_quantity: '',
@@ -78,7 +80,7 @@ export function ProductionRunPanel({
     }
     const row = await post({ action: 'create-run', ...run, planned_quantity: Number(run.planned_quantity) })
     if (!row) return
-    setMessage(`${String(row['run_ref'] ?? 'Production run')} created. Raise its MRF below; approval will not move stock.`)
+    setMessage(`${String(row['run_ref'] ?? 'Production run')} created. Raise its MRF below; approval alone will not move stock.`)
     router.refresh()
   }
 
@@ -96,7 +98,7 @@ export function ProductionRunPanel({
       expiry_date: output.expiry_date || null,
     })
     if (!row) return
-    setMessage('Output recorded for reconciliation. No stock moved; post a linked GTN to receive accepted goods.')
+    setMessage('Output recorded in Production custody. Post a linked GTN when accepted goods physically enter Finished Goods Store.')
     router.refresh()
   }
 
@@ -113,7 +115,7 @@ export function ProductionRunPanel({
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wider text-ocg-gold">Production execution</p>
-          <p className="mt-1 text-sm text-gray-500">Plan the run or record actual output. Neither action changes inventory.</p>
+          <p className="mt-1 text-sm text-gray-500">Plan the run or record actual output. Runs transform Production custody and never change a store directly.</p>
         </div>
         <button onClick={() => setOpen(false)} className="rounded p-1 text-gray-400 hover:text-gray-600" aria-label="Close"><X size={17} /></button>
       </div>
@@ -126,10 +128,19 @@ export function ProductionRunPanel({
       {mode === 'plan' ? (
         <div className="grid gap-3 lg:grid-cols-3">
           {brands.length > 1 && <Field label="Brand"><select className="input" value={run.brand_id} onChange={(e) => setRun({ ...run, brand_id: e.target.value })}>{brands.map((b) => <option key={b.id} value={b.id}>{b.label}</option>)}</select></Field>}
+          <Field label="Run type"><select className="input" value={run.run_type} onChange={(e) => setRun({ ...run, run_type: e.target.value })}><option value="normal_production">Normal production</option><option value="rework">Rework</option><option value="repackaging">Repackaging</option><option value="quality_recovery">Quality recovery</option></select></Field>
           <Field label="Finished product"><select className="input" value={run.product_item_id} onChange={(e) => setRun({ ...run, product_item_id: e.target.value })}><option value="">Select…</option>{products.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}</select></Field>
           <Field label={`Planned quantity${product ? ` (${product.unit})` : ''}`}><input type="number" min="0" step="any" className="input" value={run.planned_quantity} onChange={(e) => setRun({ ...run, planned_quantity: e.target.value })} /></Field>
           <Field label="Batch number"><input className="input" value={run.batch_number} onChange={(e) => setRun({ ...run, batch_number: e.target.value })} /></Field>
           <Field label="Production team"><input className="input" value={run.production_team} onChange={(e) => setRun({ ...run, production_team: e.target.value })} /></Field>
+          <Field label="Output state"><select className="input" value={run.output_state} onChange={(e) => setRun({ ...run, output_state: e.target.value })}><option value="packaged_output">Packaged output awaiting GTN</option><option value="bulk_wip">Bulk / WIP</option><option value="quality_hold">Quality hold</option><option value="rework">Rework</option></select></Field>
+          {run.run_type !== 'normal_production' && <>
+            <Field label="Source product / SKU"><select className="input" value={run.source_product_item_id} onChange={(e) => setRun({ ...run, source_product_item_id: e.target.value })}><option value="">Select…</option>{products.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}</select></Field>
+            <Field label="Source batch"><input className="input" value={run.source_batch_number} onChange={(e) => setRun({ ...run, source_batch_number: e.target.value })} /></Field>
+            <Field label="Source custody"><select className="input" value={run.source_custody} onChange={(e) => setRun({ ...run, source_custody: e.target.value })}><option value="">Select…</option><option value="finished_goods_store">Finished Goods Store</option><option value="field_sales">Field Sales</option><option value="production">Already in Production</option><option value="quality_hold">Quality hold</option></select></Field>
+            <Field label="Reason / incident"><input className="input" required value={run.run_reason} onChange={(e) => setRun({ ...run, run_reason: e.target.value })} /></Field>
+            <Field label="Approved quality incident"><select className="input" value={run.quality_incident_id} onChange={(e) => setRun({ ...run, quality_incident_id: e.target.value })}><option value="">Optional</option>{qualityIncidents.filter((incident) => !run.brand_id || incident.brandId === run.brand_id).map((incident) => <option key={incident.id} value={incident.id}>{incident.label}</option>)}</select></Field>
+          </>}
           <Field label="Notes"><input className="input" value={run.notes} onChange={(e) => setRun({ ...run, notes: e.target.value })} /></Field>
           {product && (
             <div className="rounded-lg border border-emerald-100 bg-emerald-50/40 p-3 lg:col-span-3">
@@ -153,9 +164,9 @@ export function ProductionRunPanel({
           <Field label="Produced"><input type="number" min="0" step="any" className="input" value={output.actual_quantity} onChange={(e) => setOutput({ ...output, actual_quantity: e.target.value })} /></Field>
           <Field label="Accepted by quality"><input type="number" min="0" step="any" className="input" value={output.accepted_quantity} onChange={(e) => setOutput({ ...output, accepted_quantity: e.target.value })} /></Field>
           <Field label="Rejected"><input type="number" min="0" step="any" className="input" value={output.rejected_quantity} onChange={(e) => setOutput({ ...output, rejected_quantity: e.target.value })} /></Field>
-          <Field label="Waste"><input type="number" min="0" step="any" className="input" value={output.waste_quantity} onChange={(e) => setOutput({ ...output, waste_quantity: e.target.value })} /></Field>
+          <div className="rounded-lg border border-amber-100 bg-amber-50 p-3 text-xs text-amber-800">Waste is not posted from a run. Put affected output on Quality hold, approve its incident, then record the disposal and loss.</div>
           <Field label="Quality result"><input className="input" value={output.quality_result} onChange={(e) => setOutput({ ...output, quality_result: e.target.value })} /></Field>
-          <Field label="Quality approved by"><input className="input" value={output.quality_approved_by} onChange={(e) => setOutput({ ...output, quality_approved_by: e.target.value })} /></Field>
+          <label className="flex min-h-11 items-center gap-2 rounded-lg border border-gray-200 px-3 text-sm text-gray-700"><input type="checkbox" checked={!!output.quality_approved_by} onChange={(e) => setOutput({ ...output, quality_approved_by: e.target.checked ? 'self' : '' })} /> Record my quality approval</label>
           <Field label="Expiry date"><input type="date" className="input" value={output.expiry_date} onChange={(e) => setOutput({ ...output, expiry_date: e.target.value })} /></Field>
           <Field label="Notes"><input className="input" value={output.notes} onChange={(e) => setOutput({ ...output, notes: e.target.value })} /></Field>
         </div>
@@ -164,7 +175,7 @@ export function ProductionRunPanel({
       {error && <p className="mt-3 rounded-lg bg-red-50 p-2.5 text-sm text-red-600">{error}</p>}
       {message && <p className="mt-3 rounded-lg bg-emerald-50 p-2.5 text-sm text-emerald-700">{message}</p>}
       <button onClick={mode === 'plan' ? createRun : recordOutput} disabled={saving} className="mt-4 inline-flex items-center gap-2 rounded-lg bg-ocg-navy px-5 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60">
-        {mode === 'plan' ? <Factory size={15} /> : <PackageCheck size={15} />}{saving ? 'Saving…' : mode === 'plan' ? 'Create run' : 'Save output (no stock movement)'}
+        {mode === 'plan' ? <Factory size={15} /> : <PackageCheck size={15} />}{saving ? 'Saving…' : mode === 'plan' ? 'Create run' : 'Post output to Production custody'}
       </button>
     </section>
   )

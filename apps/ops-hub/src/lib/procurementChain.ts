@@ -2,6 +2,7 @@ import { db, mintReference, nowIso } from './serverClient'
 import { auditEvent } from './audit'
 import { recordStockMovement } from './inventory'
 import { toInventoryBaseQuantity } from './inventoryUnits'
+import { postStoreProductionTransfer, productionStateForItem } from './productionCustody'
 import {
   canApproveRequisition,
   canCreateIssueForRequisition,
@@ -22,6 +23,8 @@ import type {
   ProcurementRequisitionItemRow,
   ProcurementRequisitionRow,
   InventoryStoreRow,
+  ProductionRunRow,
+  ProductionRunMaterialRow,
 } from '@ocg/db'
 
 // =============================================================================
@@ -36,7 +39,7 @@ import type {
 //   • a requester can never approve their own requisition
 // =============================================================================
 
-export type ChainActor = { userId?: string; email: string; name: string }
+export type ChainActor = { userId?: string; email: string; name: string; teamMemberId?: string | null }
 
 function auditActor(actor: ChainActor) {
   return { userId: actor.userId ?? '', email: actor.email, name: actor.name }
@@ -798,6 +801,16 @@ export async function postGoodsIssue(
     throw new Error(`Enter the physical ${issue.kind === 'transfer' ? 'GTN' : 'GIN'} number before posting.`)
   }
 
+  const storeIds = [issue.source_store_id, issue.destination_store_id].filter(Boolean) as string[]
+  const { data: storeData, error: storeError } = storeIds.length > 0
+    ? await db().from('inventory_stores').select('*').in('id', storeIds)
+    : { data: [] as InventoryStoreRow[], error: null }
+  if (storeError) throw new Error(storeError.message)
+  const storeById = new Map(((storeData as InventoryStoreRow[] | null) ?? []).map((store) => [store.id, store]))
+  const sourceStore = issue.source_store_id ? storeById.get(issue.source_store_id) : null
+  const destinationStore = issue.destination_store_id ? storeById.get(issue.destination_store_id) : null
+  if (issue.source_store_id && !sourceStore) throw new Error('Source store not found.')
+
   if (issue.kind === 'transfer') {
     if (!issue.source_store_id || !issue.destination_store_id) {
       throw new Error('A transfer requires explicit source and destination stores.')
@@ -805,11 +818,12 @@ export async function postGoodsIssue(
     if (issue.source_store_id === issue.destination_store_id) {
       throw new Error('Source and destination stores must be different.')
     }
-    const { data: stores } = await db().from('inventory_stores').select('*')
-      .in('id', [issue.source_store_id, issue.destination_store_id])
-    const rows = (stores as Array<{ id: string; brand_id: string | null }> | null) ?? []
+    const rows = [...storeById.values()]
     if (rows.length !== 2 || rows.some((store) => store.brand_id && store.brand_id !== issue.brand_id)) {
       throw new Error('Both transfer stores must belong to the document brand.')
+    }
+    if (sourceStore?.store_type === 'production' && destinationStore?.store_type === 'production') {
+      throw new Error('Use a Production custody state event, not a GTN between two Production stores.')
     }
   }
 
@@ -841,7 +855,28 @@ export async function postGoodsIssue(
       throw new Error('The linked production MRF must be approved before its GIN can post.')
     }
   }
-  const isProductionTransfer = issue.kind === 'transfer' && Boolean(productionRun.data)
+  const isProductionGin = issue.kind === 'issue' && issue.issued_to_type === 'production' && Boolean(productionRun.data)
+  const sourceIsProduction = issue.kind === 'transfer' && sourceStore?.store_type === 'production'
+  const destinationIsProduction = issue.kind === 'transfer' && destinationStore?.store_type === 'production'
+  const isProductionOutputGtn = sourceIsProduction && destinationStore?.store_type === 'finished_goods'
+  const isProductionMaterialReturn = sourceIsProduction && ['raw', 'packaging'].includes(destinationStore?.store_type ?? '')
+  const isProductionBoundary = isProductionGin || sourceIsProduction || destinationIsProduction
+  if ((sourceIsProduction || destinationIsProduction) && !productionRun.data) {
+    throw new Error('A GTN crossing the Production boundary must be linked to its Production run.')
+  }
+  if (destinationIsProduction && productionRun.data
+      && !['rework', 'repackaging', 'quality_recovery'].includes(String(productionRun.data.run_type ?? ''))) {
+    throw new Error('A Finished Goods Store → Production GTN requires a rework, repackaging or quality-recovery run.')
+  }
+  if (isProductionGin && ['production', 'finished_goods', 'field_sales'].includes(sourceStore?.store_type ?? '')) {
+    throw new Error('A production GIN must issue raw material or packaging from its authorised Store, never from Production, Finished Goods or Field Sales.')
+  }
+  if (destinationIsProduction && sourceStore?.store_type !== 'finished_goods') {
+    throw new Error('Use a production GIN for raw material or packaging. A Store → Production GTN is reserved for Finished Goods rework/repackaging.')
+  }
+  if (sourceIsProduction && !isProductionOutputGtn && !isProductionMaterialReturn) {
+    throw new Error('A Production GTN may transfer accepted output to Finished Goods or return unused material to its Raw/Packaging Store.')
+  }
 
   // Validate everything BEFORE moving any stock — a bad line must not leave a
   // half-posted note behind.
@@ -850,6 +885,14 @@ export async function postGoodsIssue(
   if (itemIds.length > 0) {
     const { data } = await db().from('inventory_items').select('*').in('id', itemIds)
     for (const row of (data as InventoryItemRow[] | null) ?? []) stockById.set(row.id, row)
+  }
+  const { data: runMaterialData, error: runMaterialError } = isProductionMaterialReturn && productionRun.data
+    ? await db().from('production_run_materials').select('*').eq('run_id', productionRun.data.id)
+    : { data: [] as ProductionRunMaterialRow[], error: null }
+  if (runMaterialError) throw new Error(runMaterialError.message)
+  const runMaterialsByItem = new Map<string, ProductionRunMaterialRow[]>()
+  for (const row of (runMaterialData as ProductionRunMaterialRow[] | null) ?? []) {
+    runMaterialsByItem.set(row.item_id, [...(runMaterialsByItem.get(row.item_id) ?? []), row])
   }
   const remainingByLine = issue.requisition_id ? await remainingByRequisitionLine(issue.requisition_id) : new Map<string, number>()
   for (const line of items) {
@@ -869,23 +912,42 @@ export async function postGoodsIssue(
       line.unit,
       stock?.base_unit || stock?.unit || '',
     )
-    if (productionRun.data && issue.kind === 'transfer' && line.inventory_item_id !== productionRun.data.product_item_id) {
-      throw new Error(`${line.description}: A production GTN may only transfer the finished good made by the linked run.`)
+    if (productionRun.data && isProductionOutputGtn && line.inventory_item_id !== productionRun.data.product_item_id) {
+      throw new Error(`${line.description}: This Production → Store GTN may only transfer the output SKU of the linked run.`)
     }
-    if (!isProductionTransfer && baseQuantity > Number(stock?.quantity ?? 0)) {
+    if (productionRun.data && isProductionMaterialReturn) {
+      const materials = runMaterialsByItem.get(line.inventory_item_id) ?? []
+      if (materials.length === 0) throw new Error(`${line.description}: This item was not issued to the linked run, so it cannot be returned from that run.`)
+      if (destinationStore?.store_type === 'packaging' && stock?.item_type !== 'packaging') {
+        throw new Error(`${line.description}: Only packaging may return to the Packaging Store.`)
+      }
+      if (destinationStore?.store_type === 'raw' && stock?.item_type === 'packaging') {
+        throw new Error(`${line.description}: Packaging must return to the Packaging Store.`)
+      }
+      const availableToReturn = materials.reduce((sum, material) => sum + Number(material.issued_quantity) - Number(material.consumed_quantity) - Number(material.waste_quantity) - Number(material.returned_quantity), 0)
+      if (baseQuantity > availableToReturn + 0.0001) {
+        throw new Error(`${line.description}: Only ${availableToReturn} ${stock?.base_unit || stock?.unit} remains available to return from this run.`)
+      }
+    }
+    if (productionRun.data && destinationIsProduction
+        && line.inventory_item_id !== productionRun.data.source_product_item_id) {
+      throw new Error(`${line.description}: This Store → Production GTN must match the source rework SKU on the linked run.`)
+    }
+    if (!sourceIsProduction && baseQuantity > Number(stock?.quantity ?? 0)) {
       throw new Error(`${line.description}: Cannot issue ${line.quantity_issued} ${line.unit} — only ${Number(stock?.quantity ?? 0)} ${stock?.base_unit || stock?.unit} in stock.`)
     }
   }
 
-  if (isProductionTransfer && productionRun.data) {
-    const { data: existingDocs } = await db().from('procurement_goods_issues').select('id')
-      .eq('production_run_id', productionRun.data.id).eq('kind', 'transfer').eq('status', 'posted')
-    const ids = ((existingDocs as Array<{ id: string }> | null) ?? []).map((row) => row.id)
-    const existingLines = ids.length > 0 ? await getGoodsIssueItemsForIssues(ids) : []
-    const alreadyTransferred = existingLines.reduce((sum, line) => {
-      const item = line.inventory_item_id ? stockById.get(line.inventory_item_id) : null
-      return sum + toInventoryBaseQuantity(Number(line.quantity_issued ?? 0), line.unit, item?.base_unit || item?.unit || '')
-    }, 0)
+  if (isProductionOutputGtn && productionRun.data) {
+    if (!productionRun.data.quality_approved_at || !String(productionRun.data.quality_approved_by ?? '').trim()) {
+      throw new Error('Quality approval is required before Production output can transfer to Finished Goods Store.')
+    }
+    const { data: existingEvents, error: eventError } = await db().from('production_custody_events')
+      .select('base_quantity').eq('production_run_id', productionRun.data.id)
+      .eq('direction', 'out').eq('event_kind', 'gtn_transfer')
+    if (eventError) throw new Error(eventError.message)
+    const alreadyTransferred = ((existingEvents as Array<{ base_quantity: number }> | null) ?? [])
+      .reduce((sum, event) => sum + Number(event.base_quantity ?? 0), 0)
     const postingNow = items.reduce((sum, line) => {
       const item = line.inventory_item_id ? stockById.get(line.inventory_item_id) : null
       return sum + toInventoryBaseQuantity(Number(line.quantity_issued ?? 0), line.unit || '', item?.base_unit || item?.unit || '')
@@ -904,10 +966,43 @@ export async function postGoodsIssue(
   for (const line of items) {
     const quantity = Number(line.quantity_issued)
     if (quantity <= 0 || !line.inventory_item_id) continue
-    // Production output does not sit in inventory before its GTN. Therefore a
-    // production GTN creates only the destination receipt; all other GIN/GTN
-    // documents first post the store-out movement shown here.
-    if (!isProductionTransfer) {
+    const stock = stockById.get(line.inventory_item_id)
+    if (!stock) throw new Error(`${line.description}: Inventory item not found.`)
+    if (isProductionBoundary) {
+      const storeId = sourceIsProduction ? issue.destination_store_id : issue.source_store_id
+      if (!storeId) throw new Error('The store side of this Production transfer is required.')
+      const inboundToProduction = !sourceIsProduction
+      await postStoreProductionTransfer({
+        item: stock,
+        store_id: storeId,
+        store_direction: inboundToProduction ? 'out' : 'in',
+        quantity,
+        movement_unit: line.unit,
+        reason: `${inboundToProduction ? 'Issued to' : 'Received from'} Production on ${documentReference}`,
+        reference: documentReference,
+        source: issue.kind === 'issue' ? 'goods_issue' : 'goods_transfer',
+        goods_issue_id: issue.id,
+        issue_item_id: line.id,
+        production_run_id: issue.production_run_id,
+        batch_number: line.batch_number,
+        production_store_id: sourceIsProduction ? issue.source_store_id : destinationIsProduction ? issue.destination_store_id : null,
+        production_state: isProductionGin
+          ? productionStateForItem(stock)
+          : destinationIsProduction
+            ? 'rework'
+            : isProductionMaterialReturn
+              ? productionStateForItem(stock)
+              : ((productionRun.data as ProductionRunRow | null)?.output_state || 'packaged_output'),
+        production_event_kind: isProductionGin ? 'gin_receipt' : destinationIsProduction ? 'gtn_receipt' : isProductionMaterialReturn ? 'return_to_store' : 'gtn_transfer',
+        source_custody: inboundToProduction ? (sourceStore?.store_type || 'store') : 'production',
+        destination_custody: inboundToProduction ? 'production' : (destinationStore?.store_type || 'store'),
+        quality_incident_id: (productionRun.data as ProductionRunRow | null)?.quality_incident_id ?? null,
+        recorded_by: actor.email,
+        recorded_by_id: actor.teamMemberId ?? null,
+        idempotency_key: `${issue.kind}:${line.id}`,
+      })
+      movementsCreated += 2
+    } else {
       await recordStockMovement({
         item_id: line.inventory_item_id,
         direction: 'out',
@@ -924,51 +1019,24 @@ export async function postGoodsIssue(
         recorded_by: actor.email,
       })
       movementsCreated += 1
-    }
-
-    if (issue.kind === 'transfer') {
-      await recordStockMovement({
-        item_id: line.inventory_item_id,
-        direction: 'in',
-        quantity,
-        movement_unit: line.unit,
-        reason: `Received from transfer ${documentReference}`,
-        reference: documentReference,
-        source: 'goods_transfer',
-        goods_issue_id: issue.id,
-        issue_item_id: isProductionTransfer ? line.id : undefined,
-        production_run_id: issue.production_run_id,
-        store_id: issue.destination_store_id,
-        source_table: 'procurement_goods_issue_items',
-        source_record_id: line.id,
-        idempotency_key: `goods-transfer-destination:${line.id}`,
-        recorded_by: actor.email,
-      })
-      movementsCreated += 1
-    }
-
-    if (issue.kind === 'issue' && issue.production_run_id) {
-      const run = productionRun.data as { id: string; product_item_id: string; planned_quantity: number; started_at: string | null }
-      const { data: bom } = await db().from('production_bom_lines').select('*')
-        .eq('product_item_id', run.product_item_id).eq('component_item_id', line.inventory_item_id)
-        .eq('active', true).maybeSingle()
-      const expected = bom
-        ? Number(bom.quantity_per_unit ?? 0) * Number(run.planned_quantity ?? 0) * (1 + Number(bom.wastage_percent ?? 0) / 100)
-        : 0
-      const { data: existingMaterial } = await db().from('production_run_materials').select('id')
-        .eq('issue_item_id', line.id).maybeSingle()
-      if (!existingMaterial) {
-        const { error: materialError } = await db().from('production_run_materials').insert({
-          run_id: issue.production_run_id,
+      if (issue.kind === 'transfer') {
+        await recordStockMovement({
           item_id: line.inventory_item_id,
+          direction: 'in',
+          quantity,
+          movement_unit: line.unit,
+          reason: `Received from transfer ${documentReference}`,
+          reference: documentReference,
+          source: 'goods_transfer',
           goods_issue_id: issue.id,
-          issue_item_id: line.id,
-          expected_quantity: expected,
-          issued_quantity: quantity,
-          unit: line.unit,
-          notes: `Posted from ${reference}`,
+          production_run_id: issue.production_run_id,
+          store_id: issue.destination_store_id,
+          source_table: 'procurement_goods_issue_items',
+          source_record_id: line.id,
+          idempotency_key: `goods-transfer-destination:${line.id}`,
+          recorded_by: actor.email,
         })
-        if (materialError) throw new Error(materialError.message)
+        movementsCreated += 1
       }
     }
 
@@ -989,15 +1057,11 @@ export async function postGoodsIssue(
       await db().from('production_runs').update({
         status: 'materials_issued', started_at: productionRun.data?.started_at ?? now, updated_at: now,
       }).eq('id', issue.production_run_id)
-    } else {
-      const { data: postedDocs } = await db().from('procurement_goods_issues').select('id')
-        .eq('production_run_id', issue.production_run_id).eq('kind', 'transfer').eq('status', 'posted')
-      const ids = ((postedDocs as Array<{ id: string }> | null) ?? []).map((row) => row.id)
-      const { data: postedMovements } = ids.length > 0
-        ? await db().from('inventory_movements').select('base_quantity').in('goods_issue_id', ids).eq('direction', 'in')
-        : { data: [] as Array<{ base_quantity: number }> }
-      const transferred = ((postedMovements as Array<{ base_quantity: number }> | null) ?? [])
-        .reduce((sum, movement) => sum + Number(movement.base_quantity ?? 0), 0)
+    } else if (isProductionOutputGtn) {
+      const { data: postedEvents } = await db().from('production_custody_events').select('base_quantity')
+        .eq('production_run_id', issue.production_run_id).eq('event_kind', 'gtn_transfer').eq('direction', 'out')
+      const transferred = ((postedEvents as Array<{ base_quantity: number }> | null) ?? [])
+        .reduce((sum, event) => sum + Number(event.base_quantity ?? 0), 0)
       const accepted = Number(productionRun.data?.accepted_quantity ?? 0)
       await db().from('production_runs').update({
         status: accepted > 0 && transferred >= accepted ? 'completed' : 'partially_completed',

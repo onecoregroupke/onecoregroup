@@ -8,6 +8,8 @@ import {
 } from '@/lib/fieldSales'
 import { isFieldSalesManager, canManageFieldSales, fieldSalesAllowedBrands, canAccessSalesperson } from '@/lib/fieldSalesAccess'
 import { auditEvent } from '@/lib/audit'
+import { recallFieldSalesToProduction } from '@/lib/productionCustody'
+import { db } from '@/lib/serverClient'
 
 function assertBrand(allowed: string[] | null, brandId: string | null) {
   if (allowed !== null && (!brandId || !allowed.includes(brandId))) {
@@ -165,6 +167,32 @@ export async function POST(req: NextRequest) {
         })
         await auditEvent({ actor, action: 'field_sales.reconciliation.approve', entity_table: 'field_sales_allocations', entity_id: row.id, entity_label: row.delivery_note_no || row.allocation_ref, after_data: row as unknown as Record<string, unknown> })
         return NextResponse.json({ ok: true, row })
+      }
+      case 'quality-recall-to-production': {
+        if (!canManageFieldSales(actor)) return NextResponse.json({ ok: false, error: 'Manager access required.' }, { status: 403 })
+        const { data: item } = await db().from('inventory_items').select('brand_id').eq('id', String(body?.item_id ?? '')).maybeSingle()
+        if (!item) throw new Error('Inventory item not found.')
+        assertBrand(allowed, item.brand_id)
+        const result = await recallFieldSalesToProduction({
+          salesperson_id: String(body?.salesperson_id ?? ''),
+          item_id: String(body?.item_id ?? ''),
+          quantity: Number(body?.quantity ?? 0),
+          batch_number: String(body?.batch_number ?? ''),
+          allocation_id: body?.allocation_id ? String(body.allocation_id) : null,
+          quality_incident_id: String(body?.quality_incident_id ?? ''),
+          production_store_id: body?.production_store_id ? String(body.production_store_id) : null,
+          recorded_by: who,
+          recorded_by_id: actor.teamMemberId,
+          idempotency_key: String(body?.idempotency_key ?? `quality-recall:${body?.quality_incident_id}:${body?.salesperson_id}:${body?.item_id}`),
+        })
+        await auditEvent({
+          actor,
+          action: 'field_sales.quality_recall.production',
+          entity_table: 'inventory_quality_incidents',
+          entity_id: String(body?.quality_incident_id ?? ''),
+          after_data: result,
+        })
+        return NextResponse.json({ ok: true, result })
       }
       default:
         return NextResponse.json({ ok: false, error: `Unknown action "${action}"` }, { status: 400 })

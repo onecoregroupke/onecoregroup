@@ -123,25 +123,28 @@ export interface MaterialReconciliation {
   returned: number
   consumed: number
   waste: number
-  /** Unaccounted-for material: issued - returned - consumed - waste. */
+  /** Compatibility field. Without a physical count this is held in Production,
+   * not an unexplained loss. */
   unaccounted: number
+  /** Issued material still physically held in Production custody. */
+  remainingInProduction: number
   /** Consumed vs the BOM expectation. Positive = used more than planned. */
   varianceVsExpected: number
 }
 
 /**
- * §23/§25: reconcile expected against actual use. `unaccounted` is the number
- * that matters — material that left the store and cannot be explained by
- * consumption, return or recorded waste.
+ * §23/§25: reconcile expected against actual use. The residual remains in
+ * Production custody until a later consumption, GTN return or approved loss.
  */
 export function reconcileMaterial(m: RunMaterial): MaterialReconciliation {
-  const unaccounted = m.issued_quantity - m.returned_quantity - m.consumed_quantity - m.waste_quantity
+  const remainingInProduction = m.issued_quantity - m.returned_quantity - m.consumed_quantity - m.waste_quantity
   return {
     issued: m.issued_quantity,
     returned: m.returned_quantity,
     consumed: m.consumed_quantity,
     waste: m.waste_quantity,
-    unaccounted: round3(unaccounted),
+    unaccounted: round3(remainingInProduction),
+    remainingInProduction: round3(remainingInProduction),
     varianceVsExpected: round3(m.consumed_quantity - m.expected_quantity),
   }
 }
@@ -178,14 +181,14 @@ export interface ProductionOutput {
   waste_quantity: number
 }
 
-/** Recording production output is reconciliation only; it has no inventory
- * effect. A posted GTN is the authoritative finished-goods receipt. */
+/** Output recording never changes a store. It creates a Production custody
+ * position; a posted GTN is the later authoritative location transfer. */
 export function validateProductionOutput(output: ProductionOutput): string[] {
   const values = [output.produced_quantity, output.accepted_quantity, output.rejected_quantity, output.waste_quantity]
   const problems: string[] = []
   if (values.some((value) => value < 0)) problems.push('Output quantities cannot be negative.')
-  if (output.accepted_quantity + output.rejected_quantity > output.produced_quantity) {
-    problems.push('Accepted plus rejected cannot exceed the produced quantity.')
+  if (output.accepted_quantity + output.rejected_quantity + output.waste_quantity > output.produced_quantity) {
+    problems.push('Accepted, rejected and waste together cannot exceed the produced quantity.')
   }
   return problems
 }
@@ -195,7 +198,8 @@ export function awaitingTransferQuantity(accepted: number, transferredOnPostedGt
 }
 
 export function productionGtnStockEffect(quantity: number): { production: number; finishedGoods: number } {
-  return { production: 0, finishedGoods: Math.max(0, quantity) }
+  const moved = Math.max(0, quantity)
+  return { production: moved === 0 ? 0 : -moved, finishedGoods: moved }
 }
 
 export interface FgTransfer {

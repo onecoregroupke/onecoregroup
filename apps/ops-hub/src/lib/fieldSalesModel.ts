@@ -13,7 +13,7 @@
 // revenue exists yet. The daily invoice then reduces custody only.
 
 export const CUSTODY_MOVEMENT_KINDS = [
-  'issue', 'sale', 'return', 'damage', 'sample', 'promotion', 'adjustment', 'reversal',
+  'issue', 'sale', 'return', 'damage', 'sample', 'promotion', 'quality_recall', 'adjustment', 'reversal',
 ] as const
 export type CustodyMovementKind = (typeof CUSTODY_MOVEMENT_KINDS)[number]
 
@@ -85,6 +85,12 @@ export function invoiceStockEffect(quantitySold: number): StockEffect {
     companyOwned: -quantitySold,  // the goods have genuinely left the company
     createsRevenue: true,
   }
+}
+
+/** An authorised quality recall moves the named salesperson's stock directly
+ * to Production. Finished Goods is deliberately untouched. */
+export function qualityRecallStockEffect(quantity: number) {
+  return { mainStore: 0, custody: -quantity, production: quantity, companyOwned: 0, createsRevenue: false }
 }
 
 /** §22: accepted returns re-enter the main store; rejected/damaged do not. */

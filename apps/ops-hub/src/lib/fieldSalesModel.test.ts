@@ -5,6 +5,7 @@ import {
   allocationStockEffect, invoiceStockEffect, returnStockEffect, damageStockEffect,
   positionBalance, flagCustodyIssues, paymentMismatch, reconcileWeek,
   detectDuplicateReferences, type CustodyPosition,
+  qualityRecallStockEffect,
 } from './fieldSalesModel'
 
 // Addendum §35 "Field sales" testing requirements, in order.
@@ -48,6 +49,12 @@ test('allocating then selling deducts the main store exactly once', () => {
   assert.equal(alloc.custody + sale.custody, 200)
 })
 
+test('quality recall moves sales custody directly to Production without touching Finished Goods', () => {
+  assert.deepEqual(qualityRecallStockEffect(8), {
+    mainStore: 0, custody: -8, production: 8, companyOwned: 0, createsRevenue: false,
+  })
+})
+
 test('E–H: delivery, two sales, and a mixed return preserve the store/custody boundary', () => {
   let store = 100
   let custody = 0
@@ -88,7 +95,7 @@ test('damage in the field never re-enters the store', () => {
 
 test('only an issue increases custody', () => {
   assert.equal(custodyDirectionFor('issue'), 'in')
-  for (const k of ['sale', 'return', 'damage', 'sample', 'promotion'] as const) {
+  for (const k of ['sale', 'return', 'damage', 'sample', 'promotion', 'quality_recall'] as const) {
     assert.equal(custodyDirectionFor(k), 'out', k)
   }
 })

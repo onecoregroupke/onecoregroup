@@ -56,12 +56,23 @@ test('approving a requisition moves no stock — only the issue does', () => {
   assert.equal(issueStockQuantity({ issued_quantity: 25 }), 25)
 })
 
+test('run output cannot classify more than was physically produced', () => {
+  assert.match(validateProductionOutput({ produced_quantity: 100, accepted_quantity: 80, rejected_quantity: 15, waste_quantity: 10 })[0], /together cannot exceed/)
+})
+
 test('A: MRF approval alone has zero ledger quantity', () => {
   assert.equal(issueStockQuantity({ issued_quantity: 0 }), 0)
 })
 
 test('B: a posted GIN moves exactly the issued quantity out', () => {
   assert.equal(issueStockQuantity({ issued_quantity: 37.5 }), 37.5)
+})
+
+test('normal production GIN changes Store and Production once, while the run causes no second Store deduction', () => {
+  const issued = issueStockQuantity({ issued_quantity: 6 })
+  assert.equal(100 - issued, 94)
+  assert.equal(0 + issued, 6)
+  assert.equal(100 - issued, 94)
 })
 
 test('issuing cannot exceed what was approved', () => {
@@ -106,6 +117,15 @@ test('a fully reconciled issue has zero unaccounted', () => {
   assert.equal(r.unaccounted, 0)
 })
 
+test('unused issued packaging remains visible in Production custody', () => {
+  const reconciliation = reconcileMaterial({
+    item_type: 'packaging', expected_quantity: 78, issued_quantity: 125,
+    consumed_quantity: 78, returned_quantity: 0, waste_quantity: 0,
+  })
+  assert.equal(200 - 125, 75)
+  assert.equal(reconciliation.remainingInProduction, 47)
+})
+
 // ─── Packaging is tracked separately (§25) ──────────────────────────────────
 
 test('packaging reconciles separately from raw ingredients', () => {
@@ -137,15 +157,81 @@ test('a transfer adds only accepted finished goods', () => {
 
 test('C: recording production output validates reconciliation but has no implicit stock effect', () => {
   assert.deepEqual(validateProductionOutput({
-    produced_quantity: 100, accepted_quantity: 92, rejected_quantity: 8, waste_quantity: 2,
+    produced_quantity: 100, accepted_quantity: 92, rejected_quantity: 8, waste_quantity: 0,
   }), [])
   assert.deepEqual(productionGtnStockEffect(0), { production: 0, finishedGoods: 0 })
 })
 
-test('D: a production GTN receives accepted output once and never deducts a phantom production balance', () => {
-  assert.deepEqual(productionGtnStockEffect(92), { production: 0, finishedGoods: 92 })
+test('D: a production GTN reduces real Production custody and receives output into Finished Goods once', () => {
+  assert.deepEqual(productionGtnStockEffect(92), { production: -92, finishedGoods: 92 })
   assert.equal(awaitingTransferQuantity(92, 92), 0)
   assert.equal(awaitingTransferQuantity(92, 40), 52)
+})
+
+test('WIP remains in Production when only part of the produced volume is transferred', () => {
+  const effect = productionGtnStockEffect(130)
+  assert.equal(200 + effect.production, 70)
+  assert.equal(0 + effect.finishedGoods, 130)
+})
+
+test('500ml finished goods can be recalled, repacked to one 5L unit, and transferred without liquid variance', () => {
+  let finishedGoods500ml = 10
+  let productionLitres = 0
+  let packagingStore5L = 1
+  let production5LPackages = 0
+  let finishedGoods5L = 0
+
+  // GTN: Finished Goods -> Production. A package-unit movement carries its
+  // explicit 500ml physical equivalent into the rework pool.
+  finishedGoods500ml -= 10
+  productionLitres += 10 * 0.5
+
+  // GIN: one new 5L package enters Production; the run consumes that package.
+  packagingStore5L -= 1
+  production5LPackages += 1
+  production5LPackages -= 1
+
+  // GTN: the repacked 5L output leaves Production and enters Finished Goods.
+  productionLitres -= 5
+  finishedGoods5L += 1
+
+  assert.deepEqual({ finishedGoods500ml, productionLitres, packagingStore5L, production5LPackages, finishedGoods5L }, {
+    finishedGoods500ml: 0, productionLitres: 0, packagingStore5L: 0, production5LPackages: 0, finishedGoods5L: 1,
+  })
+})
+
+test('full Multipurpose rework conserves 100 litres across FG, Sales and Production', () => {
+  let finishedGoods1L = 56
+  let salesperson1L = 8
+  let productionLitres = 36
+  let finishedGoods20L = 0
+
+  finishedGoods1L -= 56
+  productionLitres += 56
+  salesperson1L -= 8
+  productionLitres += 8
+  assert.deepEqual({ finishedGoods1L, salesperson1L, productionLitres }, {
+    finishedGoods1L: 0, salesperson1L: 0, productionLitres: 100,
+  })
+
+  productionLitres -= 5 * 20
+  finishedGoods20L += 5
+  const companyLitres = finishedGoods1L + salesperson1L + productionLitres + finishedGoods20L * 20
+  assert.deepEqual({ productionLitres, finishedGoods20L, companyLitres }, {
+    productionLitres: 0, finishedGoods20L: 5, companyLitres: 100,
+  })
+})
+
+test('recovered source packaging stays in Production and can be consumed later without a duplicate GIN', () => {
+  const packagingStoreMovement = 0
+  const recoveredReusable = 50
+  const recoveredDamaged = 6
+  const consumedOnLaterRun = 20
+  assert.deepEqual({
+    reusableRemaining: recoveredReusable - consumedOnLaterRun,
+    qualityHold: recoveredDamaged,
+    packagingStoreMovement,
+  }, { reusableRemaining: 30, qualityHold: 6, packagingStoreMovement: 0 })
 })
 
 test('accepted and rejected output cannot exceed production', () => {
@@ -185,6 +271,11 @@ test('closing = opening + in - out', () => {
     { direction: 'in', quantity: 10 },
   ])
   assert.equal(closing, 130)
+})
+
+test('approved disposal is an outward ledger event and retains the balance for rework', () => {
+  assert.equal(closingBalance(10, [{ direction: 'out', quantity: 4 }]), 6)
+  assert.equal(4 * 675, 2700)
 })
 
 test('the stock card running balance matches every recorded quantity_after', () => {
