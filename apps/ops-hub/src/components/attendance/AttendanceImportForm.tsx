@@ -35,9 +35,9 @@ export function AttendanceImportForm() {
     <section className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
       <div className="mb-3">
         <h2 className="text-xs font-semibold uppercase tracking-wider text-ocg-gold">Import attendance</h2>
-        <p className="mt-1 text-sm text-gray-500">Paste converted Deli S151 export rows as JSON. Each row should include employee_name/email, attendance_date, check_in_at, and check_out_at.</p>
+        <p className="mt-1 text-sm text-gray-500">Paste converted Deli S151 rows as JSON. Each IN/OUT becomes independent biometric evidence; imports never overwrite self-clock or reviewer evidence.</p>
       </div>
-      <textarea className="input min-h-32 font-mono text-xs" value={json} onChange={(e) => setJson(e.target.value)} placeholder='[{"employee_name":"Jane Doe","employee_email":"jane@example.com","attendance_date":"2026-07-03","check_in_at":"2026-07-03T08:02:00+03:00","check_out_at":"2026-07-03T17:11:00+03:00"}]' />
+      <textarea className="input min-h-32 font-mono text-xs" value={json} onChange={(e) => setJson(e.target.value)} placeholder='[{"employee_code":"104","device_name":"Deli S151","check_in_at":"2026-09-02T08:02:00+03:00","check_out_at":"2026-09-02T17:11:00+03:00"}]' />
       {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
       <div className="mt-3 flex justify-end">
         <button onClick={submit} disabled={saving || !json.trim()} className="inline-flex items-center gap-2 rounded-lg bg-ocg-navy px-4 py-2 text-sm font-medium text-white disabled:opacity-60">

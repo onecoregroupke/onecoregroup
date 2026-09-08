@@ -49,6 +49,30 @@ function minutesBetween(aIso: string, bIso: string): number {
   return Math.round((Date.parse(bIso) - Date.parse(aIso)) / 60_000)
 }
 
+export interface AttendanceEvidencePoint {
+  id: string
+  source: 'biometric' | 'employee_self' | 'reviewer_manual' | 'historical_import'
+  direction: 'in' | 'out'
+  occurred_at: string
+}
+
+/** Pivot independent evidence without mutating or choosing a "winning" source. */
+export function reconcileAttendanceEvidence(points: readonly AttendanceEvidencePoint[], thresholdMinutes = 10) {
+  const sources = new Map<AttendanceEvidencePoint['source'], { in: string | null; out: string | null; ids: string[] }>()
+  for (const point of points) {
+    const source = sources.get(point.source) ?? { in: null, out: null, ids: [] }
+    source.ids.push(point.id)
+    if (point.direction === 'in' && (!source.in || point.occurred_at < source.in)) source.in = point.occurred_at
+    if (point.direction === 'out' && (!source.out || point.occurred_at > source.out)) source.out = point.occurred_at
+    sources.set(point.source, source)
+  }
+  const spread = (direction: 'in' | 'out') => {
+    const values = [...sources.values()].map((source) => source[direction]).filter((value): value is string => !!value).map(Date.parse)
+    return values.length > 1 ? Math.max(...values) - Math.min(...values) : 0
+  }
+  return { sources, discrepancy: spread('in') > thresholdMinutes * 60_000 || spread('out') > thresholdMinutes * 60_000 }
+}
+
 /**
  * The schedule in force for an employee on a date (§10).
  * Picks the most recent schedule whose effective window contains the date, then

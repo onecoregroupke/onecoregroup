@@ -1,5 +1,6 @@
 import { db } from './serverClient'
-import type { OpsTeamMemberRow } from '@ocg/db'
+import type { OpsAttendanceEventRow, OpsTeamMemberRow } from '@ocg/db'
+import { todayInEat } from './serverClient'
 
 export interface AttendanceRow {
   id: string
@@ -81,4 +82,120 @@ export async function upsertAttendance(input: {
     .single()
   if (error) throw new Error(error.message)
   return data as AttendanceRow
+}
+
+export interface AttendanceEvidenceDaily {
+  team_member_id: string
+  employee_name: string
+  employee_email: string
+  event_date: string
+  source: OpsAttendanceEventRow['source']
+  check_in_at: string | null
+  check_out_at: string | null
+  in_evidence_count: number
+  out_evidence_count: number
+  evidence_event_ids: string[]
+  latest_recorded_at: string
+}
+
+export async function listAttendanceEvidence(actor: {
+  teamMemberId: string | null
+  can: (section: 'management', level?: 'view' | 'edit') => boolean
+  permissions: unknown
+}, opts: { from?: string; to?: string; limit?: number } = {}): Promise<AttendanceEvidenceDaily[]> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let query = (db() as any).from('ops_attendance_evidence_daily').select('*')
+    .order('event_date', { ascending: false }).order('employee_name').limit(opts.limit ?? 1500)
+  if (opts.from) query = query.gte('event_date', opts.from)
+  if (opts.to) query = query.lte('event_date', opts.to)
+  if (actor.permissions !== null && !actor.can('management', 'view')) {
+    if (!actor.teamMemberId) return []
+    query = query.eq('team_member_id', actor.teamMemberId)
+  }
+  const { data, error } = await query
+  if (error) throw new Error(error.message)
+  return ((data as AttendanceEvidenceDaily[] | null) ?? []).map((row) => ({
+    ...row,
+    in_evidence_count: Number(row.in_evidence_count ?? 0),
+    out_evidence_count: Number(row.out_evidence_count ?? 0),
+  }))
+}
+
+export async function attendanceEventsForMember(teamMemberId: string, eventDate = todayInEat()): Promise<OpsAttendanceEventRow[]> {
+  const { data, error } = await db().from('ops_attendance_events').select('*')
+    .eq('team_member_id', teamMemberId).eq('event_date', eventDate).order('occurred_at')
+  if (error) throw new Error(error.message)
+  return (data as OpsAttendanceEventRow[] | null) ?? []
+}
+
+export async function recordAttendanceEvent(input: {
+  team_member_id: string
+  occurred_at: string
+  direction: 'in' | 'out'
+  source: OpsAttendanceEventRow['source']
+  device_name?: string
+  device_event_id?: string
+  recorded_by?: string
+  recorded_by_user_id?: string | null
+  reason?: string
+  notes?: string
+  source_event_key?: string
+  raw_payload?: Record<string, unknown>
+}): Promise<OpsAttendanceEventRow> {
+  if (!input.team_member_id) throw new Error('An employee is required.')
+  const occurred = new Date(input.occurred_at)
+  if (Number.isNaN(occurred.getTime())) throw new Error('Attendance time is invalid.')
+  const eventDate = occurred.toLocaleDateString('en-CA', { timeZone: 'Africa/Nairobi' })
+  if (input.source === 'reviewer_manual' && (!input.recorded_by?.trim() || !input.reason?.trim())) {
+    throw new Error('Manual attendance needs the reviewer identity and a reason.')
+  }
+  if (input.source_event_key) {
+    const { data: existing } = await db().from('ops_attendance_events').select('*')
+      .eq('source_event_key', input.source_event_key).maybeSingle()
+    if (existing) return existing as OpsAttendanceEventRow
+  }
+  const { data, error } = await db().from('ops_attendance_events').insert({
+    team_member_id: input.team_member_id,
+    occurred_at: occurred.toISOString(),
+    event_date: eventDate,
+    direction: input.direction,
+    source: input.source,
+    device_name: input.device_name ?? '',
+    device_event_id: input.device_event_id ?? '',
+    recorded_by: input.recorded_by ?? '',
+    recorded_by_user_id: input.recorded_by_user_id ?? null,
+    reason: input.reason ?? '',
+    notes: input.notes ?? '',
+    source_event_key: input.source_event_key ?? '',
+    raw_payload: input.raw_payload ?? {},
+  }).select('*').single()
+  if (error) throw new Error(error.message)
+  return data as OpsAttendanceEventRow
+}
+
+export async function selfClock(input: {
+  teamMemberId: string
+  direction: 'in' | 'out'
+  recordedByUserId: string
+}): Promise<OpsAttendanceEventRow> {
+  const now = new Date()
+  const today = now.toLocaleDateString('en-CA', { timeZone: 'Africa/Nairobi' })
+  const events = await attendanceEventsForMember(input.teamMemberId, today)
+  const self = events.filter((event) => event.source === 'employee_self')
+  if (input.direction === 'in' && self.some((event) => event.direction === 'in')) {
+    throw new Error('You have already clocked in today.')
+  }
+  if (input.direction === 'out') {
+    if (!self.some((event) => event.direction === 'in')) throw new Error('Clock in before clocking out.')
+    if (self.some((event) => event.direction === 'out')) throw new Error('You have already clocked out today.')
+  }
+  return recordAttendanceEvent({
+    team_member_id: input.teamMemberId,
+    occurred_at: now.toISOString(),
+    direction: input.direction,
+    source: 'employee_self',
+    recorded_by: 'Employee self-service',
+    recorded_by_user_id: input.recordedByUserId,
+    source_event_key: `employee-self:${input.teamMemberId}:${today}:${input.direction}`,
+  })
 }

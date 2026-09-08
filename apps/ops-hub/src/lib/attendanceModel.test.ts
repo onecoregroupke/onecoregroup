@@ -3,8 +3,20 @@ import assert from 'node:assert/strict'
 import {
   effectiveSchedule, isWorkday, collapsePunches, calculateAttendance,
   attendanceExceptions, summariseAttendance,
+  reconcileAttendanceEvidence,
   type WorkSchedule, type AttendanceRecordLike,
 } from './attendanceModel'
+
+test('biometric, self-clock and reviewer evidence remain three distinct points', () => {
+  const result = reconcileAttendanceEvidence([
+    { id: 'bio', source: 'biometric', direction: 'in', occurred_at: '2026-09-02T08:03:00+03:00' },
+    { id: 'self', source: 'employee_self', direction: 'in', occurred_at: '2026-09-02T08:05:00+03:00' },
+    { id: 'manual', source: 'reviewer_manual', direction: 'in', occurred_at: '2026-09-02T08:00:00+03:00' },
+  ])
+  assert.equal(result.sources.size, 3)
+  assert.deepEqual([...result.sources.values()].flatMap((source) => source.ids).sort(), ['bio', 'manual', 'self'])
+  assert.equal(result.discrepancy, false)
+})
 
 const MON = '2026-08-03'   // Monday
 const SAT = '2026-08-08'   // Saturday
