@@ -4,7 +4,7 @@ import { memberForEmail, listTeam } from '@/lib/team'
 import { listBrands } from '@/lib/brands'
 import { listProjects } from '@/lib/projects'
 import { calendarFeed } from '@/lib/calendarFeed'
-import { canCreateEvent } from '@/lib/calendarModel'
+import { canCreateEvent, calendarPeopleScope } from '@/lib/calendarModel'
 import { availableScopes } from '@/lib/calendarScope'
 import { todayInEat } from '@/lib/serverClient'
 import { CalendarBoard, type FeedItem } from '@/components/calendar/CalendarBoard'
@@ -43,14 +43,16 @@ export default async function CalendarPage() {
 
   // The exact predicate POST /api/tasks applies before creating a task.
   const canAssignTasks = canAssignTaskFromCalendar(actor.permissions, actor.isSuperAdmin)
+  const scopes = availableScopes(viewer)
+  const defaultScope = scopes[0] ?? 'personal'
 
   const [initial, brands, projects, team] = await Promise.all([
-    // First paint: the viewer's own week. The client then refetches on any
-    // view/scope change.
-    calendarFeed(viewer, { view: 'week', date: today, memberIds: me ? [me.id] : [] }),
+    // First paint matches the visible selector: Management for an authorised
+    // manager, My Calendar for an ordinary employee.
+    calendarFeed(viewer, { view: 'week', date: today, memberIds: defaultScope === 'personal' && me ? [me.id] : undefined }),
     listBrands(),
     canAssignTasks ? listProjects({ status: 'Active' }) : Promise.resolve([]),
-    canAssignTasks ? listTeam() : Promise.resolve([]),
+    listTeam(),
   ])
 
   const brandById = new Map(brands.map((b) => [b.id, b.short_name || b.name]))
@@ -70,6 +72,9 @@ export default async function CalendarPage() {
     team.map((m) => ({ id: m.id, name: m.name, brandIds: m.brand_ids ?? [] })),
     scope,
   ).map((m) => ({ id: m.id, name: m.name }))
+  const peopleScope = calendarPeopleScope(viewer)
+  const calendarPeople = team.filter((member) => peopleScope.kind === 'all'
+    || (peopleScope.kind === 'own' ? member.id === me?.id : (member.brand_ids ?? []).some((brandId) => peopleScope.brandIds.includes(brandId))))
 
   return (
     <div className="space-y-5">
@@ -88,12 +93,13 @@ export default async function CalendarPage() {
       <CalendarBoard
         initial={initial as { from: string; to: string; items: FeedItem[] }}
         today={today}
-        scopes={availableScopes(viewer)}
-        canCreateEvents={canCreateEvent(viewer, 'company', null) || canCreateEvent(viewer, 'team', null)}
+        scopes={scopes}
+        canCreateEvents={canCreateEvent(viewer, 'private', null)}
         canAssignTasks={canAssignTasks}
         brands={brands.map((b) => ({ id: b.id, label: b.name }))}
         projects={projectOptions}
         people={peopleOptions}
+        filterPeople={calendarPeople.map((member) => ({ id: member.id, name: member.name, team: member.team ?? '', department: member.department ?? '' }))}
       />
     </div>
   )

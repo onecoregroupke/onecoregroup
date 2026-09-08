@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { X } from 'lucide-react'
 import { api } from '@/lib/apiClient'
 import { CALENDAR_EVENT_KINDS } from '@/lib/calendarModel'
+import { ScheduleControls, emptyScheduleOptions, scheduleOptionsPayload } from './ScheduleControls'
 
 /**
  * Create a calendar event.
@@ -33,6 +34,7 @@ export function EventComposer({
     date, start_time: '09:00', end_time: '10:00', all_day: false,
     visibility: 'private', brand_id: '',
   })
+  const [scheduleOptions, setScheduleOptions] = useState(emptyScheduleOptions)
 
   function set<K extends keyof typeof form>(k: K, v: (typeof form)[K]) {
     setForm((c) => ({ ...c, [k]: v }))
@@ -61,6 +63,7 @@ export function EventComposer({
         all_day: form.all_day,
         visibility: form.visibility,
         brand_id: form.brand_id || null,
+        ...scheduleOptionsPayload(scheduleOptions),
       }),
     })
     setSaving(false)
@@ -143,6 +146,8 @@ export function EventComposer({
           <Field label="Notes">
             <textarea className="input min-h-[70px]" value={form.description} onChange={(e) => set('description', e.target.value)} />
           </Field>
+
+          <ScheduleControls value={scheduleOptions} onChange={setScheduleOptions} startDate={form.date} />
 
           {!canCreateShared && (
             <p className="rounded-lg bg-gray-50 p-2.5 text-xs text-gray-500">

@@ -96,12 +96,15 @@ async function visibleMemberIds(viewer: CalendarViewer): Promise<string[] | null
 async function tasksIn(from: string, to: string, memberIds: string[] | null, viewer: CalendarViewer): Promise<CalendarItem[]> {
   // Two windows, one union: tasks due in the range, and tasks scheduled in it.
   // A task scheduled Wednesday but due next month must still appear on Wednesday.
-  const [byDeadline, bySchedule] = await Promise.all([
+  const [byDeadline, bySchedule, byOccurrences] = await Promise.all([
     db().from('ops_tasks').select('*').gte('target_date', from).lte('target_date', to).limit(2000),
     db().from('ops_tasks').select('*')
       .gte('scheduled_start_at', `${from}T00:00:00+03:00`)
       .lte('scheduled_start_at', `${to}T23:59:59+03:00`)
       .limit(2000),
+    db().from('ocg_schedule_occurrences').select('*')
+      .gte('starts_at', `${from}T00:00:00+03:00`).lte('starts_at', `${to}T23:59:59+03:00`)
+      .not('source_task_id', 'is', null).limit(2000),
   ])
 
   const rows = new Map<string, OpsTaskRow>()
@@ -109,51 +112,69 @@ async function tasksIn(from: string, to: string, memberIds: string[] | null, vie
     ...((byDeadline.data as OpsTaskRow[] | null) ?? []),
     ...((bySchedule.data as OpsTaskRow[] | null) ?? []),
   ]) rows.set(row.task_id, row)
+  const occurrences = (byOccurrences.data as import('@ocg/db').OcgScheduleOccurrenceRow[] | null) ?? []
+  const missingTaskIds = [...new Set(occurrences.map((occurrence) => occurrence.source_task_id).filter((id): id is string => !!id && !rows.has(id)))]
+  if (missingTaskIds.length > 0) {
+    const { data } = await db().from('ops_tasks').select('*').in('task_id', missingTaskIds)
+    for (const row of (data as OpsTaskRow[] | null) ?? []) rows.set(row.task_id, row)
+  }
 
   const team = await listTeam()
   const byName = new Map(team.map((m) => [m.name, m.id]))
 
-  return [...rows.values()]
+  const visible = [...rows.values()]
     .filter((t) => {
       if (memberIds === null) return true
       const id = byName.get(t.assigned_to ?? '')
       return !!id && memberIds.includes(id)
     })
-    .map((t) => {
+  const visibleIds = new Set(visible.map((task) => task.task_id))
+  const output: CalendarItem[] = []
+  for (const t of visible) {
       const assigneeId = byName.get(t.assigned_to ?? '') ?? null
       const scheduled = !!t.scheduled_start_at
       const timed = scheduled && !t.scheduled_all_day
-      return {
-        id: `task:${t.task_id}`,
-        type: 'task' as const,
-        title: t.task_name,
-        // Placed by schedule where one exists, else by deadline.
-        date: scheduled ? nairobiDateOf(t.scheduled_start_at!) : t.target_date,
-        startsAt: timed ? t.scheduled_start_at : null,
-        endsAt: timed ? t.scheduled_end_at : null,
-        allDay: !timed,
-        status: t.current_status,
-        brandId: t.brand_id ?? null,
-        assigneeId,
-        assigneeName: t.assigned_to ?? '',
-        createdById: null,
-        href: `/tasks/${t.task_id}`,
-        canMove: canReschedule(viewer, { type: 'task', assigneeId }),
-        meta: {
-          taskId: t.task_id,
-          priority: t.priority,
-          project: t.project_name,
-          scheduled,
-          // The deadline stays visible even when the chip is placed by schedule,
-          // so "scheduled Wednesday, due Friday" is readable on the calendar.
-          dueDate: t.target_date || null,
-          location: t.scheduled_location || '',
-        },
+      const common = {
+        title: t.task_name, brandId: t.brand_id ?? null, assigneeId,
+        assigneeName: t.assigned_to ?? '', createdById: null, href: `/tasks/${t.task_id}`,
+        canMove: canReschedule(viewer, { type: 'task' as const, assigneeId }),
+        meta: { taskId: t.task_id, priority: t.priority, project: t.project_name,
+          description: t.task_description, category: t.category, scheduled,
+          dueDate: t.target_date || null, location: t.scheduled_location || '' },
       }
+      if (!t.schedule_rule_id && (scheduled ? nairobiDateOf(t.scheduled_start_at!) >= from && nairobiDateOf(t.scheduled_start_at!) <= to : t.target_date >= from && t.target_date <= to)) {
+        output.push({ id: `task:${t.task_id}`, type: 'task',
+          date: scheduled ? nairobiDateOf(t.scheduled_start_at!) : t.target_date,
+          startsAt: timed ? t.scheduled_start_at : null, endsAt: timed ? t.scheduled_end_at : null,
+          allDay: !timed, status: t.current_status, ...common })
+      }
+      if (scheduled && t.target_date && t.target_date >= from && t.target_date <= to
+          && t.target_date !== nairobiDateOf(t.scheduled_start_at!)) {
+        output.push({ id: `deadline:${t.task_id}`, type: 'deadline', date: t.target_date,
+          startsAt: null, endsAt: null, allDay: true, status: t.current_status, ...common,
+          title: `${t.task_name} due`, canMove: false })
+      }
+  }
+  for (const occurrence of occurrences) {
+    if (!occurrence.source_task_id || !visibleIds.has(occurrence.source_task_id)) continue
+    const task = rows.get(occurrence.source_task_id)!
+    const assigneeId = occurrence.assignee_id ?? byName.get(task.assigned_to ?? '') ?? null
+    output.push({
+      id: `task-occurrence:${occurrence.id}`, type: 'task', title: task.task_name,
+      date: nairobiDateOf(occurrence.starts_at), startsAt: task.scheduled_all_day ? null : occurrence.starts_at,
+      endsAt: task.scheduled_all_day ? null : occurrence.ends_at, allDay: task.scheduled_all_day,
+      status: occurrence.status, brandId: task.brand_id ?? null, assigneeId,
+      assigneeName: task.assigned_to ?? '', createdById: null, href: `/tasks/${task.task_id}`,
+      canMove: false,
+      meta: { taskId: task.task_id, occurrenceId: occurrence.id, occurrenceNumber: occurrence.occurrence_number,
+        recurring: true, priority: task.priority, project: task.project_name, description: task.task_description,
+        category: task.category, dueDate: task.target_date || null, location: task.scheduled_location || '' },
     })
+  }
+  return output
 }
 
-async function dutiesIn(from: string, to: string, viewer: CalendarViewer): Promise<CalendarItem[]> {
+async function dutiesIn(from: string, to: string, viewer: CalendarViewer, memberIds: string[] | null): Promise<CalendarItem[]> {
   const scope = calendarPeopleScope(viewer)
   const dutyScope = scope.kind === 'own'
     ? { kind: 'own' as const }
@@ -165,6 +186,7 @@ async function dutiesIn(from: string, to: string, viewer: CalendarViewer): Promi
   for (const date of betweenDates(from, to)) {
     const occ = await occurrencesOn(date, { scope: dutyScope, teamMemberId: viewer.teamMemberId })
     for (const o of occ) {
+      if (memberIds !== null && (!o.assignee.id || !memberIds.includes(o.assignee.id))) continue
       out.push({
         // The occurrence identity — duty × date × person. Same triple as the
         // log's unique key, so this id is stable across every surface.
@@ -201,12 +223,22 @@ async function dutiesIn(from: string, to: string, viewer: CalendarViewer): Promi
 }
 
 async function eventsIn(from: string, to: string, viewer: CalendarViewer): Promise<CalendarItem[]> {
-  const { data } = await db().from('ocg_calendar_events').select('*')
-    .lte('starts_at', `${to}T23:59:59Z`)
-    .or(`ends_at.gte.${from}T00:00:00Z,ends_at.is.null`)
-    .neq('status', 'cancelled')
-    .limit(1000)
-  const events = (data as OcgCalendarEventRow[] | null) ?? []
+  const [baseQuery, occurrenceQuery] = await Promise.all([
+    db().from('ocg_calendar_events').select('*')
+      .lte('starts_at', `${to}T23:59:59Z`).or(`ends_at.gte.${from}T00:00:00Z,ends_at.is.null`)
+      .neq('status', 'cancelled').limit(1000),
+    db().from('ocg_schedule_occurrences').select('*')
+      .gte('starts_at', `${from}T00:00:00+03:00`).lte('starts_at', `${to}T23:59:59+03:00`)
+      .not('source_event_id', 'is', null).limit(1000),
+  ])
+  const eventMap = new Map(((baseQuery.data as OcgCalendarEventRow[] | null) ?? []).map((event) => [event.id, event]))
+  const occurrences = (occurrenceQuery.data as import('@ocg/db').OcgScheduleOccurrenceRow[] | null) ?? []
+  const missingIds = [...new Set(occurrences.map((occurrence) => occurrence.source_event_id).filter((id): id is string => !!id && !eventMap.has(id)))]
+  if (missingIds.length > 0) {
+    const { data } = await db().from('ocg_calendar_events').select('*').in('id', missingIds).neq('status', 'cancelled')
+    for (const event of (data as OcgCalendarEventRow[] | null) ?? []) eventMap.set(event.id, event)
+  }
+  const events = [...eventMap.values()]
   if (events.length === 0) return []
 
   const { data: att } = await db().from('ocg_calendar_event_attendees')
@@ -218,25 +250,39 @@ async function eventsIn(from: string, to: string, viewer: CalendarViewer): Promi
     attendeesByEvent.set(a.event_id, list)
   }
 
-  return events
-    .filter((e) => canSeeEvent(viewer, { ...e, attendee_member_ids: attendeesByEvent.get(e.id) ?? [] }))
-    .map((e) => ({
-      id: `event:${e.id}`,
-      type: 'event' as const,
-      title: e.title,
-      date: e.starts_at.slice(0, 10),
-      startsAt: e.all_day ? null : e.starts_at,
-      endsAt: e.all_day ? null : e.ends_at,
-      allDay: e.all_day,
-      status: e.status,
-      brandId: e.brand_id,
-      assigneeId: null,
-      assigneeName: e.created_by,
-      createdById: e.created_by_id,
-      href: `/calendar/events/${e.id}`,
-      canMove: canReschedule(viewer, { type: 'event', createdById: e.created_by_id }),
-      meta: { eventKind: e.event_kind, location: e.location, visibility: e.visibility },
-    }))
+  const visible = new Map(events
+    .filter((event) => canSeeEvent(viewer, { ...event, attendee_member_ids: attendeesByEvent.get(event.id) ?? [] }))
+    .map((event) => [event.id, event]))
+  const output: CalendarItem[] = []
+  for (const event of visible.values()) {
+    if (event.schedule_rule_id) continue
+    output.push({
+      id: `event:${event.id}`, type: event.event_kind === 'meeting' ? 'meeting' : 'event',
+      title: event.title, date: nairobiDateOf(event.starts_at), startsAt: event.all_day ? null : event.starts_at,
+      endsAt: event.all_day ? null : event.ends_at, allDay: event.all_day, status: event.status,
+      brandId: event.brand_id, assigneeId: null, assigneeName: event.created_by,
+      createdById: event.created_by_id, href: `/calendar/events/${event.id}`,
+      canMove: canReschedule(viewer, { type: 'event', createdById: event.created_by_id }),
+      meta: { eventKind: event.event_kind, location: event.location, visibility: event.visibility,
+        description: event.description, notes: event.notes, attendeeIds: attendeesByEvent.get(event.id) ?? [] },
+    })
+  }
+  for (const occurrence of occurrences) {
+    if (!occurrence.source_event_id) continue
+    const event = visible.get(occurrence.source_event_id)
+    if (!event) continue
+    output.push({
+      id: `event-occurrence:${occurrence.id}`, type: event.event_kind === 'meeting' ? 'meeting' : 'event',
+      title: event.title, date: nairobiDateOf(occurrence.starts_at), startsAt: event.all_day ? null : occurrence.starts_at,
+      endsAt: event.all_day ? null : occurrence.ends_at, allDay: event.all_day, status: occurrence.status,
+      brandId: event.brand_id, assigneeId: null, assigneeName: event.created_by,
+      createdById: event.created_by_id, href: `/calendar/events/${event.id}`, canMove: false,
+      meta: { eventKind: event.event_kind, location: event.location, visibility: event.visibility,
+        description: event.description, notes: event.notes, attendeeIds: attendeesByEvent.get(event.id) ?? [],
+        occurrenceId: occurrence.id, occurrenceNumber: occurrence.occurrence_number, recurring: true },
+    })
+  }
+  return output
 }
 
 async function leaveIn(from: string, to: string, memberIds: string[] | null): Promise<CalendarItem[]> {
@@ -321,12 +367,12 @@ export async function calendarFeed(
     ? (scopedMembers === null ? opts.memberIds : opts.memberIds.filter((m) => scopedMembers.includes(m)))
     : scopedMembers
 
-  const wanted = new Set<CalendarItemType>(opts.types ?? [...['task', 'personal_task', 'duty', 'inspection', 'meeting', 'event', 'leave'] as CalendarItemType[]])
+  const wanted = new Set<CalendarItemType>(opts.types ?? [...['task', 'personal_task', 'duty', 'inspection', 'meeting', 'event', 'leave', 'deadline'] as CalendarItemType[]])
 
   const parts = await Promise.all([
-    wanted.has('task') ? tasksIn(window.from, window.to, memberIds, viewer) : [],
-    (wanted.has('duty') || wanted.has('inspection')) ? dutiesIn(window.from, window.to, viewer) : [],
-    wanted.has('event') ? eventsIn(window.from, window.to, viewer) : [],
+    (wanted.has('task') || wanted.has('deadline')) ? tasksIn(window.from, window.to, memberIds, viewer) : [],
+    (wanted.has('duty') || wanted.has('inspection')) ? dutiesIn(window.from, window.to, viewer, memberIds) : [],
+    (wanted.has('event') || wanted.has('meeting')) ? eventsIn(window.from, window.to, viewer) : [],
     wanted.has('leave') ? leaveIn(window.from, window.to, memberIds) : [],
     wanted.has('personal_task') ? personalTasksIn(window.from, window.to, viewer) : [],
   ])

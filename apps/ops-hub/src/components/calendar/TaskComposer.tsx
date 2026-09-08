@@ -8,6 +8,7 @@ import {
   buildTaskPayload, validateTaskForm, initialTaskForm,
   type AssignableProject, type AssignablePerson,
 } from '@/lib/calendarTasks'
+import { ScheduleControls, emptyScheduleOptions, scheduleOptionsPayload } from './ScheduleControls'
 
 export type ComposerProject = AssignableProject
 export type ComposerPerson = AssignablePerson
@@ -41,6 +42,7 @@ export function TaskComposer({
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [form, setForm] = useState(() => initialTaskForm(date, projects[0]?.id ?? ''))
+  const [scheduleOptions, setScheduleOptions] = useState(emptyScheduleOptions)
 
   function set<K extends keyof typeof form>(k: K, v: (typeof form)[K]) {
     setForm((c) => ({ ...c, [k]: v }))
@@ -77,7 +79,7 @@ export function TaskComposer({
     // The canonical task endpoint — the same one the Task Board posts to (§25).
     const { ok, data } = await api<{ error?: string; emailNote?: string }>('/api/tasks', {
       method: 'POST',
-      body: JSON.stringify(buildTaskPayload(form)),
+      body: JSON.stringify({ ...buildTaskPayload(form), ...scheduleOptionsPayload(scheduleOptions) }),
     })
     setSaving(false)
     if (!ok) { setError(data?.error ?? 'Could not create the task.'); return }
@@ -189,6 +191,8 @@ export function TaskComposer({
           </p>
         )}
       </fieldset>
+
+      {form.schedule_date && <ScheduleControls value={scheduleOptions} onChange={setScheduleOptions} startDate={form.schedule_date} />}
 
       {/* ── Deadline: a SEPARATE concept from the schedule (§41) ───── */}
       <Field label="Deadline (due date)">

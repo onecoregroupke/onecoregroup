@@ -85,11 +85,15 @@ export async function sendReport(
   subject: string,
   html: string,
   recipients: string[],
+  idempotencyKey?: string,
 ): Promise<boolean> {
   const resend = client()
   if (!resend || recipients.length === 0) return false
   try {
-    await resend.emails.send({ from: fromAddress(), to: recipients, subject, html })
+    await resend.emails.send(
+      { from: fromAddress(), to: recipients, subject, html },
+      idempotencyKey ? { idempotencyKey } : undefined,
+    )
     return true
   } catch {
     return false

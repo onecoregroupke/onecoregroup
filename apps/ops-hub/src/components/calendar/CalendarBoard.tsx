@@ -1,8 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import Link from 'next/link'
-import { ChevronLeft, ChevronRight, Plus, Loader2, CalendarDays, ListTodo, CalendarPlus } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, Loader2, CalendarDays, ListTodo, CalendarPlus, X, ExternalLink, Clock, MapPin } from 'lucide-react'
 import { api } from '@/lib/apiClient'
 import { CALENDAR_SCOPE_LABELS, type CalendarScope } from '@/lib/calendarScope'
 import { EventComposer } from './EventComposer'
@@ -40,7 +39,7 @@ const TYPE_STYLE: Record<string, { dot: string; chip: string; label: string }> =
 }
 const styleFor = (t: string) => TYPE_STYLE[t] ?? TYPE_STYLE['event']!
 
-const ALL_TYPES = ['task', 'personal_task', 'duty', 'inspection', 'meeting', 'event', 'leave'] as const
+const ALL_TYPES = ['task', 'personal_task', 'duty', 'inspection', 'meeting', 'event', 'leave', 'deadline'] as const
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
@@ -81,6 +80,7 @@ export function CalendarBoard({
   brands,
   projects,
   people,
+  filterPeople,
 }: {
   initial: { from: string; to: string; items: FeedItem[] }
   today: string
@@ -91,6 +91,7 @@ export function CalendarBoard({
   brands: { id: string; label: string }[]
   projects: ComposerProject[]
   people: ComposerPerson[]
+  filterPeople: Array<{ id: string; name: string; team: string; department: string }>
 }) {
   const [view, setView] = useState<View>('week')
   const [anchor, setAnchor] = useState(today)
@@ -101,11 +102,18 @@ export function CalendarBoard({
   /** What is being composed, and for which day. */
   const [composing, setComposing] = useState<{ kind: 'event' | 'task'; date: string } | null>(null)
   const [error, setError] = useState('')
+  const [selected, setSelected] = useState<FeedItem | null>(null)
+  const [personFilter, setPersonFilter] = useState('')
+  const [teamFilter, setTeamFilter] = useState('')
+  const [departmentFilter, setDepartmentFilter] = useState('')
+  const [brandFilter, setBrandFilter] = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
     setError('')
-    const params = new URLSearchParams({ view, date: anchor, scope, types: types.join(',') })
+    // Fetch the complete scoped window once. Type chips are deliberately local
+    // so toggling them never incurs a round-trip or makes the calendar flash.
+    const params = new URLSearchParams({ view, date: anchor, scope })
     // A month view renders whole weeks, so ask for the padded window.
     if (view === 'month') {
       const grid = monthGrid(anchor)
@@ -116,18 +124,29 @@ export function CalendarBoard({
     setLoading(false)
     if (!ok) { setError(data?.error ?? 'Could not load the calendar.'); return }
     setItems(data.items ?? [])
-  }, [view, anchor, scope, types])
+  }, [view, anchor, scope])
 
   useEffect(() => { void load() }, [load])
 
+  const personById = useMemo(() => new Map(filterPeople.map((person) => [person.id, person])), [filterPeople])
+  const filteredItems = useMemo(() => items.filter((item) => {
+    if (!types.includes(item.type)) return false
+    const person = item.assigneeId ? personById.get(item.assigneeId) : null
+    if (personFilter && item.assigneeId !== personFilter) return false
+    if (teamFilter && person?.team !== teamFilter) return false
+    if (departmentFilter && person?.department !== departmentFilter) return false
+    if (brandFilter && item.brandId !== brandFilter) return false
+    return true
+  }), [items, types, personById, personFilter, teamFilter, departmentFilter, brandFilter])
+
   const byDate = useMemo(() => {
     const map = new Map<string, FeedItem[]>()
-    for (const item of items) map.set(item.date, [...(map.get(item.date) ?? []), item])
+    for (const item of filteredItems) map.set(item.date, [...(map.get(item.date) ?? []), item])
     for (const list of map.values()) {
       list.sort((a, b) => (a.allDay === b.allDay ? (a.startsAt ?? '').localeCompare(b.startsAt ?? '') : a.allDay ? -1 : 1))
     }
     return map
-  }, [items])
+  }, [filteredItems])
 
   function step(dir: -1 | 1) {
     setAnchor((a) => (view === 'month' ? addMonths(a, dir) : addDays(a, view === 'week' ? 7 * dir : dir)))
@@ -204,12 +223,19 @@ export function CalendarBoard({
         })}
       </div>
 
+      {scopes[0] === 'management' && <div className="grid gap-2 rounded-xl border border-gray-100 bg-white p-3 sm:grid-cols-2 lg:grid-cols-4">
+        <FilterSelect label="Person" value={personFilter} onChange={setPersonFilter} options={filterPeople.map((person) => ({ value: person.id, label: person.name }))} />
+        <FilterSelect label="Team" value={teamFilter} onChange={setTeamFilter} options={[...new Set(filterPeople.map((person) => person.team).filter(Boolean))].sort().map((value) => ({ value, label: value }))} />
+        <FilterSelect label="Department" value={departmentFilter} onChange={setDepartmentFilter} options={[...new Set(filterPeople.map((person) => person.department).filter(Boolean))].sort().map((value) => ({ value, label: value }))} />
+        <FilterSelect label="Brand" value={brandFilter} onChange={setBrandFilter} options={brands.map((brand) => ({ value: brand.id, label: brand.label }))} />
+      </div>}
+
       {error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-600">{error}</p>}
 
       {/* ── Grid ────────────────────────────────────────────────────── */}
-      {view === 'month' && <MonthView anchor={anchor} today={today} byDate={byDate} onAdd={openDay} canAssignTasks={canAssignTasks} />}
-      {view === 'week' && <WeekView anchor={anchor} today={today} byDate={byDate} onAdd={openDay} canAssignTasks={canAssignTasks} />}
-      {view === 'day' && <DayView date={anchor} today={today} items={byDate.get(anchor) ?? []} />}
+      {view === 'month' && <MonthView anchor={anchor} today={today} byDate={byDate} onAdd={openDay} canAssignTasks={canAssignTasks} onSelect={setSelected} />}
+      {view === 'week' && <WeekView anchor={anchor} today={today} byDate={byDate} onAdd={openDay} canAssignTasks={canAssignTasks} onSelect={setSelected} />}
+      {view === 'day' && <DayView date={anchor} today={today} items={byDate.get(anchor) ?? []} onSelect={setSelected} />}
 
       {composing?.kind === 'event' && (
         <EventComposer
@@ -232,6 +258,7 @@ export function CalendarBoard({
           onCreated={() => { setComposing(null); void load() }}
         />
       )}
+      {selected && <ItemDrawer item={selected} brands={brands} onClose={() => setSelected(null)} />}
     </div>
   )
 }
@@ -355,12 +382,13 @@ function DayAdd({
 
 // ─── Views ──────────────────────────────────────────────────────────────────
 
-function MonthView({ anchor, today, byDate, onAdd, canAssignTasks }: {
+function MonthView({ anchor, today, byDate, onAdd, canAssignTasks, onSelect }: {
   anchor: string
   today: string
   byDate: Map<string, FeedItem[]>
   onAdd: (kind: 'event' | 'task', date: string) => void
   canAssignTasks: boolean
+  onSelect: (item: FeedItem) => void
 }) {
   const days = monthGrid(anchor)
   const current = monthOf(anchor)
@@ -385,7 +413,7 @@ function MonthView({ anchor, today, byDate, onAdd, canAssignTasks }: {
                 <DayAdd date={day} canAssignTasks={canAssignTasks} onAdd={onAdd} size={12} />
               </div>
               <div className="space-y-0.5">
-                {list.slice(0, 3).map((i) => <Chip key={i.id} item={i} compact />)}
+                {list.slice(0, 3).map((i) => <Chip key={i.id} item={i} compact onSelect={onSelect} />)}
                 {list.length > 3 && <p className="px-1 text-[10px] text-gray-400">+{list.length - 3} more</p>}
               </div>
             </div>
@@ -396,12 +424,13 @@ function MonthView({ anchor, today, byDate, onAdd, canAssignTasks }: {
   )
 }
 
-function WeekView({ anchor, today, byDate, onAdd, canAssignTasks }: {
+function WeekView({ anchor, today, byDate, onAdd, canAssignTasks, onSelect }: {
   anchor: string
   today: string
   byDate: Map<string, FeedItem[]>
   onAdd: (kind: 'event' | 'task', date: string) => void
   canAssignTasks: boolean
+  onSelect: (item: FeedItem) => void
 }) {
   const from = startOfWeek(anchor)
   const days = Array.from({ length: 7 }, (_, i) => addDays(from, i))
@@ -429,7 +458,7 @@ function WeekView({ anchor, today, byDate, onAdd, canAssignTasks }: {
               <div className="space-y-1">
                 {list.length === 0
                   ? <p className="px-1 text-[11px] text-gray-300">—</p>
-                  : list.map((i) => <Chip key={i.id} item={i} />)}
+                  : list.map((i) => <Chip key={i.id} item={i} onSelect={onSelect} />)}
               </div>
             </div>
           )
@@ -439,7 +468,7 @@ function WeekView({ anchor, today, byDate, onAdd, canAssignTasks }: {
   )
 }
 
-function DayView({ date, today, items }: { date: string; today: string; items: FeedItem[] }) {
+function DayView({ date, today, items, onSelect }: { date: string; today: string; items: FeedItem[]; onSelect: (item: FeedItem) => void }) {
   const allDay = items.filter((i) => i.allDay)
   const timed = items.filter((i) => !i.allDay)
   return (
@@ -448,7 +477,7 @@ function DayView({ date, today, items }: { date: string; today: string; items: F
         <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
           <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-gray-400">All day</h3>
           <div className="grid gap-1.5 sm:grid-cols-2">
-            {allDay.map((i) => <Row key={i.id} item={i} />)}
+            {allDay.map((i) => <Row key={i.id} item={i} onSelect={onSelect} />)}
           </div>
         </section>
       )}
@@ -461,7 +490,7 @@ function DayView({ date, today, items }: { date: string; today: string; items: F
             {items.length === 0 ? 'Nothing scheduled on this day.' : 'Nothing with a set time.'}
           </p>
         ) : (
-          <div className="space-y-1.5">{timed.map((i) => <Row key={i.id} item={i} />)}</div>
+          <div className="space-y-1.5">{timed.map((i) => <Row key={i.id} item={i} onSelect={onSelect} />)}</div>
         )}
       </section>
     </div>
@@ -479,7 +508,7 @@ function rangeOf(item: FeedItem): string {
   return item.endsAt ? `${t(item.startsAt)}–${t(item.endsAt)}` : t(item.startsAt)
 }
 
-function Chip({ item, compact = false }: { item: FeedItem; compact?: boolean }) {
+function Chip({ item, compact = false, onSelect }: { item: FeedItem; compact?: boolean; onSelect: (item: FeedItem) => void }) {
   const s = styleFor(item.type)
   const done = item.status === 'done' || item.status === 'Completed'
   const overdue = item.meta?.['overdue'] === true
@@ -494,25 +523,25 @@ function Chip({ item, compact = false }: { item: FeedItem; compact?: boolean }) 
   ].filter(Boolean).join(' · ')
 
   return (
-    <Link href={item.href} title={title}
+    <button type="button" onClick={() => onSelect(item)} title={title}
       className={`flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] leading-tight transition-colors hover:brightness-95 ${s.chip} ${
         done ? 'opacity-50' : ''} ${overdue ? 'ring-1 ring-red-300' : ''}`}>
       <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${s.dot}`} />
       {!compact && item.startsAt && <span className="shrink-0 font-medium tabular-nums">{timeOf(item)}</span>}
       <span className={`truncate ${done ? 'line-through' : ''}`}>{item.title}</span>
-    </Link>
+    </button>
   )
 }
 
-function Row({ item }: { item: FeedItem }) {
+function Row({ item, onSelect }: { item: FeedItem; onSelect: (item: FeedItem) => void }) {
   const s = styleFor(item.type)
   const done = item.status === 'done' || item.status === 'Completed'
   const range = rangeOf(item)
   const due = item.meta?.['dueDate']
   const location = item.meta?.['location']
   return (
-    <Link href={item.href}
-      className="flex items-center gap-3 rounded-lg border border-gray-100 px-3 py-2 transition-colors hover:border-ocg-gold/40">
+    <button type="button" onClick={() => onSelect(item)}
+      className="flex w-full items-center gap-3 rounded-lg border border-gray-100 px-3 py-2 text-left transition-colors hover:border-ocg-gold/40">
       {/* Day and week views show the full window, not just the start (§43). */}
       <span className="w-24 shrink-0 text-xs font-medium tabular-nums text-gray-500">{range || '—'}</span>
       <span className={`h-2 w-2 shrink-0 rounded-full ${s.dot}`} />
@@ -526,6 +555,61 @@ function Row({ item }: { item: FeedItem }) {
         </span>
       </span>
       <CalendarDays size={13} className="shrink-0 text-gray-200" />
-    </Link>
+    </button>
   )
+}
+
+function FilterSelect({ label, value, onChange, options }: {
+  label: string
+  value: string
+  onChange: (value: string) => void
+  options: Array<{ value: string; label: string }>
+}) {
+  return <label><span className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-gray-400">{label}</span><select className="input" value={value} onChange={(event) => onChange(event.target.value)}><option value="">All {label.toLowerCase()}</option>{options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+}
+
+function ItemDrawer({ item, brands, onClose }: { item: FeedItem; brands: Array<{ id: string; label: string }>; onClose: () => void }) {
+  useEffect(() => {
+    const close = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose() }
+    document.addEventListener('keydown', close)
+    return () => document.removeEventListener('keydown', close)
+  }, [onClose])
+  const style = styleFor(item.type)
+  const description = item.meta?.['description']
+  const project = item.meta?.['project']
+  const priority = item.meta?.['priority']
+  const location = item.meta?.['location']
+  const dueDate = item.meta?.['dueDate']
+  const checklistDone = item.meta?.['checklistDone']
+  const checklistTotal = item.meta?.['checklistTotal']
+  const brandLabel = item.brandId ? brands.find((brand) => brand.id === item.brandId)?.label ?? 'Authorised brand' : ''
+  const openLabel = item.type === 'task' || item.type === 'deadline' ? 'Open full task'
+    : item.type === 'duty' || item.type === 'inspection' ? 'Open full duty' : 'Open full event'
+  return (
+    <div className="fixed inset-0 z-50 bg-black/20" onClick={onClose}>
+      <aside role="dialog" aria-modal="true" aria-label={`${style.label} details`} className="absolute inset-y-0 right-0 flex w-full max-w-md flex-col bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
+        <div className="flex items-start justify-between border-b border-gray-100 px-5 py-4"><div><p className="text-xs font-semibold uppercase tracking-wider text-ocg-gold">{style.label} details</p><h2 className="mt-1 text-xl font-semibold text-gray-900">{item.title}</h2></div><button onClick={onClose} aria-label="Close details" className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"><X size={19} /></button></div>
+        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5">
+          <div className="flex flex-wrap gap-2"><span className={`rounded-full border px-2.5 py-1 text-xs font-medium capitalize ${style.chip}`}>{item.status.replace(/_/g, ' ')}</span>{typeof priority === 'string' && priority && <span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-600">{priority} priority</span>}</div>
+          <dl className="grid gap-3 text-sm">
+            <Detail icon={<Clock size={15} />} label="When" value={item.allDay ? `${item.date} · all day` : `${item.date} · ${rangeOf(item)}`} />
+            {item.assigneeName && <Detail label="Assignee" value={item.assigneeName} />}
+            {(typeof project === 'string' && project) || brandLabel ? <Detail label="Project / brand" value={[typeof project === 'string' ? project : '', brandLabel].filter(Boolean).join(' · ')} /> : null}
+            {typeof dueDate === 'string' && dueDate && <Detail label="Deadline" value={dueDate} />}
+            {typeof location === 'string' && location && <Detail icon={<MapPin size={15} />} label="Location" value={location} />}
+            {typeof checklistTotal === 'number' && checklistTotal > 0 && <Detail label="Checklist / review" value={`${Number(checklistDone ?? 0)} of ${checklistTotal} complete · ${String(item.meta?.['reviewState'] ?? 'not reviewed').replace(/_/g, ' ')}`} />}
+            {item.type === 'event' || item.type === 'meeting' ? <Detail label="Visibility / attendees" value={`${String(item.meta?.['visibility'] ?? 'private').replace(/_/g, ' ')} · ${(item.meta?.['attendeeIds'] as unknown[] | undefined)?.length ?? 0} attendee(s)`} /> : null}
+          </dl>
+          {typeof description === 'string' && description && <div><p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Description</p><p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-gray-600">{description}</p></div>}
+          {typeof item.meta?.['notes'] === 'string' && item.meta['notes'] && <div><p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Notes</p><p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-gray-600">{String(item.meta['notes'])}</p></div>}
+          {item.meta?.['recurring'] === true && <p className="rounded-lg bg-blue-50 p-3 text-xs text-blue-800">Recurring occurrence {String(item.meta?.['occurrenceNumber'] ?? '')}. Its completion state is independent from every other occurrence.</p>}
+        </div>
+        <div className="border-t border-gray-100 p-4"><a href={item.href} className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-ocg-navy px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-800">{openLabel} <ExternalLink size={14} /></a></div>
+      </aside>
+    </div>
+  )
+}
+
+function Detail({ label, value, icon }: { label: string; value: string; icon?: React.ReactNode }) {
+  return <div><dt className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-gray-400">{icon}{label}</dt><dd className="mt-1 text-gray-700">{value}</dd></div>
 }

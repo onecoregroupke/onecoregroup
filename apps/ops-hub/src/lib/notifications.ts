@@ -11,6 +11,7 @@ export interface PortalNotification {
   body: string
   href: string
   metadata: Record<string, unknown>
+  idempotency_key: string
   read_at: string | null
   created_at: string
 }
@@ -29,9 +30,15 @@ export async function createNotification(input: {
   body?: string
   href?: string
   metadata?: Record<string, unknown>
+  idempotency_key?: string
 }): Promise<void> {
   if (!input.recipient_email.trim() || !input.title.trim()) return
-  await db().from('ocg_notifications').insert({
+  if (input.idempotency_key) {
+    const { data: existing } = await db().from('ocg_notifications').select('id')
+      .eq('idempotency_key', input.idempotency_key).maybeSingle()
+    if (existing) return
+  }
+  const { error } = await db().from('ocg_notifications').insert({
     recipient_email: clean(input.recipient_email),
     recipient_name: input.recipient_name ?? '',
     sender_email: input.sender_email ? clean(input.sender_email) : '',
@@ -41,7 +48,9 @@ export async function createNotification(input: {
     body: input.body ?? '',
     href: input.href ?? '',
     metadata: input.metadata ?? {},
+    idempotency_key: input.idempotency_key ?? '',
   })
+  if (error && !error.message.toLowerCase().includes('duplicate')) throw new Error(error.message)
 }
 
 export async function listNotifications(email: string, limit = 50): Promise<PortalNotification[]> {

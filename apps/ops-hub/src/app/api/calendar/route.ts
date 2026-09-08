@@ -7,6 +7,8 @@ import { canCreateEvent, CALENDAR_VIEWS, CALENDAR_EVENT_KINDS, type CalendarView
 import { auditEvent } from '@/lib/audit'
 import { db, nowIso } from '@/lib/serverClient'
 import type { OcgCalendarEventRow } from '@ocg/db'
+import { createScheduleForEntity, generateScheduleOccurrences, type ScheduleRuleInput } from '@/lib/scheduleRules'
+import { createCalendarReminders, type ReminderInput } from '@/lib/calendarReminders'
 
 /** Build the viewer context every calendar call needs. */
 async function viewerFor(actor: NonNullable<Awaited<ReturnType<typeof getApiActor>>>) {
@@ -83,6 +85,8 @@ export async function POST(req: NextRequest) {
     }
 
     const kind = String(body.event_kind ?? 'event')
+    const recurrence = body.recurrence as ScheduleRuleInput | null | undefined
+    if (recurrence) generateScheduleOccurrences(String(body.starts_at), body.ends_at || null, recurrence)
     const { data, error } = await db().from('ocg_calendar_events').insert({
       title,
       description: String(body.description ?? ''),
@@ -105,11 +109,26 @@ export async function POST(req: NextRequest) {
     if (error) throw new Error(error.message)
     const row = data as OcgCalendarEventRow
 
+    const schedule = recurrence ? await createScheduleForEntity({
+      entityType: 'event', entityId: row.id, startsAt: row.starts_at, endsAt: row.ends_at,
+      assigneeId: viewer.teamMemberId, rule: recurrence,
+      createdBy: actor.name || actor.email || actor.userId, createdById: viewer.teamMemberId,
+    }) : null
+
     const attendees: string[] = Array.isArray(body.attendee_ids) ? body.attendee_ids : []
     if (attendees.length > 0) {
       await db().from('ocg_calendar_event_attendees').insert(
         attendees.map((id) => ({ event_id: row.id, team_member_id: id })),
       )
+    }
+    const reminders = Array.isArray(body.reminders) ? body.reminders as ReminderInput[] : []
+    if (actor.email && reminders.length > 0) {
+      await createCalendarReminders({
+        entityType: 'event', entityId: row.id, scheduleRuleId: schedule?.rule.id ?? null,
+        startsAt: row.starts_at, occurrences: schedule?.occurrences,
+        recipientId: viewer.teamMemberId, recipientEmail: actor.email,
+        recipientName: actor.name, createdBy: actor.name || actor.email || actor.userId, reminders,
+      })
     }
 
     await auditEvent({

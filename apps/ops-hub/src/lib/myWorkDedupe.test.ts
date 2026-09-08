@@ -103,6 +103,7 @@ function taskRow(over: Partial<OpsTaskRow> = {}): OpsTaskRow {
     scheduled_end_at: null,
     scheduled_all_day: false,
     scheduled_location: '',
+    schedule_rule_id: null,
     ...over,
   }
 }

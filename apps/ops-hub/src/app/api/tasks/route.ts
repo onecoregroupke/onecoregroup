@@ -12,6 +12,8 @@ import { completionUrl } from '@/lib/completion'
 import { auditEvent } from '@/lib/audit'
 import { createNotification } from '@/lib/notifications'
 import { sendMessage, startConversation } from '@/lib/chat'
+import { createScheduleForEntity, generateScheduleOccurrences, type ScheduleRuleInput } from '@/lib/scheduleRules'
+import { createCalendarReminders, type ReminderInput } from '@/lib/calendarReminders'
 
 export async function GET(req: NextRequest) {
   const actor = await getApiActor(req)
@@ -58,6 +60,11 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       )
     }
+    const recurrence = body.recurrence as ScheduleRuleInput | null | undefined
+    if (recurrence) {
+      if (!body.scheduled_start_at) return NextResponse.json({ ok: false, error: 'A recurring task needs a scheduled start.' }, { status: 400 })
+      generateScheduleOccurrences(body.scheduled_start_at, body.scheduled_end_at || null, recurrence)
+    }
     // Brand managers may only create tasks under their own brands' projects...
     if (actor.taskScope.kind === 'brands') {
       const project = await getProject(body.project_id)
@@ -86,6 +93,17 @@ export async function POST(req: NextRequest) {
       }
     }
     const task = await createTask({ ...body, created_by: actor.email ?? 'admin' })
+    let taskSchedule: Awaited<ReturnType<typeof createScheduleForEntity>> | null = null
+    if (recurrence && task.scheduled_start_at) {
+      const team = await listTeam()
+      const assignee = team.find((member) => member.name.trim().toLowerCase() === task.assigned_to.trim().toLowerCase())
+      taskSchedule = await createScheduleForEntity({
+        entityType: 'task', entityId: task.task_id,
+        startsAt: task.scheduled_start_at, endsAt: task.scheduled_end_at,
+        assigneeId: assignee?.id ?? null, rule: recurrence,
+        createdBy: actor.name || actor.email || actor.userId, createdById: actor.teamMemberId,
+      })
+    }
     await auditEvent({
       actor,
       action: 'create',
@@ -100,6 +118,16 @@ export async function POST(req: NextRequest) {
     if (task.assigned_to) {
       const team = await listTeam()
       const to = lookupAssigneeEmail(team, task.assigned_to)
+      const assignee = team.find((member) => member.name.trim().toLowerCase() === task.assigned_to.trim().toLowerCase())
+      const reminders = Array.isArray(body.reminders) ? body.reminders as ReminderInput[] : []
+      if (to && task.scheduled_start_at && reminders.length > 0) {
+        await createCalendarReminders({
+          entityType: 'task', entityId: task.task_id, scheduleRuleId: taskSchedule?.rule.id ?? null,
+          startsAt: task.scheduled_start_at, occurrences: taskSchedule?.occurrences,
+          recipientId: assignee?.id ?? null, recipientEmail: to, recipientName: task.assigned_to,
+          createdBy: actor.name || actor.email || actor.userId, reminders,
+        })
+      }
       if (to && task.hmac_token) {
         const brand = task.brand_id ? await resolveBrand(task.brand_id) : null
         const sent = await sendTaskAssignment({

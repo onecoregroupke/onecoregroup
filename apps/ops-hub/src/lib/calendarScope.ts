@@ -69,10 +69,11 @@ export async function resolveScopeMembers(
 export function availableScopes(viewer: CalendarViewer): CalendarScope[] {
   const peopleScope = calendarPeopleScope(viewer)
   if (peopleScope.kind === 'own') return ['personal']
-  const out: CalendarScope[] = ['personal']
+  // Managers land on oversight first; ordinary employees still land on their
+  // own calendar. This is also the order CalendarBoard uses for initial scope.
+  const out: CalendarScope[] = ['management', 'personal']
   if ((viewer.team ?? '').trim()) out.push('team')
   if ((viewer.department ?? '').trim()) out.push('department')
   out.push('company')
-  if (peopleScope.kind === 'brands' || peopleScope.kind === 'all') out.push('management')
   return out
 }
