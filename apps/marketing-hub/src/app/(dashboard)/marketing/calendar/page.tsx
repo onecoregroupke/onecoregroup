@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react'
+import ContentPeek from '@/components/marketing/ContentPeek'
 import { apiFetch } from '@/lib/marketing/client'
 import {
   CONTENT_STATUS_LABELS,
@@ -48,6 +49,8 @@ export default function CalendarPage() {
   const [brandFilter, setBrandFilter] = useState('')
   const [platformFilter, setPlatformFilter] = useState('')
   const [draggingId, setDraggingId] = useState<string | null>(null)
+  const [peekId, setPeekId] = useState<string | null>(null)
+  const closePeek = useCallback(() => setPeekId(null), [])
   const [dragOver, setDragOver] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -153,8 +156,9 @@ export default function CalendarPage() {
       <div>
         <h1 className="font-bold text-2xl text-gray-900">Calendar</h1>
         <p className="text-gray-500 text-sm mt-1">
-          One week at a glance — brands down the side, days across the top. Drag a post to another
-          day to reschedule. Colour = content pillar. Times are Africa/Nairobi (EAT).
+          One week at a glance — brands down the side, days across the top. Click a post to read it
+          in full without leaving this page; drag it to another day to reschedule. Colour =
+          content pillar. Times are Africa/Nairobi (EAT).
         </p>
       </div>
 
@@ -261,7 +265,12 @@ export default function CalendarPage() {
                       >
                         <div className="flex min-h-[68px] flex-col gap-1">
                           {items.map((item) => (
-                            <CalendarChip key={item.id} row={item} onDragStart={() => setDraggingId(item.id)} />
+                            <CalendarChip
+                              key={item.id}
+                              row={item}
+                              onDragStart={() => setDraggingId(item.id)}
+                              onOpen={() => setPeekId(item.id)}
+                            />
                           ))}
                           <Link
                             href={`/marketing/content/new?date=${encodeURIComponent(iso)}`}
@@ -280,31 +289,58 @@ export default function CalendarPage() {
           </tbody>
         </table>
       </div>
+
+      {peekId && (
+        <ContentPeek
+          contentId={peekId}
+          seed={content.find((c) => c.id === peekId) ?? null}
+          brands={brands}
+          platforms={platforms}
+          pillars={pillars}
+          onClose={closePeek}
+        />
+      )}
     </div>
   )
 }
 
-function CalendarChip({ row, onDragStart }: { row: CalendarContentRow; onDragStart: () => void }) {
+function CalendarChip({
+  row,
+  onDragStart,
+  onOpen,
+}: {
+  row: CalendarContentRow
+  onDragStart: () => void
+  onOpen: () => void
+}) {
+  // A chip is both draggable (reschedule) and clickable (preview). Track whether
+  // the current interaction turned into a drag so the drop doesn't also open it.
+  const draggedRef = useRef(false)
   const accent = row.primaryPillarColor ?? '#1a1a2e'
   const time = row.scheduledAt
     ? new Date(row.scheduledAt).toLocaleTimeString('en-KE', { timeZone: 'Africa/Nairobi', hour: '2-digit', minute: '2-digit' })
     : '—'
   const platform = row.platform ? PLATFORM_LABELS[row.platform] : null
+  const label = row.title || row.hook || 'Untitled'
   return (
-    <Link
-      href={`/marketing/content/${row.id}/edit`}
+    <button
+      type="button"
       draggable
-      onDragStart={(e) => { e.dataTransfer.effectAllowed = 'move'; onDragStart() }}
-      className="block cursor-move rounded-md border bg-white px-2 py-1.5 text-[11px] leading-snug shadow-sm transition-colors hover:bg-gray-50"
+      onMouseDown={() => { draggedRef.current = false }}
+      onKeyDown={() => { draggedRef.current = false }}
+      onDragStart={(e) => { draggedRef.current = true; e.dataTransfer.effectAllowed = 'move'; onDragStart() }}
+      onClick={() => { if (!draggedRef.current) onOpen() }}
+      className="block w-full cursor-move rounded-md border bg-white px-2 py-1.5 text-left text-[11px] leading-snug shadow-sm transition-colors hover:bg-gray-50"
       style={{ borderColor: `${accent}55`, borderLeft: `3px solid ${accent}` }}
       title={`${CONTENT_STATUS_LABELS[row.status]} · ${CONTENT_TYPE_LABELS[row.contentType]}${platform ? ` · ${platform}` : ''}`}
+      aria-label={`Preview ${label}`}
     >
       <div className="flex items-center justify-between gap-1 text-[9px] uppercase tracking-wide text-gray-400">
         <span>{time}</span>
         {platform && <span className="truncate">{platform}</span>}
       </div>
-      <div className="mt-0.5 truncate text-gray-800">{row.title || row.hook || 'Untitled'}</div>
-    </Link>
+      <div className="mt-0.5 truncate text-gray-800">{label}</div>
+    </button>
   )
 }
 
