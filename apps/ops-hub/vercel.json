@@ -1,6 +1,5 @@
 {
   "crons": [
-    { "path": "/api/calendar/reminders/run", "schedule": "*/5 * * * *" },
     { "path": "/api/npt/reminders/run", "schedule": "0 5 * * *" },
     { "path": "/api/reports/team-briefs", "schedule": "0 4 * * 1-5" },
     { "path": "/api/reports/daily", "schedule": "0 16 * * 1-5" },
