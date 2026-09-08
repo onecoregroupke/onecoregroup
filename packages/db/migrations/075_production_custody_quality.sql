@@ -526,9 +526,15 @@ SELECT
   MAX(NULLIF(e.equivalent_unit,'')) AS equivalent_unit,
   MIN(e.effective_at) FILTER (WHERE e.direction = 'in') AS first_received_at,
   MAX(e.effective_at) AS last_event_at,
-  MAX(e.production_run_id) FILTER (WHERE e.production_run_id IS NOT NULL) AS latest_run_id,
-  MAX(e.source_document_type) FILTER (WHERE e.source_document_type <> '') AS latest_source_document_type,
-  MAX(e.source_document_id) FILTER (WHERE e.source_document_id IS NOT NULL) AS latest_source_document_id
+  -- "latest" means the value carried by the most recent event, not the largest
+  -- value. MAX() has no uuid aggregate anyway, and on text it would return the
+  -- alphabetically last document type rather than the current one.
+  (array_agg(e.production_run_id ORDER BY e.effective_at DESC)
+     FILTER (WHERE e.production_run_id IS NOT NULL))[1] AS latest_run_id,
+  (array_agg(e.source_document_type ORDER BY e.effective_at DESC)
+     FILTER (WHERE e.source_document_type <> ''))[1] AS latest_source_document_type,
+  (array_agg(e.source_document_id ORDER BY e.effective_at DESC)
+     FILTER (WHERE e.source_document_id IS NOT NULL))[1] AS latest_source_document_id
 FROM production_custody_events e
 JOIN inventory_items i ON i.id = e.item_id
 GROUP BY e.brand_id, e.production_store_id, e.item_id, i.name, i.sku, e.batch_number, e.custody_state, i.base_unit
