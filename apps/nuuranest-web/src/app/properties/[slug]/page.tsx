@@ -1,7 +1,6 @@
 export const dynamic = 'force-dynamic'
 
 import { notFound } from 'next/navigation'
-import Image from 'next/image'
 import Link from 'next/link'
 import { createServerClient } from '@ocg/db'
 import type { Property, PropertyReview } from '@ocg/db'
@@ -294,15 +293,12 @@ export default async function PropertyDetailPage({ params }: PageProps) {
             </div>
 
             {/* Nearby */}
-            <NearbyProperties currentSlug={property.slug} neighbourhood={property.neighbourhood} />
+            <NearbyProperties currentSlug={property.slug} />
           </div>
 
           {/* Sticky sidebar */}
           <div className="hidden lg:block">
-            <BookingSidebar
-              property={property}
-              whatsappMessage={whatsappMessage}
-            />
+            <BookingSidebar property={property} />
           </div>
         </div>
 

@@ -65,7 +65,6 @@ export default function FlowEditor({ flowId }: { flowId?: string }) {
         setLoading(false)
       }
     })()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [flowId])
 
   async function save() {

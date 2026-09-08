@@ -69,7 +69,7 @@ export default function CompliancePage() {
         .from('daily_metrics')
         .select('brand_id, metric_date, feed_posts_count')
         .gte('metric_date', fmtDate(weekStart))
-        .lte('metric_date', fmtDate(weekEnd)),
+        .lte('metric_date', fmtDate(getWeekDays(weekStart)[6]!)),
     ]).then(([br, mr]) => {
       setBrands((br.data as Brand[]) ?? [])
       setMetrics((mr.data as DailyMetric[]) ?? [])

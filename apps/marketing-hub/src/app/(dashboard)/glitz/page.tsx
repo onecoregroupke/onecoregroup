@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import type { Product, ProductSize } from '@ocg/db'
-import { getClient, getSession } from '@/lib/supabase'
+import { getClient } from '@/lib/supabase'
 import {
   AlertCircle, CheckCircle, Download, Eye, Package,
   Plus, RefreshCw, Save, Sparkles, Upload, X,

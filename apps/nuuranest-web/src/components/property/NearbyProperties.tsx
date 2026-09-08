@@ -6,10 +6,9 @@ import { PropertyCard } from './PropertyCard'
 
 interface NearbyPropertiesProps {
   currentSlug: string
-  neighbourhood: string
 }
 
-export async function NearbyProperties({ currentSlug, neighbourhood }: NearbyPropertiesProps) {
+export async function NearbyProperties({ currentSlug }: NearbyPropertiesProps) {
   let nearby: Property[] = []
   try {
     const supabase = createServerClient()

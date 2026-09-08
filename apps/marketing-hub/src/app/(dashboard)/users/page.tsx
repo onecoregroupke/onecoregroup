@@ -8,7 +8,7 @@ import {
 import { getClient } from '@/lib/supabase'
 import { SECTIONS, defaultPermissions } from '@/lib/permissions'
 import { usePermissions } from '@/contexts/PermissionsContext'
-import type { PermissionsMap, AccessLevel, SectionKey } from '@/lib/permissions'
+import type { PermissionsMap, AccessLevel } from '@/lib/permissions'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface HubUser {
@@ -212,10 +212,6 @@ export default function UsersPage() {
     } finally {
       setInviting(false)
     }
-  }
-
-  function setAccess(perms: PermissionsMap, section: SectionKey, val: AccessLevel): PermissionsMap {
-    return { ...perms, [section]: val }
   }
 
   // ── Guard: only admins or users with users:edit can see this page ────────────

@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import type { Brand, DailyMetric, ComplianceLog } from '@ocg/db'
-import { TrendingUp, TrendingDown, Users, Eye, MessageCircle, BarChart2, PenSquare } from 'lucide-react'
+import { TrendingUp, TrendingDown, Eye, MessageCircle, BarChart2, PenSquare } from 'lucide-react'
 import {
   BarChart,
   Bar,

@@ -7,10 +7,9 @@ import { formatKsh } from '@/lib/format'
 
 interface BookingSidebarProps {
   property: Property
-  whatsappMessage: string
 }
 
-export function BookingSidebar({ property, whatsappMessage }: BookingSidebarProps) {
+export function BookingSidebar({ property }: BookingSidebarProps) {
   const [checkIn, setCheckIn] = useState('')
   const [checkOut, setCheckOut] = useState('')
   const [guests, setGuests] = useState(2)

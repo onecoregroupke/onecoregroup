@@ -119,7 +119,6 @@ export default function ContentEditor({ contentId, defaultDate, defaultPlatformI
         setLoading(false)
       }
     })()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contentId])
 
   function togglePillar(id: string) {

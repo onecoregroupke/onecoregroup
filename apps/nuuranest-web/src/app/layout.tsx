@@ -4,6 +4,7 @@ import { Navbar } from '@/components/layout/Navbar'
 import { Footer } from '@/components/layout/Footer'
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env['NEXT_PUBLIC_SITE_URL'] ?? 'https://nuuranest.vercel.app'),
   title: {
     default: 'Nuuranest Stays — Your Home on the Coast',
     template: '%s | Nuuranest Stays',

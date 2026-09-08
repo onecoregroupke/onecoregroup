@@ -50,7 +50,7 @@ export default function SendToTaskAgent({ contentId }: { contentId: string }) {
       </div>
       <p className="mb-4 text-sm text-gray-500">
         Hand this post to the Ops Hub agents to produce the asset. The brief includes this
-        post's hook, caption, platform and brand. When the draft is approved in Ops, the
+        post&apos;s hook, caption, platform and brand. When the draft is approved in Ops, the
         deliverable comes back here and the post auto-schedules.
       </p>
 

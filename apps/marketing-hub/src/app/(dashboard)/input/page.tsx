@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import { getClient } from '@/lib/supabase'
 import type { Brand, DailyMetricInsert } from '@ocg/db'
 import { CheckCircle, AlertCircle, ChevronRight, ChevronLeft } from 'lucide-react'
@@ -216,12 +217,12 @@ export default function InputPortalPage() {
             >
               Submit Another Brand
             </button>
-            <a
+            <Link
               href="/"
               className="px-6 py-2.5 border border-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors"
             >
               Back to Dashboard
-            </a>
+            </Link>
           </div>
         </div>
       </div>

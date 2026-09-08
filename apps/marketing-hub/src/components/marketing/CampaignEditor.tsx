@@ -99,7 +99,6 @@ export default function CampaignEditor({ campaignId }: { campaignId?: string }) 
         setLoading(false)
       }
     })()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [campaignId])
 
   async function save() {
