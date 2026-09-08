@@ -948,6 +948,7 @@ export interface OpsTaskRow {
   scheduled_end_at: string | null
   scheduled_all_day: boolean
   scheduled_location: string
+  schedule_rule_id: string | null
 }
 type OpsTaskInsert = Pick<OpsTaskRow, 'task_id' | 'project_id' | 'task_name'> & Partial<OpsTaskRow>
 
@@ -2487,8 +2488,82 @@ export interface OcgCalendarEventRow {
   notes: string
   created_at: string
   updated_at: string
+  schedule_rule_id: string | null
 }
 type OcgCalendarEventInsert = Pick<OcgCalendarEventRow, 'title' | 'starts_at'> & Partial<OcgCalendarEventRow>
+
+export interface OcgScheduleRuleRow {
+  id: string
+  entity_type: 'task' | 'event'
+  entity_id: string
+  timezone: string
+  frequency: 'daily' | 'weekdays' | 'selected_weekdays' | 'weekly' | 'monthly' | 'interval_days' | 'interval_weeks'
+  interval_count: number
+  weekdays: number[]
+  day_of_month: number | null
+  starts_on: string
+  ends_on: string | null
+  occurrence_limit: number | null
+  active: boolean
+  created_by: string
+  created_by_id: string | null
+  created_at: string
+  updated_at: string
+}
+type OcgScheduleRuleInsert = Pick<OcgScheduleRuleRow, 'entity_type' | 'entity_id' | 'frequency' | 'starts_on'> & Partial<OcgScheduleRuleRow>
+
+export interface OcgScheduleOccurrenceRow {
+  id: string
+  rule_id: string
+  occurrence_number: number
+  starts_at: string
+  ends_at: string | null
+  source_task_id: string | null
+  source_event_id: string | null
+  assignee_id: string | null
+  status: 'pending' | 'in_progress' | 'completed' | 'skipped' | 'cancelled'
+  completed_at: string | null
+  completed_by: string
+  completion_note: string
+  created_at: string
+  updated_at: string
+}
+type OcgScheduleOccurrenceInsert = Pick<OcgScheduleOccurrenceRow, 'rule_id' | 'occurrence_number' | 'starts_at'> & Partial<OcgScheduleOccurrenceRow>
+
+export interface OcgReminderRuleRow {
+  id: string
+  entity_type: 'task' | 'event' | 'schedule_occurrence'
+  entity_id: string
+  schedule_rule_id: string | null
+  offset_minutes: number
+  channel: 'email' | 'in_app'
+  recipient_id: string | null
+  recipient_email: string
+  active: boolean
+  created_by: string
+  created_at: string
+}
+type OcgReminderRuleInsert = Pick<OcgReminderRuleRow, 'entity_type' | 'entity_id' | 'offset_minutes' | 'channel'> & Partial<OcgReminderRuleRow>
+
+export interface OcgReminderDeliveryRow {
+  id: string
+  reminder_rule_id: string
+  occurrence_id: string | null
+  occurrence_starts_at: string
+  due_at: string
+  recipient_email: string
+  channel: 'email' | 'in_app'
+  status: 'pending' | 'processing' | 'sent' | 'failed' | 'cancelled'
+  attempt_count: number
+  last_attempt_at: string | null
+  sent_at: string | null
+  provider_message_id: string
+  error_message: string
+  idempotency_key: string
+  created_at: string
+  updated_at: string
+}
+type OcgReminderDeliveryInsert = Pick<OcgReminderDeliveryRow, 'reminder_rule_id' | 'occurrence_starts_at' | 'due_at' | 'channel' | 'idempotency_key'> & Partial<OcgReminderDeliveryRow>
 
 export interface OcgCalendarEventAttendeeRow {
   id: string
@@ -2822,6 +2897,10 @@ export interface InventoryItemRow {
   purchasable: boolean
   producible: boolean
   sellable: boolean
+  display_name: string
+  sort_order: number
+  size_ml: number | null
+  packaging_component: string
   created_at: string
   updated_at: string
 }
@@ -2871,6 +2950,7 @@ export interface InventoryMovementRow {
   approved_by: string
   reversal_of_id: string | null
   import_id: string | null
+  production_custody_event_id: string | null
 }
 type InventoryMovementInsert = Pick<InventoryMovementRow, 'item_id'> & Partial<InventoryMovementRow>
 
@@ -2888,10 +2968,23 @@ export interface InventoryPriceHistoryRow {
   notes: string
   created_by: string
   created_at: string
+  idempotency_key: string
 }
 export type InventoryPriceHistoryInsert =
   Pick<InventoryPriceHistoryRow, 'inventory_item_id' | 'price_type' | 'amount_ksh' | 'effective_date'>
   & Partial<InventoryPriceHistoryRow>
+
+export interface InventoryProductFamilyOrderRow {
+  id: string
+  canonical_name: string
+  normalized_name: string
+  sort_order: number
+  shared_packaging: boolean
+  active: boolean
+  created_at: string
+}
+type InventoryProductFamilyOrderInsert =
+  Pick<InventoryProductFamilyOrderRow, 'canonical_name' | 'normalized_name' | 'sort_order'> & Partial<InventoryProductFamilyOrderRow>
 
 export interface InventoryItemAliasRow {
   id: string
@@ -3312,6 +3405,7 @@ export interface OcgNotificationRow {
   body: string
   href: string
   metadata: Record<string, unknown>
+  idempotency_key: string
   read_at: string | null
   created_at: string
 }
@@ -3488,8 +3582,41 @@ export interface OpsAttendanceRecordRow {
   notes: string
   created_at: string
   updated_at: string
+  evidence_summary_generated_at: string | null
 }
 type OpsAttendanceRecordInsert = Pick<OpsAttendanceRecordRow, 'attendance_date'> & Partial<OpsAttendanceRecordRow>
+
+export interface OpsAttendanceEventRow {
+  id: string
+  team_member_id: string
+  occurred_at: string
+  event_date: string
+  direction: 'in' | 'out'
+  source: 'biometric' | 'employee_self' | 'reviewer_manual' | 'historical_import'
+  device_name: string
+  device_event_id: string
+  recorded_by: string
+  recorded_by_user_id: string | null
+  reason: string
+  notes: string
+  source_event_key: string
+  raw_payload: Record<string, unknown>
+  created_at: string
+}
+type OpsAttendanceEventInsert = Pick<OpsAttendanceEventRow, 'team_member_id' | 'occurred_at' | 'event_date' | 'direction' | 'source'> & Partial<OpsAttendanceEventRow>
+
+export interface OpsAttendanceIdentityRow {
+  id: string
+  team_member_id: string
+  device_name: string
+  employee_code: string
+  active: boolean
+  notes: string
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+type OpsAttendanceIdentityInsert = Pick<OpsAttendanceIdentityRow, 'team_member_id' | 'employee_code'> & Partial<OpsAttendanceIdentityRow>
 
 type DbTable<Row, Insert, Update> = {
   Row: Row & Record<string, unknown>
@@ -4090,6 +4217,16 @@ export interface ProductionRunRow {
   created_by: string
   created_at: string
   updated_at: string
+  run_type: 'normal_production' | 'rework' | 'repackaging' | 'quality_recovery'
+  run_reason: string
+  source_product_item_id: string | null
+  source_batch_number: string
+  source_custody: string
+  output_state: 'bulk_wip' | 'packaged_output' | 'quality_hold' | 'rework'
+  quality_incident_id: string | null
+  reviewed_by: string
+  reviewed_by_id: string | null
+  reviewed_at: string | null
 }
 export type ProductionRunInsert = Pick<ProductionRunRow, 'run_ref'> & Partial<ProductionRunRow>
 
@@ -4109,9 +4246,143 @@ export interface ProductionRunMaterialRow {
   variance_quantity: number
   notes: string
   created_at: string
+  material_role: 'material' | 'packaging' | 'rework_input' | 'additional_wip' | 'recovered_packaging'
+  production_state: string
+  source_custody_event_id: string | null
+  consumption_posted_at: string | null
 }
 export type ProductionRunMaterialInsert =
   Pick<ProductionRunMaterialRow, 'run_id' | 'item_id'> & Partial<Omit<ProductionRunMaterialRow, 'variance_quantity'>>
+
+export interface InventoryQualityIncidentRow {
+  id: string
+  incident_ref: string
+  incident_at: string
+  brand_id: string | null
+  item_id: string | null
+  batch_number: string
+  custody_type: 'raw_store' | 'packaging_store' | 'production' | 'finished_goods_store' | 'field_sales' | 'quality_hold'
+  custody_store_id: string | null
+  salesperson_id: string | null
+  affected_quantity: number
+  unit: string
+  equivalent_quantity: number | null
+  equivalent_unit: string
+  reason_category: string
+  description: string
+  evidence: unknown[]
+  status: 'reported' | 'under_review' | 'disposition_approved' | 'in_progress' | 'resolved' | 'cancelled'
+  disposition: '' | 'release' | 'quarantine' | 'return_to_production' | 'rework' | 'repackage' | 'partial_salvage' | 'dispose'
+  disposition_note: string
+  reported_by: string
+  reported_by_id: string | null
+  reviewed_by: string
+  reviewed_by_id: string | null
+  reviewed_at: string | null
+  disposition_approved_by: string
+  disposition_approved_by_id: string | null
+  disposition_approved_at: string | null
+  linked_run_id: string | null
+  source_document_type: string
+  source_document_id: string | null
+  source_allocation_id: string | null
+  closed_at: string | null
+  created_at: string
+  updated_at: string
+}
+export type InventoryQualityIncidentInsert =
+  Pick<InventoryQualityIncidentRow, 'incident_ref' | 'affected_quantity' | 'reason_category'> & Partial<InventoryQualityIncidentRow>
+
+export interface ProductionCustodyEventRow {
+  id: string
+  brand_id: string | null
+  production_store_id: string | null
+  item_id: string
+  batch_number: string
+  custody_state: 'materials' | 'packaging' | 'recovered_packaging' | 'bulk_wip' | 'packaged_output' | 'quality_hold' | 'rework'
+  direction: 'in' | 'out'
+  event_kind: string
+  quantity: number
+  unit: string
+  base_quantity: number
+  base_unit: string
+  equivalent_quantity: number | null
+  equivalent_unit: string
+  balance_after: number
+  source_custody: string
+  destination_custody: string
+  source_store_id: string | null
+  destination_store_id: string | null
+  salesperson_id: string | null
+  allocation_id: string | null
+  production_run_id: string | null
+  quality_incident_id: string | null
+  source_document_type: string
+  source_document_id: string | null
+  source_document_line_id: string | null
+  reason: string
+  effective_at: string
+  recorded_by: string
+  recorded_by_id: string | null
+  approved_by: string
+  approved_by_id: string | null
+  approved_at: string | null
+  idempotency_key: string
+  reversal_of_id: string | null
+  metadata: Record<string, unknown>
+  created_at: string
+}
+export type ProductionCustodyEventInsert =
+  Pick<ProductionCustodyEventRow, 'item_id' | 'custody_state' | 'direction' | 'event_kind' | 'quantity' | 'unit' | 'base_quantity' | 'base_unit' | 'idempotency_key'> & Partial<ProductionCustodyEventRow>
+
+export interface ProductionRecoveredPackagingRow {
+  id: string
+  production_run_id: string
+  quality_incident_id: string | null
+  source_item_id: string | null
+  source_batch_number: string
+  component_item_id: string
+  component_kind: string
+  quantity: number
+  unit: string
+  condition_status: 'reusable' | 'damaged' | 'disposed' | 'quarantined'
+  custody_event_id: string | null
+  notes: string
+  recorded_by: string
+  recorded_by_id: string | null
+  idempotency_key: string
+  created_at: string
+}
+export type ProductionRecoveredPackagingInsert =
+  Pick<ProductionRecoveredPackagingRow, 'production_run_id' | 'component_item_id' | 'quantity' | 'condition_status' | 'idempotency_key'> & Partial<ProductionRecoveredPackagingRow>
+
+export interface InventoryDisposalLossEventRow {
+  id: string
+  loss_ref: string
+  brand_id: string | null
+  item_id: string
+  batch_number: string
+  source_custody: string
+  source_store_id: string | null
+  salesperson_id: string | null
+  quantity: number
+  unit: string
+  valuation_basis: string
+  unit_value_ksh: number
+  loss_value_ksh: number
+  reason: string
+  quality_incident_id: string
+  production_run_id: string | null
+  production_custody_event_id: string | null
+  approved_by: string
+  approved_by_id: string | null
+  approved_at: string
+  recorded_by: string
+  idempotency_key: string
+  created_at: string
+}
+export type InventoryDisposalLossEventInsert =
+  Pick<InventoryDisposalLossEventRow, 'loss_ref' | 'item_id' | 'source_custody' | 'quantity' | 'unit' | 'valuation_basis' | 'reason' | 'quality_incident_id' | 'approved_by' | 'idempotency_key'> & Partial<Omit<InventoryDisposalLossEventRow, 'loss_value_ksh'>>
 
 export interface ProductionFgTransferRow {
   id: string
@@ -4301,7 +4572,7 @@ export interface FieldSalesCustodyMovementRow {
   item_id: string
   brand_id: string | null
   batch_number: string
-  /** issue | sale | return | damage | sample | promotion | adjustment | reversal */
+  /** issue | sale | return | damage | sample | promotion | quality_recall | adjustment | reversal */
   movement_kind: string
   direction: string
   quantity: number
@@ -4319,6 +4590,8 @@ export interface FieldSalesCustodyMovementRow {
   recorded_by: string
   notes: string
   created_at: string
+  quality_incident_id: string | null
+  production_custody_event_id: string | null
 }
 export type FieldSalesCustodyMovementInsert =
   Pick<FieldSalesCustodyMovementRow, 'item_id' | 'movement_kind' | 'quantity'> & Partial<FieldSalesCustodyMovementRow>
@@ -4883,6 +5156,10 @@ export interface Database {
       ocg_calendar_events: DbTable<OcgCalendarEventRow, OcgCalendarEventInsert, Partial<OcgCalendarEventRow>>
       ocg_calendar_event_attendees: DbTable<OcgCalendarEventAttendeeRow, OcgCalendarEventAttendeeInsert, Partial<OcgCalendarEventAttendeeRow>>
       ocg_calendar_reschedules: DbTable<OcgCalendarRescheduleRow, OcgCalendarRescheduleInsert, Partial<OcgCalendarRescheduleRow>>
+      ocg_schedule_rules: DbTable<OcgScheduleRuleRow, OcgScheduleRuleInsert, Partial<OcgScheduleRuleRow>>
+      ocg_schedule_occurrences: DbTable<OcgScheduleOccurrenceRow, OcgScheduleOccurrenceInsert, Partial<OcgScheduleOccurrenceRow>>
+      ocg_reminder_rules: DbTable<OcgReminderRuleRow, OcgReminderRuleInsert, Partial<OcgReminderRuleRow>>
+      ocg_reminder_deliveries: DbTable<OcgReminderDeliveryRow, OcgReminderDeliveryInsert, Partial<OcgReminderDeliveryRow>>
       ocg_leave_requests: DbTable<OcgLeaveRequestRow, OcgLeaveRequestInsert, Partial<OcgLeaveRequestRow>>
       ocg_personal_tasks: DbTable<OcgPersonalTaskRow, OcgPersonalTaskInsert, Partial<OcgPersonalTaskRow>>
       ocg_approvals: DbTable<OcgApprovalRow, OcgApprovalInsert, Partial<OcgApprovalRow>>
@@ -4906,9 +5183,12 @@ export interface Database {
       ocg_record_attachments: DbTable<OcgRecordAttachmentRow, OcgRecordAttachmentInsert, Partial<OcgRecordAttachmentRow>>
       ocg_brand_print_identities: DbTable<OcgBrandPrintIdentityRow, OcgBrandPrintIdentityInsert, Partial<OcgBrandPrintIdentityRow>>
       ops_attendance_records: DbTable<OpsAttendanceRecordRow, OpsAttendanceRecordInsert, Partial<OpsAttendanceRecordRow>>
+      ops_attendance_events: DbTable<OpsAttendanceEventRow, OpsAttendanceEventInsert, Partial<OpsAttendanceEventRow>>
+      ops_attendance_identities: DbTable<OpsAttendanceIdentityRow, OpsAttendanceIdentityInsert, Partial<OpsAttendanceIdentityRow>>
       inventory_items: DbTable<InventoryItemRow, InventoryItemInsert, Partial<InventoryItemRow>>
       inventory_movements: DbTable<InventoryMovementRow, InventoryMovementInsert, Partial<InventoryMovementRow>>
       inventory_price_history: DbTable<InventoryPriceHistoryRow, InventoryPriceHistoryInsert, Partial<InventoryPriceHistoryRow>>
+      inventory_product_family_order: DbTable<InventoryProductFamilyOrderRow, InventoryProductFamilyOrderInsert, Partial<InventoryProductFamilyOrderRow>>
       inventory_item_aliases: DbTable<InventoryItemAliasRow, InventoryItemAliasInsert, Partial<InventoryItemAliasRow>>
       procurement_vendors: DbTable<ProcurementVendorRow, ProcurementVendorInsert, Partial<ProcurementVendorRow>>
       procurement_purchases: DbTable<ProcurementPurchaseRow, ProcurementPurchaseInsert, Partial<ProcurementPurchaseRow>>
@@ -5015,6 +5295,10 @@ export interface Database {
       production_bom_lines: DbTable<ProductionBomLineRow, ProductionBomLineInsert, Partial<ProductionBomLineRow>>
       production_runs: DbTable<ProductionRunRow, ProductionRunInsert, Partial<ProductionRunRow>>
       production_run_materials: DbTable<ProductionRunMaterialRow, ProductionRunMaterialInsert, Partial<ProductionRunMaterialRow>>
+      production_custody_events: DbTable<ProductionCustodyEventRow, ProductionCustodyEventInsert, Partial<ProductionCustodyEventRow>>
+      inventory_quality_incidents: DbTable<InventoryQualityIncidentRow, InventoryQualityIncidentInsert, Partial<InventoryQualityIncidentRow>>
+      production_recovered_packaging: DbTable<ProductionRecoveredPackagingRow, ProductionRecoveredPackagingInsert, Partial<ProductionRecoveredPackagingRow>>
+      inventory_disposal_loss_events: DbTable<InventoryDisposalLossEventRow, InventoryDisposalLossEventInsert, Partial<InventoryDisposalLossEventRow>>
       production_fg_transfers: DbTable<ProductionFgTransferRow, ProductionFgTransferInsert, Partial<ProductionFgTransferRow>>
       inventory_stock_counts: DbTable<InventoryStockCountRow, InventoryStockCountInsert, Partial<InventoryStockCountRow>>
       inventory_stock_count_items: DbTable<InventoryStockCountItemRow, InventoryStockCountItemInsert, Partial<InventoryStockCountItemRow>>
@@ -5054,6 +5338,21 @@ export interface Database {
       post_finance_journal: {
         Args: { p_journal_id: string; p_posted_by: string }
         Returns: FinanceJournalRow
+      }
+      record_inventory_price: {
+        Args: {
+          p_item_id: string
+          p_price_type: string
+          p_amount_ksh: number
+          p_effective_date: string
+          p_supplier_name: string
+          p_source_description: string
+          p_source_reference: string
+          p_notes: string
+          p_created_by: string
+          p_idempotency_key: string
+        }
+        Returns: InventoryPriceHistoryRow
       }
       // Atomic countersignatures (migration 070). Each writes the verdict AND
       // its immutable review event in one transaction, and refuses a decision
