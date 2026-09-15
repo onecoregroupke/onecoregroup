@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { getApiActor } from '@/lib/api-auth'
-import { attendanceEventsForMember, listAttendanceEvidence, recordAttendanceEvent, selfClock } from '@/lib/attendance'
+import { attendanceEventsForMember, listAttendanceEvidence, listAttendanceRecords, recordAttendanceEvent, selfClock } from '@/lib/attendance'
 import { listTeam } from '@/lib/team'
 import { db } from '@/lib/serverClient'
 import { auditEvent } from '@/lib/audit'
@@ -10,9 +10,15 @@ export async function GET(req: NextRequest) {
   if (!actor) return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 })
   try {
     const url = new URL(req.url)
-    const evidence = await listAttendanceEvidence(actor, { from: url.searchParams.get('from') ?? undefined, to: url.searchParams.get('to') ?? undefined })
+    const from = url.searchParams.get('from') ?? undefined
+    const to = url.searchParams.get('to') ?? undefined
+    const employeeId = url.searchParams.get('employee') ?? undefined
+    const [records, evidence] = await Promise.all([
+      listAttendanceRecords(actor, { from, to, employeeId }),
+      listAttendanceEvidence(actor, { from, to }),
+    ])
     const today = actor.teamMemberId ? await attendanceEventsForMember(actor.teamMemberId) : []
-    return NextResponse.json({ ok: true, evidence, today })
+    return NextResponse.json({ ok: true, records, evidence, today })
   } catch (error) {
     return NextResponse.json({ ok: false, error: (error as Error).message }, { status: 400 })
   }

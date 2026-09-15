@@ -51,7 +51,7 @@ function minutesBetween(aIso: string, bIso: string): number {
 
 export interface AttendanceEvidencePoint {
   id: string
-  source: 'biometric' | 'employee_self' | 'reviewer_manual' | 'historical_import'
+  source: 'biometric' | 'employee_self' | 'reviewer_manual' | 'historical_import' | 'system_auto'
   direction: 'in' | 'out'
   occurred_at: string
 }
@@ -235,6 +235,13 @@ export function calculateAttendance(input: AttendanceInput): AttendanceCalc {
     earlyDepartureMinutes,
     overtimeMinutes,
   }
+}
+
+export function verifiedOvertimeMinutes(
+  overtimeMinutes: number,
+  checkoutSource: AttendanceEvidencePoint['source'] | null,
+): number {
+  return checkoutSource === 'system_auto' ? 0 : overtimeMinutes
 }
 
 // ─── Exceptions (§9 step 10) ────────────────────────────────────────────────

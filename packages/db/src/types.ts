@@ -3580,6 +3580,19 @@ export interface OpsAttendanceRecordRow {
   raw_payload: Record<string, unknown>
   imported_by: string
   notes: string
+  schedule_id: string | null
+  biometric_id: string
+  scheduled_start_at: string | null
+  scheduled_end_at: string | null
+  break_minutes: number
+  expected_minutes: number
+  actual_minutes: number
+  late_minutes: number
+  early_departure_minutes: number
+  overtime_minutes: number
+  status: string
+  punch_count: number
+  all_punches: Array<Record<string, unknown>>
   created_at: string
   updated_at: string
   evidence_summary_generated_at: string | null
@@ -3592,7 +3605,7 @@ export interface OpsAttendanceEventRow {
   occurred_at: string
   event_date: string
   direction: 'in' | 'out'
-  source: 'biometric' | 'employee_self' | 'reviewer_manual' | 'historical_import'
+  source: 'biometric' | 'employee_self' | 'reviewer_manual' | 'historical_import' | 'system_auto'
   device_name: string
   device_event_id: string
   recorded_by: string

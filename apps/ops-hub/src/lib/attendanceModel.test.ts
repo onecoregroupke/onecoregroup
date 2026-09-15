@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import {
   effectiveSchedule, isWorkday, collapsePunches, calculateAttendance,
   attendanceExceptions, summariseAttendance,
-  reconcileAttendanceEvidence,
+  reconcileAttendanceEvidence, verifiedOvertimeMinutes,
   type WorkSchedule, type AttendanceRecordLike,
 } from './attendanceModel'
 
@@ -16,6 +16,11 @@ test('biometric, self-clock and reviewer evidence remain three distinct points',
   assert.equal(result.sources.size, 3)
   assert.deepEqual([...result.sources.values()].flatMap((source) => source.ids).sort(), ['bio', 'manual', 'self'])
   assert.equal(result.discrepancy, false)
+})
+
+test('system auto checkout can close a record without creating verified overtime', () => {
+  assert.equal(verifiedOvertimeMinutes(120, 'system_auto'), 0)
+  assert.equal(verifiedOvertimeMinutes(120, 'employee_self'), 120)
 })
 
 const MON = '2026-08-03'   // Monday
