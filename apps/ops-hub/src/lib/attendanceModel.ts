@@ -244,6 +244,17 @@ export function verifiedOvertimeMinutes(
   return checkoutSource === 'system_auto' ? 0 : overtimeMinutes
 }
 
+export function effectiveOpenCheckoutAt(input: {
+  nowIso: string
+  scheduledEndAt: string | null
+}): string {
+  if (!input.scheduledEndAt || Number.isNaN(Date.parse(input.scheduledEndAt))) return input.nowIso
+  if (Number.isNaN(Date.parse(input.nowIso))) return input.scheduledEndAt
+  return Date.parse(input.nowIso) < Date.parse(input.scheduledEndAt)
+    ? input.nowIso
+    : input.scheduledEndAt
+}
+
 // ─── Exceptions (§9 step 10) ────────────────────────────────────────────────
 
 export interface AttendanceRecordLike {

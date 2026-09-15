@@ -1,6 +1,6 @@
 -- Migration 078: attendance system auto-checkout evidence.
 --
--- Keeps the 7:00 PM automatic close auditable without mislabelling it as
+-- Keeps automatic closeout auditable without mislabelling it as
 -- employee self-clock, reviewer/manual evidence, biometric data, or historical
 -- import evidence.
 

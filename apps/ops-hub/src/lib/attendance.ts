@@ -4,6 +4,7 @@ import { todayInEat } from './serverClient'
 import {
   calculateAttendance,
   effectiveSchedule,
+  effectiveOpenCheckoutAt,
   verifiedOvertimeMinutes,
   type ScheduleOverride,
   type WorkSchedule,
@@ -55,6 +56,11 @@ export interface AttendanceConsoleRecord extends AttendanceRow {
   check_in_label: string
   check_out_label: string
   is_auto_closed: boolean
+  is_checkout_missing: boolean
+  is_hours_capped: boolean
+  effective_check_out_at: string | null
+  effective_actual_minutes: number
+  auto_close_processed_at: string | null
   time_variance_minutes: number
   open_now: boolean
 }
@@ -271,7 +277,7 @@ export async function selfClock(input: {
 }
 
 export async function autoCloseOpenAttendanceRecords(attendanceDate = todayInEat()) {
-  const closeAt = `${attendanceDate}T19:00:00+03:00`
+  const processedAt = new Date().toISOString()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (db() as any)
     .from('ops_attendance_records')
@@ -284,16 +290,22 @@ export async function autoCloseOpenAttendanceRecords(attendanceDate = todayInEat
   const closed: OpsAttendanceEventRow[] = []
   for (const record of ((data as AttendanceRow[] | null) ?? [])) {
     if (!record.team_member_id) continue
+    if (!record.scheduled_end_at) continue
     closed.push(await recordAttendanceEvent({
       team_member_id: record.team_member_id,
-      occurred_at: closeAt,
+      occurred_at: record.scheduled_end_at,
       direction: 'out',
       source: 'system_auto',
       recorded_by: 'System auto checkout',
-      reason: '7:00 PM automatic checkout',
-      notes: 'Auto-closed · 7:00 PM',
+      reason: 'No checkout recorded before nightly closeout',
+      notes: 'Auto-closed',
       source_event_key: `system-auto:${record.team_member_id}:${attendanceDate}:out`,
-      raw_payload: { attendance_record_id: record.id, attendance_date: attendanceDate },
+      raw_payload: {
+        attendance_record_id: record.id,
+        attendance_date: attendanceDate,
+        processed_at: processedAt,
+        effective_checkout_at: record.scheduled_end_at,
+      },
     }))
   }
   return { attendanceDate, closed }
@@ -334,10 +346,14 @@ async function syncAttendanceRecordFromEvents(teamMemberId: string, eventDate: s
       check_in_source: inEvent?.source ?? null,
       check_out_source: outEvent?.source ?? null,
       system_auto_closed: outEvent?.source === 'system_auto',
+      system_auto_processed_at: outEvent?.source === 'system_auto'
+        ? (outEvent.raw_payload?.processed_at ?? outEvent.created_at)
+        : null,
+      effective_checkout_at: outEvent?.source === 'system_auto' ? outEvent.occurred_at : null,
       evidence_event_ids: events.map((event) => event.id),
     },
     imported_by: '',
-    notes: outEvent?.source === 'system_auto' ? 'Auto-closed · 7:00 PM' : '',
+    notes: outEvent?.source === 'system_auto' ? 'Auto-closed' : '',
     schedule_id: schedule?.id ?? null,
     biometric_id: employeeCode,
     scheduled_start_at: calc.scheduledStartAt,
@@ -455,16 +471,30 @@ function toConsoleRecord(row: AttendanceRow): AttendanceConsoleRecord {
   const checkInSource = raw.check_in_source ? String(raw.check_in_source) as OpsAttendanceEventRow['source'] : sourceFromPunch(row, 'in')
   const checkOutSource = raw.check_out_source ? String(raw.check_out_source) as OpsAttendanceEventRow['source'] : sourceFromPunch(row, 'out')
   const isAutoClosed = checkOutSource === 'system_auto' || raw.system_auto_closed === true || row.notes.includes('Auto-closed')
+  const nowIso = new Date().toISOString()
+  const missingCheckout = !!row.check_in_at && !row.check_out_at
+  const effectiveCheckOut = row.check_out_at ?? (missingCheckout
+    ? effectiveOpenCheckoutAt({ nowIso, scheduledEndAt: row.scheduled_end_at })
+    : null)
+  const effectiveActual = row.check_in_at && effectiveCheckOut
+    ? Math.max(0, Math.round((Date.parse(effectiveCheckOut) - Date.parse(row.check_in_at)) / 60_000) - Number(row.break_minutes ?? 0))
+    : Number(row.actual_minutes ?? 0)
+  const capped = missingCheckout && !!row.scheduled_end_at && Date.parse(nowIso) >= Date.parse(row.scheduled_end_at)
   return {
     ...row,
     all_punches: Array.isArray(row.all_punches) ? row.all_punches : [],
     check_in_source: checkInSource,
     check_out_source: checkOutSource,
     check_in_label: checkInSource ? sourceLabel(checkInSource) : '',
-    check_out_label: isAutoClosed ? 'Auto-closed · 7:00 PM' : checkOutSource ? sourceLabel(checkOutSource) : '',
+    check_out_label: isAutoClosed ? `${formatEatTime(row.check_out_at)} · Auto-closed` : checkOutSource ? sourceLabel(checkOutSource) : '',
     is_auto_closed: isAutoClosed,
-    time_variance_minutes: Number(row.actual_minutes ?? 0) - Number(row.expected_minutes ?? 0),
-    open_now: !!row.check_in_at && !row.check_out_at,
+    is_checkout_missing: missingCheckout,
+    is_hours_capped: capped,
+    effective_check_out_at: effectiveCheckOut,
+    effective_actual_minutes: effectiveActual,
+    auto_close_processed_at: raw.system_auto_processed_at ? String(raw.system_auto_processed_at) : null,
+    time_variance_minutes: effectiveActual - Number(row.expected_minutes ?? 0),
+    open_now: missingCheckout && (!row.scheduled_end_at || Date.parse(nowIso) < Date.parse(row.scheduled_end_at)),
   }
 }
 
@@ -480,4 +510,12 @@ function sourceLabel(source: OpsAttendanceEventRow['source']): string {
   if (source === 'reviewer_manual') return 'Manual / reviewer'
   if (source === 'system_auto') return 'System auto'
   return 'Historical import'
+}
+
+function formatEatTime(value: string | null | undefined) {
+  return value ? new Date(value).toLocaleTimeString('en-KE', {
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'Africa/Nairobi',
+  }) : ''
 }
