@@ -2,37 +2,31 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { sendMorningWorkBrief } from '@/lib/email'
 import { listTeam } from '@/lib/team'
 import { listTasks } from '@/lib/tasks'
-import { isActiveStatus } from '@/lib/taskStatuses'
 import { createNotification } from '@/lib/notifications'
 import { occurrencesOn, overdueOccurrences, pendingReviews, type DutyOccurrence } from '@/lib/dutyOccurrences'
-import { buildWorkBrief, limitSection, type BriefLine, type WorkBrief } from '@/lib/morningBrief'
-import { isTaskClosed } from '@/lib/myWorkModel'
-import { dutyOccurrenceKey } from '@/lib/myWork'
-import { formatScheduleRange } from '@/lib/calendarTasks'
+import { orderChecklist, type ChecklistItem } from '@/lib/dutyDetail'
+import type { BriefLine } from '@/lib/morningBrief'
+import { briefCounts, briefFor, briefHeadline, emailSections } from '@/lib/workBrief'
 import { db, todayInEat } from '@/lib/serverClient'
-import type { OpsTaskRow, NptAppointmentRow, OpsTeamMemberRow } from '@ocg/db'
+import type { OpsTaskRow, NptAppointmentRow, OcgDutyChecklistItemRow } from '@ocg/db'
 
 /**
  * THE MORNING WORK BRIEF (§§18–21).
  *
- * One weekday email per person covering their whole day — Daily Duties,
- * Assigned Tasks, appointments, overdue work, and reviews reserved for them.
+ * One weekday email per person covering their whole day — each Daily Duty broken
+ * down into its full checklist, every Assigned Task not yet completed,
+ * appointments, duties missed on earlier days, and reviews reserved for them.
  * §18 forbids a second duty cron, so this extends the existing team-brief job
  * that vercel.json already schedules rather than adding one.
  *
  * Every source is read ONCE for the whole company and then bucketed per person
  * (§50 "avoid obvious N+1 morning-email queries"): duties are derived a fixed
- * number of times regardless of headcount, and tasks/appointments are single
- * queries. A hundred employees costs the same number of round-trips as one.
+ * number of times regardless of headcount, checklists are one query, and
+ * tasks/appointments are single queries. Assembly lives in lib/workBrief.ts.
  */
 
 /** How far back the overdue sweep looks. Bounded so it never walks history (§19). */
 const OVERDUE_LOOKBACK_DAYS = 7
-
-const time = (iso: string | null) =>
-  iso ? new Date(iso).toLocaleTimeString('en-KE', {
-    hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Africa/Nairobi',
-  }) : ''
 
 export async function GET(req: NextRequest) {
   // Fail closed: without a configured CRON_SECRET this endpoint stays locked
@@ -55,11 +49,8 @@ export async function GET(req: NextRequest) {
     appointmentsOn(date),
     pendingReviews({ kind: 'all' }),
   ])
+  const checklistByDuty = await checklistsFor([...new Set(dutiesToday.map((o) => o.duty.id))])
 
-  const dutiesByMember = groupOccurrences(dutiesToday)
-  const overdueByMember = groupOccurrences(dutiesOverdue)
-  const tasksByName = groupTasks(tasks)
-  const apptsByMember = groupAppointments(appointments)
   // §19: "Only include items that person is genuinely authorised to review."
   //
   // Named reviews are attributed; unnamed ones are not. Deciding eligibility for
@@ -78,12 +69,22 @@ export async function GET(req: NextRequest) {
     reviewsByReviewer.set(r.reviewerId, [...(reviewsByReviewer.get(r.reviewerId) ?? []), line])
   }
 
+  const buckets = {
+    dutiesByMember: groupOccurrences(dutiesToday),
+    overdueByMember: groupOccurrences(dutiesOverdue),
+    tasksByName: groupTasks(tasks),
+    apptsByMember: groupAppointments(appointments),
+    reviewsByReviewer,
+    checklistByDuty,
+  }
+  const dateLabel = new Date(`${date}T00:00:00Z`).toLocaleDateString('en-GB', {
+    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC',
+  })
+
   const results: Array<Record<string, unknown>> = []
   for (const member of team) {
     if (!member.email) continue
-    const brief = briefFor(member, date, {
-      dutiesByMember, overdueByMember, tasksByName, apptsByMember, reviewsByReviewer,
-    })
+    const brief = briefFor(member, date, buckets)
 
     // §20: someone with nothing actionable gets no email. Preserving the
     // existing skip behaviour is the point — a daily "you have nothing" is how
@@ -93,10 +94,13 @@ export async function GET(req: NextRequest) {
       continue
     }
 
+    const headline = briefHeadline(brief)
+    const counts = briefCounts(brief)
     const sent = await sendMorningWorkBrief({
       to: member.email,
       name: member.name.split(' ')[0] || member.name,
-      headline: brief.headline,
+      dateLabel,
+      headline,
       workUrl: `${baseUrl}/my-work`,
       sections: emailSections(brief),
     })
@@ -109,22 +113,19 @@ export async function GET(req: NextRequest) {
       recipient_name: member.name,
       sender_name: 'Ops Hub',
       kind: 'morning_task_brief',
-      title: `Morning work brief: ${brief.headline}`,
+      title: `Morning work brief: ${headline}`,
       body: [
-        brief.counts.duties ? `${brief.counts.duties} daily duties` : '',
-        brief.counts.tasks ? `${brief.counts.tasks} assigned tasks` : '',
-        brief.counts.overdue ? `${brief.counts.overdue} overdue` : '',
-        brief.counts.reviews ? `${brief.counts.reviews} awaiting your review` : '',
+        counts.duties ? `${counts.duties} daily ${counts.duties === 1 ? 'duty' : 'duties'}` : '',
+        counts.tasks ? `${counts.tasks} open assigned ${counts.tasks === 1 ? 'task' : 'tasks'}` : '',
+        counts.overdueTasks ? `${counts.overdueTasks} overdue` : '',
+        counts.missedDuties ? `${counts.missedDuties} not recorded earlier` : '',
+        counts.reviews ? `${counts.reviews} awaiting your review` : '',
       ].filter(Boolean).join(' · '),
       href: '/my-work',
-      metadata: { date, ...brief.counts },
+      metadata: { date, ...counts },
     })
 
-    results.push({
-      member: member.name, email: member.email, sent,
-      duties: brief.counts.duties, tasks: brief.counts.tasks,
-      overdue: brief.counts.overdue, reviews: brief.counts.reviews,
-    })
+    results.push({ member: member.name, email: member.email, sent, ...counts })
   }
 
   return NextResponse.json({
@@ -136,96 +137,21 @@ export async function GET(req: NextRequest) {
   })
 }
 
-// ─── Per-person assembly ────────────────────────────────────────────────────
-
-interface Buckets {
-  dutiesByMember: Map<string, DutyOccurrence[]>
-  overdueByMember: Map<string, DutyOccurrence[]>
-  tasksByName: Map<string, OpsTaskRow[]>
-  apptsByMember: Map<string, NptAppointmentRow[]>
-  reviewsByReviewer: Map<string, BriefLine[]>
-}
-
-function briefFor(member: OpsTeamMemberRow, date: string, b: Buckets): WorkBrief {
-  const myDuties = (b.dutiesByMember.get(member.id) ?? [])
-    // §19: exclude duties already completed before the brief is generated.
-    .filter((o) => o.status !== 'done' && o.status !== 'skipped')
-  const myOverdueDuties = b.overdueByMember.get(member.id) ?? []
-  const myTasks = (b.tasksByName.get(member.name.trim().toLowerCase()) ?? [])
-    .filter((t) => !isTaskClosed(t.current_status) && isActiveStatus(t.current_status))
-
-  // Overdue is about the DEADLINE. A task scheduled for a past day but not yet
-  // due is simply work that slipped its slot, not late work.
-  const overdueTasks = myTasks.filter((t) => t.target_date && t.target_date < date)
-  const dueTasks = myTasks.filter((t) => !overdueTasks.includes(t))
-
-  return buildWorkBrief({
-    recipientName: member.name,
-    recipientEmail: member.email ?? '',
-    date,
-    duties: myDuties.map(dutyLine),
-    tasks: dueTasks.map(taskLine),
-    appointments: (b.apptsByMember.get(member.id) ?? []).map((a) => ({
-      key: `appointment:${a.id}`,
-      title: a.title || 'Appointment',
-      detail: time(a.start_at),
-    })),
-    overdue: [...myOverdueDuties.map(dutyLine), ...overdueTasks.map(taskLine)],
-    reviews: b.reviewsByReviewer.get(member.id) ?? [],
-  })
-}
-
-function dutyLine(o: DutyOccurrence): BriefLine {
-  return {
-    // The occurrence identity. Each brief section is already scoped to ONE
-    // person, so (duty, date) identifies the occurrence and the assignee adds
-    // nothing but a way for the two sides to disagree (§49).
-    key: dutyOccurrenceKey(o.duty.id, o.date),
-    title: o.duty.title,
-    detail: o.dueAt ? `due ${time(o.dueAt)}` : o.date,
-  }
-}
-
-function taskLine(t: OpsTaskRow): BriefLine {
-  // §44: a scheduled task leads with its working window — "10:00–12:00" is what
-  // the person needs at 07:00, not a task reference.
-  const window = formatScheduleRange(t.scheduled_start_at, t.scheduled_end_at, t.scheduled_all_day)
-  return {
-    // A task materialised from a duty shares the duty's key so the pair
-    // collapses to the richer duty entry (§43 "no duplicated Duty occurrence").
-    key: t.duty_id && t.duty_date ? dutyOccurrenceKey(t.duty_id, t.duty_date) : `task:${t.task_id}`,
-    title: t.task_name,
-    detail: [
-      window,
-      t.task_id,
-      t.priority !== 'Medium' ? t.priority : '',
-      t.target_date ? `due ${t.target_date}` : '',
-    ].filter(Boolean).join(' · '),
-  }
-}
-
-/** The email's sections, in reading order, with empty ones dropped (§20). */
-function emailSections(brief: WorkBrief) {
-  return [
-    { label: 'Daily duties', lines: brief.duties, tone: '#1a6b42' },
-    { label: 'Assigned tasks', lines: brief.tasks, tone: '#1a1a2e' },
-    { label: 'Appointments', lines: brief.appointments, tone: '#2c45a0' },
-    { label: 'Overdue', lines: brief.overdue, tone: '#9a2a2a' },
-    { label: 'Reviews awaiting you', lines: brief.reviews, tone: '#b07a00' },
-  ]
-    .filter((s) => s.lines.length > 0)
-    .map((s) => {
-      const { shown, more } = limitSection(s.lines)
-      return {
-        label: s.label,
-        tone: s.tone,
-        more,
-        items: shown.map((l) => ({ title: l.title, detail: l.detail })),
-      }
-    })
-}
-
 // ─── Batched sources ────────────────────────────────────────────────────────
+
+/** Every active checklist item for today's duties, in position order — one query. */
+async function checklistsFor(dutyIds: string[]): Promise<Map<string, ChecklistItem[]>> {
+  const byDuty = new Map<string, ChecklistItem[]>()
+  if (dutyIds.length === 0) return byDuty
+  const { data } = await db().from('ocg_duty_checklist_items').select('*')
+    .in('duty_id', dutyIds).eq('active', true).order('position', { ascending: true })
+  for (const row of orderChecklist((data as OcgDutyChecklistItemRow[] | null) ?? [])) {
+    byDuty.set(row.duty_id, [...(byDuty.get(row.duty_id) ?? []), {
+      id: row.id, label: row.label, hint: row.hint ?? '', required: row.required !== false, position: row.position ?? 0,
+    }])
+  }
+  return byDuty
+}
 
 function groupOccurrences(occurrences: DutyOccurrence[]): Map<string, DutyOccurrence[]> {
   const map = new Map<string, DutyOccurrence[]>()

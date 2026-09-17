@@ -224,12 +224,92 @@ export function shouldSendAssignmentEmail(duty: {
 // rather than adding a second duty cron (§18). The sections mirror My Work, so
 // the email and the page cannot tell someone different things about their day.
 
+export interface BriefChecklistItem {
+  label: string
+  hint: string
+  required: boolean
+}
+
 export interface BriefLine {
   /** Occurrence identity — the dedupe key across duties and tasks. */
   key: string
   title: string
   /** Short trailing context: "due 10:00", "TASK-0007 · High", "Jane". */
   detail: string
+  /** Duties: the short note written under the title. */
+  description?: string
+  /** Duties with no checklist: the instructions, shown in its place. */
+  instructions?: string
+  /** Duties: the WHOLE checklist — every active item, in position order. */
+  checklist?: BriefChecklistItem[]
+  /** Tasks: a state the reader must not miss. */
+  flag?: 'overdue' | 'blocked'
+  /** Missed occurrences of one recurring duty share a group and are listed once. */
+  group?: string
+  /** The occurrence date, for grouped lines. */
+  date?: string
+}
+
+const SHORT_DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+const SHORT_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+/**
+ * "Wed 16 Sep" — short enough to list a week of dates on one line. Built by hand
+ * rather than via Intl, whose abbreviations differ between runtimes ("Sept").
+ */
+export function briefShortDate(iso: string): string {
+  const d = new Date(`${iso}T00:00:00Z`)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso) || Number.isNaN(d.getTime())) return iso
+  return `${SHORT_DAYS[d.getUTCDay()]} ${d.getUTCDate()} ${SHORT_MONTHS[d.getUTCMonth()]}`
+}
+
+/**
+ * One line per recurring duty in the Overdue section, naming every day it was
+ * not recorded, instead of the same duty repeated once per missed day. Lines
+ * without a group pass through untouched, in their original order.
+ */
+export function groupMissedDuties(lines: BriefLine[]): BriefLine[] {
+  const datesByGroup = new Map<string, string[]>()
+  for (const line of lines) {
+    if (!line.group) continue
+    datesByGroup.set(line.group, [...(datesByGroup.get(line.group) ?? []), ...(line.date ? [line.date] : [])])
+  }
+  const emitted = new Set<string>()
+  const out: BriefLine[] = []
+  for (const line of lines) {
+    if (!line.group) { out.push(line); continue }
+    if (emitted.has(line.group)) continue
+    emitted.add(line.group)
+    const dates = [...new Set(datesByGroup.get(line.group) ?? [])].sort().reverse()
+    out.push({
+      key: line.group,
+      title: line.title,
+      detail: dates.length === 0
+        ? line.detail
+        : `not recorded on ${dates.map(briefShortDate).join(', ')}${dates.length > 1 ? ` (${dates.length} days)` : ''}`,
+      group: line.group,
+    })
+  }
+  return out
+}
+
+export interface OpenTaskLike {
+  task_id: string
+  target_date: string | null
+  priority: string
+}
+
+/**
+ * Uncompleted assigned work in the order to tackle it: overdue first (oldest
+ * deadline first), then by deadline, then undated; priority breaks ties.
+ */
+export function orderOpenTasks<T extends OpenTaskLike>(tasks: T[], today: string): T[] {
+  const bucket = (t: T) => (!t.target_date ? 2 : t.target_date < today ? 0 : 1)
+  return [...tasks].sort((a, b) =>
+    (bucket(a) - bucket(b))
+    || (a.target_date ?? '').localeCompare(b.target_date ?? '')
+    || ((PRIORITY_RANK[a.priority] ?? 2) - (PRIORITY_RANK[b.priority] ?? 2))
+    || a.task_id.localeCompare(b.task_id))
 }
 
 export interface WorkBrief {
@@ -258,6 +338,14 @@ export interface WorkBrief {
 
 /** How many items of each kind an email lists before "+ N more" (§20). */
 export const BRIEF_SECTION_LIMIT = 8
+
+/**
+ * Daily duties are listed in full, each with its whole checklist, and every
+ * uncompleted assigned task is listed — the brief is the employee's list for the
+ * day, not a teaser. This cap exists only so a runaway backlog cannot produce an
+ * unreadable email; it is far above any real person's open work.
+ */
+export const BRIEF_TASK_LIMIT = 60
 
 /** Trim a section to the display limit, reporting what was cut. */
 export function limitSection(lines: BriefLine[], limit = BRIEF_SECTION_LIMIT): {

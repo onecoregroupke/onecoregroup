@@ -169,59 +169,107 @@ export async function sendTeamTaskBrief(p: {
  * Sections with nothing in them are omitted entirely; an email of empty
  * headings teaches people to stop opening it.
  */
-export async function sendMorningWorkBrief(p: {
+export interface MorningBriefItem {
+  title: string
+  detail: string
+  description?: string
+  instructions?: string
+  checklist?: { label: string; hint: string; required: boolean }[]
+  flag?: 'overdue' | 'blocked'
+}
+
+export interface MorningBriefParams {
   to: string
   name: string
+  /** e.g. "Thursday 17 September 2026" */
+  dateLabel?: string
   sections: {
     label: string
-    items: { title: string; detail: string }[]
+    /** One-line explanation under the heading. */
+    note?: string
+    items: MorningBriefItem[]
     more: number
     tone: string
   }[]
   headline: string
   workUrl: string
-}): Promise<boolean> {
-  const resend = client()
-  if (!resend) return false
+}
 
-  const section = (s: (typeof p.sections)[number]) => `
-    <div style="margin:18px 0 0">
-      <p style="margin:0 0 6px;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:${s.tone};font-weight:700">
+/**
+ * The brief's HTML, separate from sending so it can be previewed and tested.
+ * Inline styles and tables only — this has to survive Gmail and Outlook.
+ */
+export function renderMorningWorkBrief(p: MorningBriefParams): string {
+  const flag = (f: MorningBriefItem['flag']) => f === 'overdue'
+    ? '<span style="display:inline-block;margin-left:6px;padding:1px 6px;border-radius:4px;background:#fdecea;color:#9a2a2a;font-size:10px;font-weight:700;letter-spacing:.04em">OVERDUE</span>'
+    : f === 'blocked'
+      ? '<span style="display:inline-block;margin-left:6px;padding:1px 6px;border-radius:4px;background:#f1f1f1;color:#555;font-size:10px;font-weight:700;letter-spacing:.04em">BLOCKED</span>'
+      : ''
+
+  const checklist = (items: NonNullable<MorningBriefItem['checklist']>) => `
+    <p style="margin:8px 0 2px;font-size:11px;color:#888;letter-spacing:.06em;text-transform:uppercase">Checklist · ${items.length} ${items.length === 1 ? 'item' : 'items'}</p>
+    <table style="border-collapse:collapse;width:100%;font-size:13px">
+      ${items.map((c, i) => `
+        <tr>
+          <td style="width:22px;padding:4px 0;vertical-align:top;color:#999">${i + 1}.</td>
+          <td style="padding:4px 0;vertical-align:top;color:#1a1a2e">
+            <span style="display:inline-block;width:11px;height:11px;border:1px solid #bbb;border-radius:2px;margin-right:6px;vertical-align:-1px"></span>${escapeHtml(c.label)}${c.required ? '' : ' <span style="color:#999;font-size:11px">(optional)</span>'}
+            ${c.hint ? `<div style="margin:2px 0 0 17px;color:#777;font-size:12px;line-height:1.45">${escapeHtml(c.hint)}</div>` : ''}
+          </td>
+        </tr>`).join('')}
+    </table>`
+
+  const item = (s: MorningBriefParams['sections'][number], it: MorningBriefItem) => `
+    <tr>
+      <td style="padding:10px 0;border-top:1px solid #f0f0f0;color:#1a1a2e;font-size:13px">
+        <div><span style="color:${s.tone}">•</span>&nbsp; <strong style="font-weight:600">${escapeHtml(it.title)}</strong>${flag(it.flag)}</div>
+        ${it.detail ? `<div style="margin:2px 0 0 14px;color:#888;font-size:12px">${escapeHtml(it.detail)}</div>` : ''}
+        ${it.description ? `<div style="margin:6px 0 0 14px;color:#444;font-size:13px;line-height:1.5">${escapeHtml(it.description)}</div>` : ''}
+        ${it.instructions ? `<div style="margin:6px 0 0 14px;padding:8px 10px;background:#f7f7f7;border-radius:6px;color:#555;font-size:12px;line-height:1.5">${escapeHtml(it.instructions).replace(/\n/g, '<br>')}</div>` : ''}
+        ${it.checklist && it.checklist.length > 0 ? `<div style="margin:0 0 0 14px">${checklist(it.checklist)}</div>` : ''}
+      </td>
+    </tr>`
+
+  const section = (s: MorningBriefParams['sections'][number]) => `
+    <div style="margin:22px 0 0">
+      <p style="margin:0;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:${s.tone};font-weight:700">
         ${escapeHtml(s.label)} · ${s.items.length + s.more}
       </p>
-      <table style="border-collapse:collapse;width:100%;font-size:13px">
-        ${s.items.map((item) => `
-          <tr>
-            <td style="padding:6px 0;border-top:1px solid #f0f0f0;color:#1a1a2e">
-              <span style="color:${s.tone}">•</span>&nbsp; ${escapeHtml(item.title)}
-              ${item.detail ? `<span style="color:#888"> — ${escapeHtml(item.detail)}</span>` : ''}
-            </td>
-          </tr>`).join('')}
-        ${s.more > 0 ? `<tr><td style="padding:6px 0;border-top:1px solid #f0f0f0;color:#999">+ ${s.more} more</td></tr>` : ''}
+      ${s.note ? `<p style="margin:2px 0 6px;color:#999;font-size:12px">${escapeHtml(s.note)}</p>` : ''}
+      <table style="border-collapse:collapse;width:100%">
+        ${s.items.map((it) => item(s, it)).join('')}
+        ${s.more > 0 ? `<tr><td style="padding:8px 0;border-top:1px solid #f0f0f0;color:#999;font-size:13px">+ ${s.more} more in My Work</td></tr>` : ''}
       </table>
     </div>`
 
-  const html = `
-  <div style="font-family:Inter,Arial,sans-serif;max-width:600px;margin:0 auto;color:#1a1a2e">
+  return `
+  <div style="font-family:Inter,Arial,sans-serif;max-width:640px;margin:0 auto;color:#1a1a2e">
     <div style="background:${NAVY};padding:20px 24px;border-radius:12px 12px 0 0">
       <span style="color:#fff;font-weight:700;font-size:18px">One Core Group</span>
       <span style="color:${GOLD};font-size:13px;margin-left:6px">Morning work brief</span>
     </div>
     <div style="border:1px solid #eee;border-top:none;padding:24px;border-radius:0 0 12px 12px">
       <p style="margin:0;font-size:16px">Good morning, ${escapeHtml(p.name)}</p>
-      <p style="margin:4px 0 0;color:#666;font-size:13px">Here is your work for today.</p>
+      <p style="margin:4px 0 0;color:#666;font-size:13px">Here is your work for ${p.dateLabel ? escapeHtml(p.dateLabel) : 'today'}.</p>
       ${p.sections.map(section).join('')}
       <a href="${p.workUrl}"
-         style="display:inline-block;margin-top:22px;background:${GOLD};color:#fff;text-decoration:none;
+         style="display:inline-block;margin-top:24px;background:${GOLD};color:#fff;text-decoration:none;
                 padding:12px 20px;border-radius:8px;font-weight:600;font-size:14px">
         Open My Work
       </a>
       <p style="color:#aaa;font-size:11px;margin-top:18px">
-        Daily Duties are the recurring responsibilities of your role. Assigned Tasks are specific work
-        given to you by management. Both are completed in My Work.
+        Daily Duties are the recurring responsibilities of your role — tick each checklist item in My Work
+        or from the Calendar as you finish it. Assigned Tasks are specific work given to you by management.
       </p>
     </div>
   </div>`
+}
+
+export async function sendMorningWorkBrief(p: MorningBriefParams): Promise<boolean> {
+  const resend = client()
+  if (!resend) return false
+
+  const html = renderMorningWorkBrief(p)
 
   try {
     await resend.emails.send({
