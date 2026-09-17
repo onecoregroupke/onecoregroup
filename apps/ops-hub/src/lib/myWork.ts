@@ -3,9 +3,10 @@ import { listTeam } from './team'
 import { listTasksForAssignee } from './tasks'
 import { occurrencesOn, overdueOccurrences, type DutyOccurrence } from './dutyOccurrences'
 import { toOccurrenceDtos } from './dutyView'
+import { resolveDutyAssignees, type TargetableMember } from './dutyModel'
 import { isTaskClosed, type WorkItem } from './myWorkModel'
 import { nairobiDateOf } from './calendarTasks'
-import type { OccurrenceDto } from '@/components/duties/DutyOccurrenceCard'
+import type { OccurrenceDto } from './dutyDetail'
 import type { OpsTaskRow, NptAppointmentRow, NptCustomerRow, OpsTeamMemberRow } from '@ocg/db'
 
 // =============================================================================
@@ -49,6 +50,12 @@ export interface MyWorkData {
   appointments: MyAppointment[]
   /** duty template id → the named reviewer's display name, for §15's wording. */
   reviewerNameByDuty: Record<string, string>
+  /**
+   * Recurring duties (not ended) that target this person at all, on any day.
+   * Zero means duties were never configured — which the page says plainly,
+   * rather than implying the person simply has nothing due today.
+   */
+  configuredDutyCount: number
 }
 
 /**
@@ -121,11 +128,11 @@ export async function loadMyWork(
     const tasks = actor.name ? await listTasksForAssignee(actor.name) : []
     return {
       member: null, date, dutiesToday: [], dutiesOverdue: [], dutiesRecent: [],
-      tasks, appointments: [], reviewerNameByDuty: {},
+      tasks, appointments: [], reviewerNameByDuty: {}, configuredDutyCount: 0,
     }
   }
 
-  const [todayOcc, overdueOcc, tasks, appointments, recentOcc] = await Promise.all([
+  const [todayOcc, overdueOcc, tasks, appointments, recentOcc, configuredDutyCount] = await Promise.all([
     occurrencesOn(date, { scope: { kind: 'own' }, teamMemberId: member.id }),
     overdueOccurrences({
       scope: { kind: 'own' }, teamMemberId: member.id, date, lookbackDays: OVERDUE_LOOKBACK_DAYS,
@@ -134,6 +141,7 @@ export async function loadMyWork(
     // §50: Today shows TODAY. The forward schedule lives in the Calendar.
     appointmentsOnDate(member.id, date),
     recentSettledOccurrences(member.id, date),
+    dutiesTargeting(member.id, team),
   ])
 
   const [dutiesToday, dutiesOverdue, dutiesRecent] = await Promise.all([
@@ -151,7 +159,17 @@ export async function loadMyWork(
     tasks,
     appointments,
     reviewerNameByDuty: reviewerNames([...todayOcc, ...overdueOcc, ...recentOcc], team),
+    configuredDutyCount,
   }
+}
+
+/** How many recurring duty definitions (not ended) target this person. */
+async function dutiesTargeting(memberId: string, team: OpsTeamMemberRow[]): Promise<number> {
+  const { data } = await db().from('ocg_daily_duties').select('*').eq('active', true)
+  const members = team as unknown as TargetableMember[]
+  return ((data as import('@ocg/db').OcgDailyDutyRow[] | null) ?? [])
+    .filter((duty) => resolveDutyAssignees(duty, members).some((m) => m.id === memberId))
+    .length
 }
 
 /** duty id → named reviewer's display name, so §15 can say "Awaiting Fatma". */

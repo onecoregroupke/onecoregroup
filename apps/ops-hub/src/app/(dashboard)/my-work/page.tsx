@@ -162,7 +162,7 @@ function TodayView({ data, today }: { data: MyWorkData; today: string }) {
             {overdueDuties.map((o) => (
               <div key={dutyKey(o)}>
                 <p className="mb-1 text-[11px] font-medium text-gray-400">{o.date}</p>
-                <DutyOccurrenceCard occurrence={o} />
+                <DutyOccurrenceCard occurrence={o} defaultOpen={o.date === today} />
               </div>
             ))}
             {overdueTasks.length > 0 && <AssignedTaskList tasks={overdueTasks} emptyMessage="" />}
@@ -177,7 +177,9 @@ function TodayView({ data, today }: { data: MyWorkData; today: string }) {
         count={dutiesDueToday.length}
       >
         {dutiesDueToday.length === 0 ? (
-          <Empty>No duties fall due for you today.</Empty>
+          <Empty>{data.member && data.configuredDutyCount === 0
+            ? 'Daily duties have not yet been configured.'
+            : dutiesLateToday.length > 0 ? 'Today’s duties are listed under Overdue above.' : 'No duties fall due for you today.'}</Empty>
         ) : (
           <div className="space-y-2">
             {dutiesDueToday.map((o) => <DutyOccurrenceCard key={dutyKey(o)} occurrence={o} />)}
@@ -259,7 +261,7 @@ function DutiesView({ data }: { data: MyWorkData }) {
             {data.dutiesOverdue.map((o) => (
               <div key={dutyKey(o)}>
                 <p className="mb-1 text-[11px] font-medium text-gray-400">{o.date}</p>
-                <DutyOccurrenceCard occurrence={o} />
+                <DutyOccurrenceCard occurrence={o} defaultOpen={false} />
               </div>
             ))}
           </div>
@@ -273,7 +275,9 @@ function DutiesView({ data }: { data: MyWorkData }) {
         count={data.dutiesToday.length}
       >
         {data.dutiesToday.length === 0 ? (
-          <Empty>No duties are scheduled for you on this day.</Empty>
+          <Empty>{data.member && data.configuredDutyCount === 0
+            ? 'Daily duties have not yet been configured.'
+            : 'No duties are scheduled for you on this day.'}</Empty>
         ) : (
           <div className="space-y-2">
             {data.dutiesToday.map((o) => <DutyOccurrenceCard key={dutyKey(o)} occurrence={o} />)}
@@ -318,7 +322,7 @@ function CompletedView({ data }: { data: MyWorkData }) {
             {data.dutiesRecent.map((o) => (
               <div key={dutyKey(o)}>
                 <p className="mb-1 text-[11px] font-medium text-gray-400">{o.date}</p>
-                <DutyOccurrenceCard occurrence={o} readOnly />
+                <DutyOccurrenceCard occurrence={o} readOnly defaultOpen={false} />
               </div>
             ))}
           </div>

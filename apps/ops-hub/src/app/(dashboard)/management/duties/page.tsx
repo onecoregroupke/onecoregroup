@@ -4,17 +4,16 @@ import { listTeam, memberForEmail } from '@/lib/team'
 import { listBrands } from '@/lib/brands'
 import { listDuties } from '@/lib/duties'
 import { occurrencesOn, pendingReviews } from '@/lib/dutyOccurrences'
-import { toOccurrenceDtos } from '@/lib/dutyView'
-import { dutyScope, dutyCan, describeDutyTarget } from '@/lib/dutyModel'
+import { toDefinitionDtos, toOccurrenceDtos } from '@/lib/dutyView'
+import { dutyScope, dutyCan } from '@/lib/dutyModel'
 import { actionableReviews, reviewScope } from '@/lib/reviewAuthority'
-import { describeRecurrence } from '@/lib/recurrence'
 import { db, todayInEat } from '@/lib/serverClient'
-import { DutyBuilder } from '@/components/duties/DutyBuilder'
-import { DutyRowControls } from '@/components/duties/DutyRowControls'
+import { DutyBuilder, type ChecklistDraft, type DutyDraft } from '@/components/duties/DutyBuilder'
 import { DutyOccurrenceCard } from '@/components/duties/DutyOccurrenceCard'
 import { DutyReviewQueue, type ReviewRow } from '@/components/duties/DutyReviewQueue'
+import { DutyTemplateList } from '@/components/duties/DutyTemplateList'
 import { requireSection } from '@/lib/server-auth'
-import type { OcgFormTemplateRow } from '@ocg/db'
+import type { OcgDailyDutyRow, OcgFormTemplateRow } from '@ocg/db'
 
 export const dynamic = 'force-dynamic'
 
@@ -71,6 +70,16 @@ export default async function DailyDutiesPage({
     scope.kind === 'all' ? true
       : scope.kind === 'brands' ? !!d.brand_id && scope.brandIds.includes(d.brand_id)
         : d.assignee_id === me?.id)
+
+  // The same definition view the assignee reads, wrapped with edit controls.
+  const definitions = await toDefinitionDtos(duties, new Map(team.map((m) => [m.id, m.name])))
+  const templates = duties.map((duty, index) => ({
+    definition: definitions[index]!,
+    draft: draftFromDuty(duty),
+    checklist: definitions[index]!.checklist.map((item): ChecklistDraft => ({
+      id: item.id, label: item.label, hint: item.hint, required: item.required,
+    })),
+  }))
 
   const done = items.filter((i) => i.status === 'done').length
   const outstanding = items.length - done
@@ -172,7 +181,13 @@ export default async function DailyDutiesPage({
                   </div>
                   <div className="space-y-2">
                     {list.map((o) => (
-                      <DutyOccurrenceCard key={`${o.dutyId}:${o.date}:${o.assigneeId ?? ''}`} occurrence={o} readOnly={!canEdit} />
+                      <DutyOccurrenceCard
+                        key={`${o.dutyId}:${o.date}:${o.assigneeId ?? ''}`}
+                        occurrence={o}
+                        readOnly={!canEdit}
+                        defaultOpen={false}
+                        onBehalf={canEdit && o.assigneeId !== (me?.id ?? null)}
+                      />
                     ))}
                   </div>
                 </div>
@@ -184,34 +199,50 @@ export default async function DailyDutiesPage({
 
       <section className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
         <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-ocg-gold">Duty templates</h2>
-        {duties.length === 0 ? (
-          <p className="rounded-lg bg-gray-50 p-4 text-sm text-gray-500">No duties set up yet.</p>
-        ) : (
-          <ul className="space-y-2">
-            {duties.map((d) => (
-              <li key={d.id} className="flex items-center justify-between gap-3 rounded-lg border border-gray-100 px-3 py-2 text-sm">
-                <span className="min-w-0">
-                  <span className="block truncate font-medium text-gray-800">
-                    {d.title}
-                    {!d.active && <span className="ml-2 text-xs font-normal text-gray-400">· ended</span>}
-                    {d.paused && <span className="ml-2 text-xs font-normal text-amber-600">· paused</span>}
-                  </span>
-                  <span className="block truncate text-xs text-gray-400">
-                    {describeDutyTarget(d, d.assignee_id ? memberById.get(d.assignee_id)?.name : undefined)}
-                    {' · '}{describeRecurrence(d)}
-                    {d.time_of_day ? ` · ${d.time_of_day}` : ''}
-                    {d.requires_approval ? ' · reviewed' : ''}
-                    {d.requires_checklist ? ' · checklist' : ''}
-                  </span>
-                </span>
-                {canEdit && <DutyRowControls id={d.id} paused={d.paused} />}
-              </li>
-            ))}
-          </ul>
-        )}
+        <DutyTemplateList templates={templates} lists={lists} canEdit={canEdit} />
       </section>
     </div>
   )
+}
+
+/** A stored definition as the builder's editable draft. */
+function draftFromDuty(d: OcgDailyDutyRow): DutyDraft {
+  const text = (v: unknown) => (v == null ? '' : String(v))
+  return {
+    id: d.id,
+    title: d.title,
+    description: text(d.description),
+    instructions: text(d.instructions),
+    duty_kind: d.duty_kind || 'task',
+    department: text(d.department) || 'Operations',
+    category: text(d.category),
+    location: text(d.location),
+    priority: d.priority || 'Medium',
+    target_kind: d.target_kind || 'employee',
+    assignee_id: text(d.assignee_id),
+    brand_id: text(d.brand_id),
+    target_team: text(d.target_team),
+    target_department: text(d.target_department),
+    target_role: text(d.target_role),
+    target_location: text(d.target_location),
+    frequency: d.frequency || 'daily',
+    weekdays: Array.isArray(d.weekdays) ? d.weekdays.map(Number) : [],
+    day_of_month: d.day_of_month == null ? '1' : String(d.day_of_month),
+    interval_days: d.interval_days ? String(d.interval_days) : '14',
+    time_of_day: text(d.time_of_day),
+    start_date: text(d.start_date),
+    end_date: text(d.end_date),
+    skip_holidays: d.skip_holidays === true,
+    requires_note: d.requires_note === true,
+    requires_proof: d.requires_proof === true,
+    requires_checklist: d.requires_checklist === true,
+    requires_approval: d.requires_approval === true,
+    required_form_template_id: text(d.required_form_template_id),
+    reviewer_id: text(d.reviewer_id),
+    grace_minutes: String(d.grace_minutes ?? 0),
+    escalation_minutes: String(d.escalation_minutes ?? 0),
+    reminder_minutes: String(d.reminder_minutes ?? 0),
+  }
 }
 
 function Stat({ label, value, tone = 'text-gray-900' }: { label: string; value: number; tone?: string }) {

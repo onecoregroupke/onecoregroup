@@ -29,7 +29,7 @@ const TARGET_META: Record<string, { label: string; icon: React.ElementType; hint
   brand: { label: 'Brand', icon: Tag, hint: 'Everyone assigned to this brand.' },
 }
 
-interface ChecklistDraft { id?: string; label: string; hint: string; required: boolean }
+export interface ChecklistDraft { id?: string; label: string; hint: string; required: boolean }
 
 export interface DutyDraft {
   id?: string
@@ -359,6 +359,11 @@ export function DutyBuilder({
                       onChange={(e) => setChecklist((c) => c.map((x, i) => (i === idx ? { ...x, label: e.target.value } : x)))} />
                     <input className="input hidden flex-1 sm:block" value={item.hint} placeholder="Hint (optional)"
                       onChange={(e) => setChecklist((c) => c.map((x, i) => (i === idx ? { ...x, hint: e.target.value } : x)))} />
+                    <label className="flex shrink-0 items-center gap-1 text-xs text-gray-500" title="Optional items do not block completion when a checklist is required">
+                      <input type="checkbox" checked={item.required} className="h-3.5 w-3.5 accent-[#1a1a2e]"
+                        onChange={(e) => setChecklist((c) => c.map((x, i) => (i === idx ? { ...x, required: e.target.checked } : x)))} />
+                      Required
+                    </label>
                     <button type="button" onClick={() => setChecklist((c) => c.filter((_, i) => i !== idx))}
                       className="shrink-0 rounded p-1 text-gray-300 hover:text-red-500" aria-label="Remove item">
                       <X size={14} />

@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { dutyToWorkItem, taskToWorkItem, dutyOccurrenceKey } from './myWork'
 import { buildToday, dedupeWork } from './myWorkModel'
-import type { OccurrenceDto } from '@/components/duties/DutyOccurrenceCard'
+import type { OccurrenceDto } from './dutyDetail'
 import type { OpsTaskRow } from '@ocg/db'
 
 // =============================================================================
@@ -34,6 +34,8 @@ function occurrence(over: Partial<OccurrenceDto> = {}): OccurrenceDto {
     priority: 'Medium',
     category: '',
     location: '',
+    frequency: 'Every day',
+    timeOfDay: '',
     assigneeId: MEMBER_ID,
     assigneeName: 'Allan',
     dueAt: null,

@@ -51,11 +51,56 @@ async function loadChecklistCounts(dutyIds: string[]): Promise<Map<string, numbe
   return counts
 }
 
-function scopeFilter(scope: DutyScope, duty: OcgDailyDutyRow, memberId: string | null): boolean {
+function scopeFilter(
+  scope: DutyScope,
+  duty: OcgDailyDutyRow,
+  memberId: string | null,
+  viewerMemberId: string | null | undefined,
+): boolean {
   switch (scope.kind) {
     case 'all': return true
     case 'brands': return !!duty.brand_id && scope.brandIds.includes(duty.brand_id)
-    case 'own': return memberId != null && duty.assignee_id === memberId
+    // The viewer's OWN occurrences: the targeted person must be the viewer. A
+    // duty addressed to their team or role is theirs too, and a viewer with no
+    // employee record owns nothing.
+    case 'own': return !!viewerMemberId && memberId === viewerMemberId
+  }
+}
+
+/** The ids a duty definition currently targets (active members only). */
+export async function dutyTargetIds(duty: OcgDailyDutyRow): Promise<string[]> {
+  const team = await listTeam()
+  return resolveDutyAssignees(duty, team as unknown as TargetableMember[]).map((m) => m.id)
+}
+
+function buildOccurrence(input: {
+  duty: OcgDailyDutyRow
+  date: string
+  memberId: string | null
+  person: { name: string; email: string | null } | null
+  log: OcgDailyDutyLogRow | null
+  checklistTotal: number
+  now: string
+}): DutyOccurrence {
+  const { duty, date, log } = input
+  const dueAt = duty.time_of_day ? dutyDueAt(date, duty.time_of_day, duty.timezone) : null
+  const status = log?.status ?? 'pending'
+  return {
+    duty,
+    date,
+    assignee: {
+      id: input.memberId,
+      name: input.person?.name ?? '',
+      email: input.person?.email ?? '',
+    },
+    dueAt,
+    log,
+    status,
+    overdue: isOccurrenceOverdue(dueAt, status, input.now, duty.grace_minutes),
+    onTime: log?.completed_on_time ?? null,
+    checklistDone: log?.checklist_done ?? 0,
+    checklistTotal: input.checklistTotal,
+    reviewState: log?.review_state ?? 'not_required',
   }
 }
 
@@ -103,33 +148,66 @@ export async function occurrencesOn(
 
     for (const person of people) {
       const memberId = person?.id ?? duty.assignee_id ?? null
-      if (!scopeFilter(scope, duty, memberId)) continue
-      if (scope.kind === 'own' && opts.teamMemberId && memberId !== opts.teamMemberId) continue
+      if (!scopeFilter(scope, duty, memberId, opts.teamMemberId)) continue
 
-      const log = logByKey.get(`${duty.id}:${memberId ?? ''}`) ?? null
-      const dueAt = duty.time_of_day ? dutyDueAt(date, duty.time_of_day, duty.timezone) : null
-      const status = log?.status ?? 'pending'
-
-      out.push({
+      out.push(buildOccurrence({
         duty,
         date,
-        assignee: {
-          id: memberId,
-          name: person?.name ?? '',
-          email: person?.email ?? '',
-        },
-        dueAt,
-        log,
-        status,
-        overdue: isOccurrenceOverdue(dueAt, status, now, duty.grace_minutes),
-        onTime: log?.completed_on_time ?? null,
-        checklistDone: log?.checklist_done ?? 0,
+        memberId,
+        person,
+        log: logByKey.get(`${duty.id}:${memberId ?? ''}`) ?? null,
         checklistTotal: checklistTotals.get(duty.id) ?? 0,
-        reviewState: log?.review_state ?? 'not_required',
-      })
+        now,
+      }))
     }
   }
   return out
+}
+
+/**
+ * One person's occurrence of one duty on one date — what a calendar chip or a
+ * direct link opens. Null when no such occurrence exists: the duty does not fall
+ * due for that person that day and nothing was ever recorded for them.
+ *
+ * This loads; it does not authorise. The caller decides who may see it, using
+ * the targeting facts returned alongside.
+ */
+export async function occurrenceFor(input: {
+  dutyId: string
+  date: string
+  assigneeId: string | null
+}): Promise<{ occurrence: DutyOccurrence; targetedIds: string[]; assigneeBrandIds: string[] } | null> {
+  const supabase = db()
+  const { data: dutyRow } = await supabase.from('ocg_daily_duties').select('*').eq('id', input.dutyId).maybeSingle()
+  if (!dutyRow) return null
+  const duty = dutyRow as OcgDailyDutyRow
+
+  const [team, holidays] = await Promise.all([listTeam(), loadHolidays()])
+  const targeted = resolveDutyAssignees(duty, team as unknown as TargetableMember[])
+  const targetedIds = targeted.map((m) => m.id)
+
+  const logQuery = supabase.from('ocg_daily_duty_logs').select('*')
+    .eq('duty_id', duty.id).eq('duty_date', input.date)
+  const { data: logRow } = await (input.assigneeId
+    ? logQuery.eq('assignee_id', input.assigneeId)
+    : logQuery.is('assignee_id', null)).maybeSingle()
+  const log = (logRow as OcgDailyDutyLogRow | null) ?? null
+
+  // Mirrors occurrencesOn(): a duty that targets nobody still surfaces once,
+  // against its stored assignee, so it can be seen and corrected.
+  const expected = targeted.length > 0 ? targetedIds : [duty.assignee_id ?? null]
+  const due = isDutyActiveOn(duty, input.date, holidays) && expected.includes(input.assigneeId)
+  if (!log && !due) return null
+
+  const person = team.find((m) => m.id === input.assigneeId) ?? null
+  const checklistTotal = (await loadChecklistCounts([duty.id])).get(duty.id) ?? 0
+  return {
+    occurrence: buildOccurrence({
+      duty, date: input.date, memberId: input.assigneeId, person, log, checklistTotal, now: nowIso(),
+    }),
+    targetedIds,
+    assigneeBrandIds: person?.brand_ids ?? [],
+  }
 }
 
 /** Occurrences for one person on one date — the My Tasks / morning brief feed. */
@@ -249,6 +327,22 @@ export async function completeDutyOccurrence(input: CompleteDutyInput): Promise<
   const items = await listChecklistItems(duty.id)
   const checklistTotal = items.length
   const checklistDone = items.filter((i) => input.checklist?.[i.id]?.checked).length
+  const requiredItems = items.filter((i) => i.required !== false)
+  const requiredDone = requiredItems.filter((i) => input.checklist?.[i.id]?.checked).length
+
+  const existingQuery = supabase
+    .from('ocg_daily_duty_logs').select('id, review_state, form_submission_id')
+    .eq('duty_id', duty.id).eq('duty_date', date)
+  const scopedExistingQuery = input.assignee_id
+    ? existingQuery.eq('assignee_id', input.assignee_id)
+    : existingQuery.is('assignee_id', null)
+  const { data: existingRow } = await scopedExistingQuery.maybeSingle()
+  const existing = existingRow as { id: string; review_state: string | null; form_submission_id: string | null } | null
+  // A caller that does not mention the form (a checklist tick, say) must not
+  // detach one already linked to this occurrence.
+  const formSubmissionId = input.form_submission_id !== undefined
+    ? input.form_submission_id
+    : (existing?.form_submission_id ?? null)
 
   const problems = validateDutyCompletion(duty, {
     status: input.status,
@@ -256,7 +350,9 @@ export async function completeDutyOccurrence(input: CompleteDutyInput): Promise<
     attachment_count: input.attachment_count,
     checklist_done: checklistDone,
     checklist_total: checklistTotal,
-    form_submission_id: input.form_submission_id,
+    checklist_required_done: requiredDone,
+    checklist_required_total: requiredItems.length,
+    form_submission_id: formSubmissionId,
   })
   if (problems.length > 0) throw new DutyCompletionError(problems)
 
@@ -277,18 +373,14 @@ export async function completeDutyOccurrence(input: CompleteDutyInput): Promise<
       : null,
     checklist_done: checklistDone,
     checklist_total: checklistTotal,
-    review_state: initialReviewState(duty, input.status),
-    form_submission_id: input.form_submission_id ?? null,
+    // Saving progress on work a reviewer sent back keeps it "reopened", so the
+    // reviewer's correction stays in front of the employee until they resubmit.
+    review_state: input.status === 'pending' && existing?.review_state === 'reopened'
+      ? 'reopened'
+      : initialReviewState(duty, input.status),
+    form_submission_id: formSubmissionId,
     attachment_count: input.attachment_count ?? 0,
   }
-
-  const existingQuery = supabase
-    .from('ocg_daily_duty_logs').select('id')
-    .eq('duty_id', duty.id).eq('duty_date', date)
-  const scopedExistingQuery = input.assignee_id
-    ? existingQuery.eq('assignee_id', input.assignee_id)
-    : existingQuery.is('assignee_id', null)
-  const { data: existingRow } = await scopedExistingQuery.maybeSingle()
 
   let log: OcgDailyDutyLogRow
   if (existingRow) {

@@ -134,6 +134,9 @@ export interface DutySubmission {
   attachment_count?: number
   checklist_done?: number
   checklist_total?: number
+  /** Required items only — when given, optional items do not gate completion. */
+  checklist_required_done?: number
+  checklist_required_total?: number
   form_submission_id?: string | null
 }
 
@@ -156,10 +159,19 @@ export function validateDutyCompletion(req: DutyRequirements, sub: DutySubmissio
     problems.push('Evidence (at least one attachment) is required for this duty.')
   }
   if (req.requires_checklist) {
-    const total = sub.checklist_total ?? 0
-    const done = sub.checklist_done ?? 0
-    if (total === 0) problems.push('This duty has no checklist items configured — ask a manager to add them.')
-    else if (done < total) problems.push(`All ${total} checklist items must be ticked (${done} done).`)
+    // Optional items never block completion. The caller passes the REQUIRED
+    // counts when it has them; a checklist with no required items at all still
+    // has to be worked through as a whole.
+    const gated = sub.checklist_required_total != null && sub.checklist_required_total > 0
+    const total = gated ? sub.checklist_required_total! : (sub.checklist_total ?? 0)
+    const done = gated ? (sub.checklist_required_done ?? 0) : (sub.checklist_done ?? 0)
+    if ((sub.checklist_total ?? 0) === 0) problems.push('This duty has no checklist items configured — ask a manager to add them.')
+    else if (done < total) {
+      const optional = gated ? (sub.checklist_total ?? 0) - total : 0
+      problems.push(optional > 0
+        ? `All ${total} required checklist items must be ticked (${done} done); the ${optional} optional ${optional === 1 ? 'item is' : 'items are'} up to you.`
+        : `All ${total} checklist items must be ticked (${done} done).`)
+    }
   }
   if (req.required_form_template_id && !sub.form_submission_id) {
     problems.push('The required form must be submitted before this duty can be completed.')
@@ -303,4 +315,81 @@ export function dutyScope(actor: DutyActor): DutyScope {
   if (!dutyCan(actor, 'view_team')) return { kind: 'own' }
   const scoped = allowedBrands(actor.brandAccess, 'duties_all') ?? allowedBrands(actor.brandAccess, 'duties')
   return scoped === null ? { kind: 'all' } : { kind: 'brands', brandIds: scoped }
+}
+
+// ─── Access to one duty / one occurrence ────────────────────────────────────
+//
+// An employee sees and works THEIR OWN duty in full — every checklist item and
+// hint — without any management grant. That is the whole of it: seeing your own
+// checklist never lets you edit the definition, change its recurrence, reassign
+// it, or read anybody else's duty. Oversight still comes only from the duty
+// grants (or the team-calendar grant that already shows a person's duty chip).
+
+export interface DutyAccessInput {
+  /** Everyone the duty definition targets today. */
+  targetedIds: string[]
+  dutyBrandId: string | null
+}
+
+export interface OccurrenceAccessInput extends DutyAccessInput {
+  /** The person whose occurrence this is. */
+  assigneeId: string | null
+  /** A result row already exists for this person on this date. */
+  hasOwnLog?: boolean
+  /** That person's brands — the team calendar is scoped by people's brands. */
+  assigneeBrandIds?: string[]
+}
+
+export type DutyViewer = DutyActor & {
+  /** The viewer's team-calendar scope, when the request comes from the calendar. */
+  calendarScope?: DutyScope
+}
+
+function inBrandScope(scope: DutyScope, brandId: string | null): boolean {
+  if (scope.kind === 'all') return true
+  return scope.kind === 'brands' && !!brandId && scope.brandIds.includes(brandId)
+}
+
+/** May this viewer read a duty's definition, checklist included? */
+export function canViewDutyDefinition(viewer: DutyActor, input: DutyAccessInput): boolean {
+  const me = viewer.teamMemberId ?? null
+  if (me && input.targetedIds.includes(me)) return true
+  return inBrandScope(dutyScope(viewer), input.dutyBrandId)
+}
+
+/**
+ * May this viewer see one occurrence — the definition plus that date's ticks,
+ * note and review?
+ *
+ * Opening a calendar chip never reveals a duty the viewer could not already see
+ * on the calendar: the team-calendar route requires both the duty's brand and
+ * the person's brand to be in scope, exactly as the feed does.
+ */
+export function canViewDutyOccurrence(viewer: DutyViewer, input: OccurrenceAccessInput): boolean {
+  const me = viewer.teamMemberId ?? null
+  if (me && input.assigneeId === me && (input.targetedIds.includes(me) || input.hasOwnLog === true)) return true
+  if (inBrandScope(dutyScope(viewer), input.dutyBrandId)) return true
+  const calendar = viewer.calendarScope
+  if (!calendar || calendar.kind === 'own') return false
+  if (calendar.kind === 'all') return true
+  return inBrandScope(calendar, input.dutyBrandId)
+    && (input.assigneeBrandIds ?? []).some((brandId) => calendar.brandIds.includes(brandId))
+}
+
+/**
+ * May this viewer WORK the occurrence — tick items, write the note, mark it done
+ * or not done?
+ *
+ * The targeted person always may. Anyone else needs duty edit rights within the
+ * duty's brand, and their completion is recorded as on-behalf. Nobody works an
+ * occurrence of a duty that does not target its person.
+ */
+export function canWorkDutyOccurrence(viewer: DutyActor, input: OccurrenceAccessInput): { allowed: boolean; onBehalf: boolean } {
+  const me = viewer.teamMemberId ?? null
+  if (me && input.assigneeId === me && input.targetedIds.includes(me)) return { allowed: true, onBehalf: false }
+  if (input.assigneeId && !input.targetedIds.includes(input.assigneeId)) return { allowed: false, onBehalf: false }
+  if (!dutyCan(viewer, 'edit')) return { allowed: false, onBehalf: false }
+  const brands = dutyAssignableBrands(viewer)
+  const allowed = brands === null || (!!input.dutyBrandId && brands.includes(input.dutyBrandId))
+  return { allowed, onBehalf: allowed }
 }

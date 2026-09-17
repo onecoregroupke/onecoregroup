@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight, Plus, Loader2, CalendarDays, ListTodo, CalendarPlus, X, ExternalLink, Clock, MapPin } from 'lucide-react'
 import { api } from '@/lib/apiClient'
 import { CALENDAR_SCOPE_LABELS, type CalendarScope } from '@/lib/calendarScope'
+import type { OccurrenceDto } from '@/lib/dutyDetail'
+import { DutyWorkPanel } from '@/components/duties/DutyDetail'
 import { EventComposer } from './EventComposer'
 import { TaskComposer, type ComposerProject, type ComposerPerson } from './TaskComposer'
 
@@ -20,6 +22,8 @@ export interface FeedItem {
   assigneeId: string | null
   assigneeName: string
   href: string
+  /** Set on duty and inspection occurrences — the definition they come from. */
+  dutyId?: string
   canMove: boolean
   meta: Record<string, unknown>
 }
@@ -128,6 +132,8 @@ export function CalendarBoard({
 
   useEffect(() => { void load() }, [load])
 
+  // The drawer follows the freshest copy of the selected item after a reload.
+  const selectedItem = selected ? items.find((item) => item.id === selected.id) ?? selected : null
   const personById = useMemo(() => new Map(filterPeople.map((person) => [person.id, person])), [filterPeople])
   const filteredItems = useMemo(() => items.filter((item) => {
     if (!types.includes(item.type)) return false
@@ -258,7 +264,9 @@ export function CalendarBoard({
           onCreated={() => { setComposing(null); void load() }}
         />
       )}
-      {selected && <ItemDrawer item={selected} brands={brands} onClose={() => setSelected(null)} />}
+      {selectedItem && (selectedItem.type === 'duty' || selectedItem.type === 'inspection') && selectedItem.dutyId
+        ? <DutyDrawer key={selectedItem.id} item={selectedItem} onClose={() => setSelected(null)} onChanged={() => void load()} />
+        : selectedItem && <ItemDrawer item={selectedItem} brands={brands} onClose={() => setSelected(null)} />}
     </div>
   )
 }
@@ -508,11 +516,20 @@ function rangeOf(item: FeedItem): string {
   return item.endsAt ? `${t(item.startsAt)}–${t(item.endsAt)}` : t(item.startsAt)
 }
 
+/** A duty's checklist progress for its date, or null for anything without one. */
+function checklistOf(item: FeedItem): { done: number; total: number } | null {
+  if (item.type !== 'duty' && item.type !== 'inspection') return null
+  const total = Number(item.meta?.['checklistTotal'] ?? 0)
+  if (!total) return null
+  return { done: Math.min(Number(item.meta?.['checklistDone'] ?? 0), total), total }
+}
+
 function Chip({ item, compact = false, onSelect }: { item: FeedItem; compact?: boolean; onSelect: (item: FeedItem) => void }) {
   const s = styleFor(item.type)
   const done = item.status === 'done' || item.status === 'Completed'
   const overdue = item.meta?.['overdue'] === true
   const due = item.meta?.['dueDate']
+  const checklist = checklistOf(item)
   // A scheduled task shows where it sits AND when it is actually due, so
   // "scheduled Wednesday, due Friday" is legible from the calendar itself.
   const title = [
@@ -520,15 +537,34 @@ function Chip({ item, compact = false, onSelect }: { item: FeedItem; compact?: b
     item.assigneeName || '',
     rangeOf(item),
     typeof due === 'string' && due && due !== item.date ? `due ${due}` : '',
+    checklist ? `${checklist.done} / ${checklist.total} completed` : '',
   ].filter(Boolean).join(' · ')
+
+  // A duty chip stays compact — the title and its count. The breakdown lives in
+  // the drawer it opens, never inside a calendar cell.
+  if (checklist && !compact) {
+    return (
+      <button type="button" onClick={() => onSelect(item)} title={title}
+        className={`block w-full rounded px-1.5 py-1 text-left text-[11px] leading-tight transition-colors hover:brightness-95 ${s.chip} ${
+          done ? 'opacity-60' : ''} ${overdue ? 'ring-1 ring-red-300' : ''}`}>
+        <span className="flex items-center gap-1">
+          <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${s.dot}`} />
+          {item.startsAt && <span className="shrink-0 font-medium tabular-nums">{timeOf(item)}</span>}
+          <span className={`truncate font-medium ${done ? 'line-through' : ''}`}>{item.title}</span>
+        </span>
+        <span className="mt-0.5 block pl-2.5 text-[10px] tabular-nums opacity-80">{checklist.done} / {checklist.total} completed</span>
+      </button>
+    )
+  }
 
   return (
     <button type="button" onClick={() => onSelect(item)} title={title}
-      className={`flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] leading-tight transition-colors hover:brightness-95 ${s.chip} ${
+      className={`flex w-full items-center gap-1 rounded px-1.5 py-0.5 text-left text-[11px] leading-tight transition-colors hover:brightness-95 ${s.chip} ${
         done ? 'opacity-50' : ''} ${overdue ? 'ring-1 ring-red-300' : ''}`}>
       <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${s.dot}`} />
       {!compact && item.startsAt && <span className="shrink-0 font-medium tabular-nums">{timeOf(item)}</span>}
-      <span className={`truncate ${done ? 'line-through' : ''}`}>{item.title}</span>
+      <span className={`min-w-0 flex-1 truncate ${done ? 'line-through' : ''}`}>{item.title}</span>
+      {checklist && <span className="shrink-0 text-[10px] tabular-nums opacity-80">{checklist.done}/{checklist.total}</span>}
     </button>
   )
 }
@@ -539,6 +575,7 @@ function Row({ item, onSelect }: { item: FeedItem; onSelect: (item: FeedItem) =>
   const range = rangeOf(item)
   const due = item.meta?.['dueDate']
   const location = item.meta?.['location']
+  const checklist = checklistOf(item)
   return (
     <button type="button" onClick={() => onSelect(item)}
       className="flex w-full items-center gap-3 rounded-lg border border-gray-100 px-3 py-2 text-left transition-colors hover:border-ocg-gold/40">
@@ -549,6 +586,7 @@ function Row({ item, onSelect }: { item: FeedItem; onSelect: (item: FeedItem) =>
         <span className={`block truncate text-sm ${done ? 'text-gray-400 line-through' : 'text-gray-800'}`}>{item.title}</span>
         <span className="block truncate text-xs text-gray-400">
           {s.label}{item.assigneeName ? ` · ${item.assigneeName}` : ''}
+          {checklist ? ` · ${checklist.done} / ${checklist.total} completed` : ''}
           {typeof location === 'string' && location ? ` · ${location}` : ''}
           {typeof due === 'string' && due && due !== item.date ? ` · due ${due}` : ''}
           {item.meta?.['overdue'] === true ? ' · overdue' : ''}
@@ -566,6 +604,91 @@ function FilterSelect({ label, value, onChange, options }: {
   options: Array<{ value: string; label: string }>
 }) {
   return <label><span className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-gray-400">{label}</span><select className="input" value={value} onChange={(event) => onChange(event.target.value)}><option value="">All {label.toLowerCase()}</option>{options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+}
+
+/**
+ * A duty on the calendar opens the day's actual work: the same duty detail My
+ * Work shows — every checklist item and hint, the note, the actions — for THIS
+ * occurrence's date and person. What may be seen and worked is decided by the
+ * server; this only renders the answer.
+ */
+function DutyDrawer({ item, onClose, onChanged }: { item: FeedItem; onClose: () => void; onChanged: () => void }) {
+  const [state, setState] = useState<{
+    loading: boolean
+    error: string
+    occurrence: OccurrenceDto | null
+    canWork: boolean
+    onBehalf: boolean
+  }>({ loading: true, error: '', occurrence: null, canWork: false, onBehalf: false })
+
+  const fetchDetail = useCallback(async () => {
+    const params = new URLSearchParams({ duty_id: item.dutyId ?? '', date: item.date })
+    params.set('assignee_id', item.assigneeId ?? '')
+    const { ok, data } = await api<{ occurrence?: OccurrenceDto; canWork?: boolean; onBehalf?: boolean; error?: string }>(
+      `/api/duties/occurrence?${params}`,
+    )
+    if (!ok || !data?.occurrence) {
+      setState((s) => ({ ...s, loading: false, error: data?.error ?? 'This duty could not be loaded.' }))
+      return
+    }
+    setState({ loading: false, error: '', occurrence: data.occurrence, canWork: !!data.canWork, onBehalf: !!data.onBehalf })
+  }, [item.dutyId, item.date, item.assigneeId])
+
+  useEffect(() => { void fetchDetail() }, [fetchDetail])
+
+  useEffect(() => {
+    const close = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose() }
+    document.addEventListener('keydown', close)
+    return () => document.removeEventListener('keydown', close)
+  }, [onClose])
+
+  const style = styleFor(item.type)
+  const o = state.occurrence
+  const dateLabel = parse(item.date).toLocaleDateString('en-KE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/20" onClick={onClose}>
+      <aside role="dialog" aria-modal="true" aria-label="Duty details" className="absolute inset-y-0 right-0 flex max-h-[100dvh] w-full max-w-lg flex-col overflow-hidden bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
+        <div className="flex shrink-0 items-start justify-between gap-3 border-b border-gray-100 px-5 py-4">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase tracking-wider text-ocg-gold">{style.label} · {dateLabel}</p>
+            <h2 className="mt-1 text-lg font-semibold leading-snug text-gray-900">{item.title}</h2>
+            <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-500">
+              {item.assigneeName && <span>{item.assigneeName}</span>}
+              <span className={`rounded-full border px-2 py-0.5 font-medium capitalize ${style.chip}`}>{(o?.status ?? item.status) === 'skipped' ? 'not done' : (o?.status ?? item.status)}</span>
+              {o && o.checklist.length > 0 && <span className="font-medium text-gray-600">{o.checklistDone} / {o.checklist.length} completed</span>}
+            </p>
+          </div>
+          <button onClick={onClose} aria-label="Close details" className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"><X size={19} /></button>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto p-5">
+          {state.loading && <p className="flex items-center gap-2 text-sm text-gray-500"><Loader2 size={15} className="animate-spin" /> Loading the duty…</p>}
+          {!state.loading && state.error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-600">{state.error}</p>}
+          {o && (
+            <DutyWorkPanel
+              occurrence={o}
+              readOnly={!state.canWork}
+              onBehalf={state.onBehalf}
+              onChanged={async () => { await fetchDetail(); onChanged() }}
+            />
+          )}
+          {o && !state.canWork && (
+            <p className="mt-4 rounded-lg bg-gray-50 p-3 text-xs text-gray-500">Read-only: only {o.assigneeName || 'the assignee'} or a duty manager can record this occurrence.</p>
+          )}
+        </div>
+
+        {o && (
+          <div className="shrink-0 border-t border-gray-100 p-4">
+            <a href={state.canWork && !state.onBehalf ? `/my-work?tab=duties&date=${item.date}` : `/management/duties?date=${item.date}`}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-gray-200 px-4 py-2.5 text-sm font-medium text-gray-700 hover:border-ocg-gold/40">
+              {state.canWork && !state.onBehalf ? 'Open this day in My Work' : 'Open this day in Duty Management'} <ExternalLink size={14} />
+            </a>
+          </div>
+        )}
+      </aside>
+    </div>
+  )
 }
 
 function ItemDrawer({ item, brands, onClose }: { item: FeedItem; brands: Array<{ id: string; label: string }>; onClose: () => void }) {

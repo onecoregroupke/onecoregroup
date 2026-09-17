@@ -3,7 +3,8 @@ import assert from 'node:assert/strict'
 import {
   resolveDutyAssignees, isDutyActiveOn, validateDutyCompletion, initialReviewState,
   wasCompletedOnTime, dutyDueAt, isOccurrenceOverdue, dutyCan, canAssignDutyInBrand,
-  dutyScope, type TargetableMember,
+  dutyScope, canViewDutyDefinition, canViewDutyOccurrence, canWorkDutyOccurrence,
+  type TargetableMember,
 } from './dutyModel'
 
 const BRAND_GLITZ = '11111111-1111-1111-1111-111111111111'
@@ -245,4 +246,96 @@ test('view_all requires an unscoped grant; a scoped manager gets brand scope', (
 test('a reviewer can review without being able to edit duty definitions', () => {
   assert.equal(dutyCan(reviewer, 'review'), true)
   assert.equal(dutyCan(reviewer, 'edit'), false)
+})
+
+// ─── Access to one duty / one occurrence ────────────────────────────────────
+
+const ann = { permissions: {}, brandAccess: {}, teamMemberId: 'm1' }
+const colleague = { permissions: {}, brandAccess: {}, teamMemberId: 'm3' }
+const annsDuty = { targetedIds: ['m1'], dutyBrandId: BRAND_GLITZ }
+const annsDay = { ...annsDuty, assigneeId: 'm1', assigneeBrandIds: [BRAND_GLITZ] }
+
+test('an employee may read the full definition of a duty that targets them', () => {
+  assert.equal(canViewDutyDefinition(ann, annsDuty), true)
+})
+
+test('an employee may not read another employee’s duty definition', () => {
+  assert.equal(canViewDutyDefinition(colleague, annsDuty), false)
+  // A missing employee record is scoped to nothing, never to everything.
+  assert.equal(canViewDutyDefinition({ permissions: {}, brandAccess: {}, teamMemberId: null }, annsDuty), false)
+})
+
+test('an employee sees and works their own occurrence without any management grant', () => {
+  assert.equal(canViewDutyOccurrence(ann, annsDay), true)
+  assert.deepEqual(canWorkDutyOccurrence(ann, annsDay), { allowed: true, onBehalf: false })
+})
+
+test('an employee cannot see or work a colleague’s occurrence by naming it', () => {
+  assert.equal(canViewDutyOccurrence(colleague, annsDay), false)
+  assert.deepEqual(canWorkDutyOccurrence(colleague, annsDay), { allowed: false, onBehalf: false })
+  // Claiming to be the assignee of a duty that does not target you does not work either.
+  assert.deepEqual(canWorkDutyOccurrence(colleague, { ...annsDuty, assigneeId: 'm3' }), { allowed: false, onBehalf: false })
+  assert.equal(canViewDutyOccurrence(colleague, { ...annsDuty, assigneeId: 'm3' }), false)
+})
+
+test('a past occurrence the employee actually recorded stays readable after reassignment', () => {
+  const reassigned = { targetedIds: ['m2'], dutyBrandId: BRAND_GLITZ, assigneeId: 'm1' }
+  assert.equal(canViewDutyOccurrence(ann, { ...reassigned, hasOwnLog: true }), true)
+  assert.equal(canViewDutyOccurrence(ann, reassigned), false)
+  assert.deepEqual(canWorkDutyOccurrence(ann, { ...reassigned, hasOwnLog: true }), { allowed: false, onBehalf: false })
+})
+
+test('a brand-scoped duty manager sees and works occurrences in their brand only, on behalf', () => {
+  const mgr = { ...manager, teamMemberId: 'm2' }
+  assert.equal(canViewDutyOccurrence(mgr, annsDay), true)
+  assert.deepEqual(canWorkDutyOccurrence(mgr, annsDay), { allowed: true, onBehalf: true })
+  const nptDay = { ...annsDay, dutyBrandId: BRAND_NPT }
+  assert.equal(canViewDutyOccurrence(mgr, nptDay), false)
+  assert.deepEqual(canWorkDutyOccurrence(mgr, nptDay), { allowed: false, onBehalf: false })
+})
+
+test('a reviewer can see team duties but cannot work them for someone else', () => {
+  const rev = { permissions: { duties_all: 'view' as const }, brandAccess: {}, teamMemberId: 'm2' }
+  assert.equal(canViewDutyOccurrence(rev, annsDay), true)
+  assert.deepEqual(canWorkDutyOccurrence(rev, annsDay), { allowed: false, onBehalf: false })
+})
+
+test('the team calendar opens a duty chip only where the feed already showed it', () => {
+  const calendarViewer = { permissions: {}, brandAccess: {}, teamMemberId: 'm2', calendarScope: { kind: 'brands' as const, brandIds: [BRAND_GLITZ] } }
+  assert.equal(canViewDutyOccurrence(calendarViewer, annsDay), true)
+  // Duty in scope but the person is not in a managed brand → the chip was never shown.
+  assert.equal(canViewDutyOccurrence(calendarViewer, { ...annsDay, assigneeBrandIds: [BRAND_NPT] }), false)
+  assert.equal(canViewDutyOccurrence({ ...calendarViewer, calendarScope: { kind: 'own' as const } }, annsDay), false)
+  // Seeing a chip never grants working it.
+  assert.deepEqual(canWorkDutyOccurrence(calendarViewer, annsDay), { allowed: false, onBehalf: false })
+})
+
+test('the founding admin sees and works everything, recorded on behalf', () => {
+  const founder = { permissions: null, brandAccess: null, teamMemberId: 'm9' }
+  assert.equal(canViewDutyOccurrence(founder, annsDay), true)
+  assert.deepEqual(canWorkDutyOccurrence(founder, annsDay), { allowed: true, onBehalf: true })
+})
+
+// ─── Optional checklist items ───────────────────────────────────────────────
+
+test('optional checklist items never block completion', () => {
+  const p = validateDutyCompletion({ requires_checklist: true }, {
+    status: 'done', checklist_done: 5, checklist_total: 6, checklist_required_done: 5, checklist_required_total: 5,
+  })
+  assert.deepEqual(p, [])
+})
+
+test('a missing REQUIRED item still blocks, and the message separates optional ones', () => {
+  const p = validateDutyCompletion({ requires_checklist: true }, {
+    status: 'done', checklist_done: 4, checklist_total: 6, checklist_required_done: 3, checklist_required_total: 5,
+  })
+  assert.equal(p.length, 1)
+  assert.match(p[0]!, /All 5 required checklist items must be ticked \(3 done\); the 1 optional item is up to you/)
+})
+
+test('a checklist made only of optional items must still be worked through', () => {
+  const p = validateDutyCompletion({ requires_checklist: true }, {
+    status: 'done', checklist_done: 1, checklist_total: 2, checklist_required_done: 0, checklist_required_total: 0,
+  })
+  assert.match(p[0]!, /All 2 checklist items/)
 })
