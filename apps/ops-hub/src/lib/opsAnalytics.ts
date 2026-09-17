@@ -4,6 +4,7 @@ import { listRuns } from './manufacturing'
 import { periodBalances, scopedBrandIds, type PeriodBalance } from './stockCards'
 import { occurrencesOn } from './dutyOccurrences'
 import type { DutyScope } from './dutyModel'
+import { interpretStoredAttendance, type StoredAttendanceLike } from './attendanceModel'
 import type { OpsTaskRow, InventoryItemRow, ProductionRunRow } from '@ocg/db'
 
 // =============================================================================
@@ -271,7 +272,7 @@ export interface DutyAnalytics {
  *
  * Bounded to 62 days so a wide filter cannot walk the whole history.
  */
-export async function dutyAnalytics(scope: DutyScope, win: Window): Promise<DutyAnalytics> {
+export async function dutyAnalytics(scope: DutyScope, win: Window, teamMemberId: string | null = null): Promise<DutyAnalytics> {
   const days: string[] = []
   const cur = new Date(`${win.from}T00:00:00Z`)
   const end = new Date(`${win.to}T00:00:00Z`).getTime()
@@ -280,7 +281,8 @@ export async function dutyAnalytics(scope: DutyScope, win: Window): Promise<Duty
     cur.setUTCDate(cur.getUTCDate() + 1)
   }
 
-  const all = (await Promise.all(days.map((d) => occurrencesOn(d, { scope })))).flat()
+  // An 'own' scope means the viewer's own occurrences, so the viewer must be named.
+  const all = (await Promise.all(days.map((d) => occurrencesOn(d, { scope, teamMemberId })))).flat()
 
   const byPersonMap = new Map<string, { name: string; total: number; done: number }>()
   for (const o of all) {
@@ -318,17 +320,23 @@ export interface AttendanceAnalytics {
   daysCovered: number
   withCheckIn: number
   missingCheckOut: number
+  /** Close-out recorded, arrival missing — hours wait for a manual arrival time. */
+  missingCheckIn: number
   averageHours: number | null
-  byPerson: Array<{ name: string; days: number; averageHours: number | null; missingCheckOut: number }>
+  byPerson: Array<{ name: string; days: number; averageHours: number | null; missingCheckOut: number; missingCheckIn: number }>
 }
 
 export async function attendanceAnalytics(win: Window): Promise<AttendanceAnalytics> {
   const { data } = await db().from('ops_attendance_records').select('*')
     .gte('attendance_date', win.from).lte('attendance_date', win.to).limit(5000)
-  const rows = (data as Array<{
+  // Read through the lone close-out rule, so a single evening punch counts as a
+  // missing ARRIVAL rather than a missing check-out (the stored rows are unchanged).
+  const rows = ((data as Array<StoredAttendanceLike & {
     employee_name: string; employee_email: string; attendance_date: string
-    check_in_at: string | null; check_out_at: string | null
-  }> | null) ?? []
+  }> | null) ?? []).map((row) => {
+    const reading = interpretStoredAttendance(row)
+    return { ...row, check_in_at: reading.checkIn, check_out_at: reading.checkOut }
+  })
 
   const hoursOf = (r: { check_in_at: string | null; check_out_at: string | null }) => {
     if (!r.check_in_at || !r.check_out_at) return null
@@ -336,14 +344,15 @@ export async function attendanceAnalytics(win: Window): Promise<AttendanceAnalyt
     return Number.isFinite(h) && h >= 0 ? h : null
   }
 
-  const byPersonMap = new Map<string, { name: string; days: number; hours: number[]; missingCheckOut: number }>()
+  const byPersonMap = new Map<string, { name: string; days: number; hours: number[]; missingCheckOut: number; missingCheckIn: number }>()
   for (const r of rows) {
     const name = r.employee_name || r.employee_email || 'Unknown'
-    const row = byPersonMap.get(name) ?? { name, days: 0, hours: [], missingCheckOut: 0 }
+    const row = byPersonMap.get(name) ?? { name, days: 0, hours: [], missingCheckOut: 0, missingCheckIn: 0 }
     row.days += 1
     const h = hoursOf(r)
     if (h !== null) row.hours.push(h)
     if (r.check_in_at && !r.check_out_at) row.missingCheckOut += 1
+    if (!r.check_in_at && r.check_out_at) row.missingCheckIn += 1
     byPersonMap.set(name, row)
   }
 
@@ -356,9 +365,10 @@ export async function attendanceAnalytics(win: Window): Promise<AttendanceAnalyt
     daysCovered: new Set(rows.map((r) => r.attendance_date)).size,
     withCheckIn: rows.filter((r) => !!r.check_in_at).length,
     missingCheckOut: rows.filter((r) => r.check_in_at && !r.check_out_at).length,
+    missingCheckIn: rows.filter((r) => !r.check_in_at && r.check_out_at).length,
     averageHours: mean(allHours),
     byPerson: [...byPersonMap.values()]
-      .map((p) => ({ name: p.name, days: p.days, averageHours: mean(p.hours), missingCheckOut: p.missingCheckOut }))
+      .map((p) => ({ name: p.name, days: p.days, averageHours: mean(p.hours), missingCheckOut: p.missingCheckOut, missingCheckIn: p.missingCheckIn }))
       .sort((a, b) => b.days - a.days),
   }
 }

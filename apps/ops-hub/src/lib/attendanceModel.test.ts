@@ -4,6 +4,7 @@ import {
   effectiveSchedule, isWorkday, collapsePunches, calculateAttendance,
   attendanceExceptions, summariseAttendance,
   reconcileAttendanceEvidence, effectiveOpenCheckoutAt, verifiedOvertimeMinutes,
+  interpretDayEvidence, interpretStoredAttendance, storedPunchAt, nairobiClock,
   type WorkSchedule, type AttendanceRecordLike,
 } from './attendanceModel'
 
@@ -81,6 +82,14 @@ test('workdays come from the effective schedule', () => {
   assert.equal(isWorkday(null, MON), false)
 })
 
+test('a schedule with no workdays listed restricts no day, so hours are still calculated', () => {
+  const unrestricted = { ...standard, workdays: [] }
+  assert.equal(isWorkday(unrestricted, SAT), true)
+  const c = calculateAttendance({ dateISO: SAT, schedule: unrestricted, checkIn: at('05:00', SAT), checkOut: at('14:00', SAT) })
+  assert.equal(c.status, 'present')
+  assert.equal(c.actualMinutes, 480)
+})
+
 // ─── Punch collapsing (§9) ──────────────────────────────────────────────────
 
 test('a double-tap within the dedupe window collapses to one event', () => {
@@ -104,6 +113,130 @@ test('punches out of order are sorted before collapsing', () => {
   const r = collapsePunches([{ at: at('14:00') }, { at: at('05:00') }])
   assert.equal(r.checkIn, at('05:00'))
   assert.equal(r.checkOut, at('14:00'))
+})
+
+// ─── The lone close-out punch ───────────────────────────────────────────────
+
+const eat = (hhmm: string, date = MON) => new Date(`${date}T${hhmm}:00+03:00`).toISOString()
+const bio = (hhmm: string, direction: 'in' | 'out' = 'in') =>
+  ({ occurred_at: eat(hhmm), direction, source: 'biometric' as const })
+
+test('the Nairobi wall clock is read at UTC+3', () => {
+  assert.equal(nairobiClock('2026-09-04T14:22:00+00:00'), '17:22')
+  assert.equal(nairobiClock('not-a-date'), '')
+})
+
+test('a lone punch at or after 17:00 is the close-out, never an arrival', () => {
+  const r = interpretDayEvidence([bio('17:14')])
+  assert.equal(r.checkIn, null)
+  assert.equal(r.checkOut, eat('17:14'))
+  assert.equal(r.lonePunchCloseout, true)
+  assert.equal(r.checkInMissing, true)
+  // No arrival → the day cannot claim hours.
+  const calc = calculateAttendance({ dateISO: MON, schedule: standard, checkIn: r.checkIn, checkOut: r.checkOut })
+  assert.equal(calc.status, 'incomplete')
+  assert.equal(calc.actualMinutes, 0)
+})
+
+test('17:00 exactly is already the close-out; 16:59 is still an arrival', () => {
+  assert.equal(interpretDayEvidence([bio('17:00')]).lonePunchCloseout, true)
+  const early = interpretDayEvidence([bio('16:59')])
+  assert.equal(early.checkIn, eat('16:59'))
+  assert.equal(early.checkOut, null)
+  assert.equal(early.checkOutMissing, true)
+})
+
+test('a lone morning punch keeps behaving as an arrival with checkout missing', () => {
+  const r = interpretDayEvidence([bio('07:52')])
+  assert.equal(r.checkIn, eat('07:52'))
+  assert.equal(r.checkOut, null)
+  assert.equal(r.lonePunchCloseout, false)
+})
+
+test('the stored direction of a device punch is not trusted — order decides', () => {
+  // The importer wrote this lone evening punch as IN.
+  const r = interpretDayEvidence([bio('18:05', 'in')])
+  assert.equal(r.checkOut, eat('18:05'))
+  assert.equal(r.checkInSource, null)
+  assert.equal(r.checkOutSource, 'biometric')
+})
+
+test('two device punches are still first IN, last OUT', () => {
+  const r = interpretDayEvidence([bio('17:40'), bio('08:02')])
+  assert.equal(r.checkIn, eat('08:02'))
+  assert.equal(r.checkOut, eat('17:40'))
+  assert.equal(r.lonePunchCloseout, false)
+})
+
+test('an evening double-tap collapses to one close-out punch', () => {
+  const r = interpretDayEvidence([bio('17:14'), bio('17:16', 'out')])
+  assert.equal(r.checkIn, null)
+  assert.equal(r.lonePunchCloseout, true)
+})
+
+test('a manually entered arrival completes the day and hours are calculated', () => {
+  const r = interpretDayEvidence([
+    bio('17:14'),
+    { occurred_at: eat('08:00'), direction: 'in', source: 'reviewer_manual' },
+  ])
+  assert.equal(r.checkIn, eat('08:00'))
+  assert.equal(r.checkInSource, 'reviewer_manual')
+  assert.equal(r.checkOut, eat('17:14'))
+  assert.equal(r.checkInMissing, false)
+  const calc = calculateAttendance({ dateISO: MON, schedule: standard, checkIn: r.checkIn, checkOut: r.checkOut })
+  assert.equal(calc.actualMinutes, 494)   // 9h14m minus the 1h break
+})
+
+test('a self-clock arrival pairs with the evening punch as its close-out', () => {
+  const r = interpretDayEvidence([
+    { occurred_at: eat('08:05'), direction: 'in', source: 'employee_self' },
+    bio('17:20'),
+  ])
+  assert.equal(r.checkIn, eat('08:05'))
+  assert.equal(r.checkOut, eat('17:20'))
+})
+
+test('a deliberate arrival after the lone punch keeps that punch an arrival', () => {
+  const r = interpretDayEvidence([
+    bio('17:10'),
+    { occurred_at: eat('17:30'), direction: 'in', source: 'reviewer_manual' },
+  ])
+  assert.equal(r.checkIn, eat('17:10'))
+  assert.equal(r.lonePunchCloseout, false)
+})
+
+test('an evening shift keeps its lone evening punch as the arrival', () => {
+  const r = interpretDayEvidence([bio('17:25')], { scheduledStartAt: eat('17:30') })
+  assert.equal(r.checkIn, eat('17:25'))
+  assert.equal(r.lonePunchCloseout, false)
+})
+
+test('self-clock evidence is never reinterpreted by the device rule', () => {
+  const r = interpretDayEvidence([{ occurred_at: eat('17:45'), direction: 'in', source: 'employee_self' }])
+  assert.equal(r.checkIn, eat('17:45'))
+  assert.equal(r.lonePunchCloseout, false)
+})
+
+test('a stored historical lone evening punch is READ as a close-out without rewriting it', () => {
+  const row = {
+    check_in_at: '2026-09-04T14:22:00+00:00', check_out_at: null, punch_count: 1,
+    scheduled_start_at: '2026-09-04T05:00:00+00:00',
+    all_punches: [{ mode: 'FP', occurred_at: '2026-09-04T14:22:00+00:00', source_row_number: 12 }],
+    raw_payload: { import_id: 'x', interpretation: 'first punch IN; last punch OUT only when 2+ punches' },
+  }
+  const read = interpretStoredAttendance(row)
+  assert.deepEqual(read, { checkIn: null, checkOut: '2026-09-04T14:22:00+00:00', lonePunchCloseout: true })
+  assert.equal(row.check_in_at, '2026-09-04T14:22:00+00:00')   // the stored row is untouched
+})
+
+test('stored rows that are complete, morning, multi-punch or deliberately clocked stay as stored', () => {
+  const base = { check_in_at: eat('17:30'), check_out_at: null, punch_count: 1, scheduled_start_at: eat('08:00') }
+  assert.equal(interpretStoredAttendance({ ...base, check_out_at: eat('18:00') }).lonePunchCloseout, false)
+  assert.equal(interpretStoredAttendance({ ...base, check_in_at: eat('07:45') }).checkIn, eat('07:45'))
+  assert.equal(interpretStoredAttendance({ ...base, punch_count: 2, all_punches: [{ at: eat('08:00') }, { at: eat('17:30') }] }).checkIn, eat('17:30'))
+  assert.equal(interpretStoredAttendance({ ...base, raw_payload: { check_in_source: 'employee_self' } }).checkIn, eat('17:30'))
+  assert.equal(storedPunchAt({ at: eat('09:00') }), eat('09:00'))
+  assert.equal(storedPunchAt({ occurred_at: 'nonsense' }), null)
 })
 
 test('no punches yields nothing rather than a fabricated day', () => {

@@ -65,7 +65,7 @@ export default async function OperationsAnalyticsPage({
     manufacturingAnalytics(allowed, win, sp.brand),
     inventoryAnalytics(allowed, win, sp.brand),
     taskAnalytics(allowed, win, sp.brand, today),
-    dutyAnalytics(scope, win),
+    dutyAnalytics(scope, win, me?.id ?? null),
     attendanceAnalytics(win),
   ])
   const brands = scopeBrands(allBrands, allowed)
@@ -275,21 +275,25 @@ export default async function OperationsAnalyticsPage({
 
       {/* ── Attendance ──────────────────────────────────────────────── */}
       <Section icon={ClipboardCheck} title="Attendance">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <Stat label="Records" value={num(attendance.records)} hint={`${attendance.daysCovered} days covered`} />
           <Stat label="People" value={num(attendance.people)} />
           <Stat label="Average hours" value={attendance.averageHours == null ? '—' : `${attendance.averageHours}h`}
             hint={attendance.averageHours == null ? 'no complete in/out pairs' : undefined} />
           <Stat label="Missing check-out" value={num(attendance.missingCheckOut)}
             tone={attendance.missingCheckOut ? 'text-amber-600' : 'text-gray-900'} />
+          <Stat label="Missing check-in" value={num(attendance.missingCheckIn)}
+            hint="single punch from 17:00 read as the close-out"
+            tone={attendance.missingCheckIn ? 'text-orange-600' : 'text-gray-900'} />
         </div>
         {attendance.byPerson.length > 0 ? (
           <Table
             className="mt-4"
-            head={['Person', 'Days', 'Avg hours', 'Missing check-out']}
+            head={['Person', 'Days', 'Avg hours', 'Missing check-out', 'Missing check-in']}
             rows={attendance.byPerson.slice(0, 15).map((p) => [
               p.name, num(p.days), p.averageHours == null ? '—' : `${p.averageHours}h`,
               <span key="m" className={p.missingCheckOut ? 'text-amber-600' : 'text-gray-400'}>{p.missingCheckOut || '—'}</span>,
+              <span key="i" className={p.missingCheckIn ? 'text-orange-600' : 'text-gray-400'}>{p.missingCheckIn || '—'}</span>,
             ])}
           />
         ) : <Empty>No attendance records imported for this period.</Empty>}

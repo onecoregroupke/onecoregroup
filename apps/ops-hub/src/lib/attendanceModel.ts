@@ -109,6 +109,11 @@ export function effectiveSchedule(
 
 export function isWorkday(schedule: WorkSchedule | null, dateISO: string): boolean {
   if (!schedule) return false
+  // An EMPTY workday list declares no rest days — it is not "never works". The
+  // imported schedules carry start/end times and expected hours with workdays
+  // left unset, and their history records Saturdays as worked. Reading [] as
+  // "no workdays" would turn every re-derived day into a rest day with no hours.
+  if (schedule.workdays.length === 0) return true
   return schedule.workdays.includes(dow(dateISO))
 }
 
@@ -129,28 +134,206 @@ export function collapsePunches(
   punches: Punch[],
   dedupeWindowMinutes = 5,
 ): { checkIn: string | null; checkOut: string | null; punchCount: number; duplicates: number } {
-  const sorted = [...punches]
-    .map((p) => p.at)
-    .filter((at) => Number.isFinite(Date.parse(at)))
-    .sort()
-
-  if (sorted.length === 0) return { checkIn: null, checkOut: null, punchCount: 0, duplicates: 0 }
-
-  const distinct: string[] = [sorted[0]]
-  let duplicates = 0
-  for (const at of sorted.slice(1)) {
-    if (minutesBetween(distinct[distinct.length - 1], at) <= dedupeWindowMinutes) duplicates++
-    else distinct.push(at)
-  }
+  const { distinct, total } = distinctPunches(punches.map((p) => p.at), dedupeWindowMinutes)
+  if (distinct.length === 0) return { checkIn: null, checkOut: null, punchCount: 0, duplicates: 0 }
 
   return {
     checkIn: distinct[0],
     // A single punch is a check-in with a MISSING check-out, never a zero-length
     // day — that distinction is what §9's "missing clock-out" report is built on.
+    // (The lone EVENING punch is the exception — see interpretDayEvidence.)
     checkOut: distinct.length > 1 ? distinct[distinct.length - 1] : null,
-    punchCount: sorted.length,
-    duplicates,
+    punchCount: total,
+    duplicates: total - distinct.length,
   }
+}
+
+/** Sorted, parseable instants with double-taps inside the window collapsed. */
+function distinctPunches(times: string[], dedupeWindowMinutes: number): { distinct: string[]; total: number } {
+  const sorted = times
+    .filter((at) => Number.isFinite(Date.parse(at)))
+    .sort((a, b) => Date.parse(a) - Date.parse(b))
+  const distinct: string[] = []
+  for (const at of sorted) {
+    const last = distinct[distinct.length - 1]
+    if (last && minutesBetween(last, at) <= dedupeWindowMinutes) continue
+    distinct.push(at)
+  }
+  return { distinct, total: sorted.length }
+}
+
+// ─── The lone close-out punch ───────────────────────────────────────────────
+//
+// The Deli reader has no IN/OUT key. Every import so far has read a day's
+// punches as "first punch IN, last punch OUT when there are two or more", so a
+// person who forgot to punch on arrival and punched once on leaving was recorded
+// as ARRIVING at 17:14 — and their hours were then computed from that.
+//
+// The rule: when the day's ONLY device punch falls at or after 17:00 Nairobi
+// time, it is the close-out. The arrival is unknown, so no hours are calculated
+// until someone records the arrival time as manual evidence.
+
+/** From this Nairobi wall-clock time, a day's only device punch is a close-out. */
+export const LONE_PUNCH_CLOSEOUT_FROM = '17:00'
+
+export type AttendanceSource = AttendanceEvidencePoint['source']
+
+/**
+ * Sources whose direction is INFERRED from punch order rather than recorded by
+ * the person. Self-clock, reviewer entries and the system closeout all carry a
+ * deliberate direction and are never reinterpreted.
+ */
+export const DEVICE_SOURCES: readonly AttendanceSource[] = ['biometric', 'historical_import']
+
+export function isDeviceSource(source: string | null | undefined): boolean {
+  return (DEVICE_SOURCES as readonly string[]).includes(source ?? '')
+}
+
+/** 'HH:MM' on the Nairobi wall clock. EAT is UTC+3 with no DST. */
+export function nairobiClock(iso: string): string {
+  const t = Date.parse(iso)
+  if (!Number.isFinite(t)) return ''
+  return new Date(t + 3 * 60 * 60_000).toISOString().slice(11, 16)
+}
+
+/**
+ * Is this lone device punch the day's close-out?
+ *
+ * An evening shift that STARTS at or after the cutoff arrives in the evening, so
+ * its lone punch stays an arrival — the rule is about people who forgot to punch
+ * in, not about when people work.
+ */
+export function isLoneCloseoutPunch(
+  punchAt: string,
+  opts: { scheduledStartAt?: string | null; closeoutFrom?: string } = {},
+): boolean {
+  const from = opts.closeoutFrom ?? LONE_PUNCH_CLOSEOUT_FROM
+  const clock = nairobiClock(punchAt)
+  if (!clock || clock < from) return false
+  const shiftStart = opts.scheduledStartAt ? nairobiClock(opts.scheduledStartAt) : ''
+  return !(shiftStart && shiftStart >= from)
+}
+
+export interface DayEvidence {
+  occurred_at: string
+  direction: 'in' | 'out'
+  source: AttendanceSource
+}
+
+export interface DayPunchInterpretation {
+  checkIn: string | null
+  checkOut: string | null
+  checkInSource: AttendanceSource | null
+  checkOutSource: AttendanceSource | null
+  /** The day's only device punch was read as the close-out. */
+  lonePunchCloseout: boolean
+  /** A close-out with no arrival: hours wait for a manual arrival time. */
+  checkInMissing: boolean
+  checkOutMissing: boolean
+}
+
+/**
+ * One day's check-in and check-out from every piece of evidence.
+ *
+ * Device punches are read together as a sequence (first IN, last OUT, lone
+ * evening punch = close-out). Evidence with a deliberate direction — self-clock,
+ * reviewer entry, system closeout — is taken at its word. The earliest arrival
+ * and the latest departure across both win, exactly as before.
+ */
+export function interpretDayEvidence(
+  events: DayEvidence[],
+  opts: { scheduledStartAt?: string | null; closeoutFrom?: string; dedupeWindowMinutes?: number } = {},
+): DayPunchInterpretation {
+  const valid = events.filter((e) => Number.isFinite(Date.parse(e.occurred_at)))
+  const device = valid.filter((e) => isDeviceSource(e.source))
+  const explicit = valid.filter((e) => !isDeviceSource(e.source))
+  const explicitIns = explicit.filter((e) => e.direction === 'in')
+  const explicitOuts = explicit.filter((e) => e.direction === 'out')
+
+  const { distinct } = distinctPunches(device.map((e) => e.occurred_at), opts.dedupeWindowMinutes ?? 5)
+  const sourceAt = (at: string) =>
+    device.find((e) => Date.parse(e.occurred_at) === Date.parse(at))?.source ?? 'biometric'
+
+  const ins: Array<{ at: string; source: AttendanceSource }> = explicitIns.map((e) => ({ at: e.occurred_at, source: e.source }))
+  const outs: Array<{ at: string; source: AttendanceSource }> = explicitOuts.map((e) => ({ at: e.occurred_at, source: e.source }))
+
+  let lonePunchCloseout = false
+  if (distinct.length === 1) {
+    const only = distinct[0]!
+    // A deliberate arrival recorded at or after the lone punch means the punch
+    // cannot have closed that day's work.
+    const arrivalAfter = explicitIns.some((e) => Date.parse(e.occurred_at) >= Date.parse(only))
+    lonePunchCloseout = !arrivalAfter && isLoneCloseoutPunch(only, opts)
+    if (lonePunchCloseout) outs.push({ at: only, source: sourceAt(only) })
+    else ins.push({ at: only, source: sourceAt(only) })
+  } else if (distinct.length > 1) {
+    ins.push({ at: distinct[0]!, source: sourceAt(distinct[0]!) })
+    outs.push({ at: distinct[distinct.length - 1]!, source: sourceAt(distinct[distinct.length - 1]!) })
+  }
+
+  const earliest = [...ins].sort((a, b) => Date.parse(a.at) - Date.parse(b.at))[0] ?? null
+  const latest = [...outs].sort((a, b) => Date.parse(b.at) - Date.parse(a.at))[0] ?? null
+
+  return {
+    checkIn: earliest?.at ?? null,
+    checkOut: latest?.at ?? null,
+    checkInSource: earliest?.source ?? null,
+    checkOutSource: latest?.source ?? null,
+    lonePunchCloseout: lonePunchCloseout && !earliest,
+    checkInMissing: !earliest && !!latest,
+    checkOutMissing: !!earliest && !latest,
+  }
+}
+
+export interface StoredAttendanceLike {
+  check_in_at: string | null
+  check_out_at: string | null
+  punch_count?: number | null
+  scheduled_start_at?: string | null
+  all_punches?: unknown
+  raw_payload?: Record<string, unknown> | null
+}
+
+/** The instant of a stored punch, whatever shape its writer used. */
+export function storedPunchAt(punch: unknown): string | null {
+  if (!punch || typeof punch !== 'object') return null
+  const p = punch as Record<string, unknown>
+  const at = typeof p['at'] === 'string' ? p['at'] : typeof p['occurred_at'] === 'string' ? p['occurred_at'] : ''
+  return at && Number.isFinite(Date.parse(at)) ? at : null
+}
+
+/**
+ * Read a STORED day record the way the lone close-out rule would.
+ *
+ * Historical rows were written under "first punch IN" and are deliberately never
+ * rewritten. This only changes how they are read: a day whose sole device punch
+ * came at or after 17:00 is presented as a close-out with the arrival missing.
+ * Rows whose arrival was recorded deliberately (self-clock, reviewer) are left
+ * exactly as stored.
+ */
+export function interpretStoredAttendance(row: StoredAttendanceLike): {
+  checkIn: string | null
+  checkOut: string | null
+  lonePunchCloseout: boolean
+} {
+  const raw = row.raw_payload ?? {}
+  const stored = { checkIn: row.check_in_at, checkOut: row.check_out_at, lonePunchCloseout: raw['lone_punch_closeout'] === true }
+  if (!row.check_in_at || row.check_out_at) return stored
+
+  const inSource = typeof raw['check_in_source'] === 'string' ? raw['check_in_source'] : null
+  if (inSource && !isDeviceSource(inSource)) return stored
+
+  const times = (Array.isArray(row.all_punches) ? row.all_punches : [])
+    .map(storedPunchAt)
+    .filter((at): at is string => !!at)
+  const distinctCount = times.length > 0
+    ? distinctPunches(times, 5).distinct.length
+    : Number(row.punch_count ?? 1)
+  if (distinctCount > 1) return stored
+
+  return isLoneCloseoutPunch(row.check_in_at, { scheduledStartAt: row.scheduled_start_at })
+    ? { checkIn: null, checkOut: row.check_in_at, lonePunchCloseout: true }
+    : stored
 }
 
 // ─── Daily calculation ──────────────────────────────────────────────────────
